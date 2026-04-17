@@ -55,6 +55,18 @@ body {
   border-color: var(--color-border);
 }
 
+/* Preflight deja `select` con fondo transparente; refuerzo tema oscuro en listas nativas (p. ej. Windows). */
+@layer base {
+  select {
+    color-scheme: dark;
+  }
+  select option,
+  select optgroup {
+    background-color: var(--color-surface-2);
+    color: var(--color-text-1);
+  }
+}
+
 ::placeholder {
   color: var(--color-text-3);
   opacity: 1;

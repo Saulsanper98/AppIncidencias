@@ -43,7 +43,7 @@ import {
 import { StatusChangeModal } from "@/components/status-change-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { ccmgcNativeSelectClassName, Input, Select, Textarea } from "@/components/ui/input";
 import type { AssetType, SessionUser, Ticket, TicketPriority, TicketStatus, UserRole } from "@/lib/domain";
 import { canUseFilters, getAllowedTransitions } from "@/lib/rbac";
 import { calculatePriority, calculateSlaMinutes, formatSlaOverdueLabel, toUiPriority } from "@/lib/ticketing";
@@ -2202,7 +2202,10 @@ export function TicketsModule() {
                       ref={statusFilterSelectRef}
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value as "todos" | TicketStatus)}
-                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-1)] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                      className={cn(
+                        ccmgcNativeSelectClassName,
+                        "w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs focus:ring-2 focus:ring-[var(--color-accent)]",
+                      )}
                     >
                       <option value="todos">Todos los estados</option>
                       <option value="abierto">Abierto</option>
@@ -2213,7 +2216,10 @@ export function TicketsModule() {
                     <select
                       value={priorityFilter}
                       onChange={(e) => setPriorityFilter(e.target.value as "todos" | TicketPriority)}
-                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-1)] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                      className={cn(
+                        ccmgcNativeSelectClassName,
+                        "w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs focus:ring-2 focus:ring-[var(--color-accent)]",
+                      )}
                       aria-label="Filtrar por prioridad"
                     >
                       <option value="todos">Todas las prioridades</option>
@@ -2224,7 +2230,10 @@ export function TicketsModule() {
                     <select
                       value={operatorFilter}
                       onChange={(e) => setOperatorFilter(e.target.value)}
-                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-1)] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                      className={cn(
+                        ccmgcNativeSelectClassName,
+                        "w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs focus:ring-2 focus:ring-[var(--color-accent)]",
+                      )}
                     >
                       <option value="todas">Todas las operadoras</option>
                       {operators.map((op) => (
@@ -2236,7 +2245,10 @@ export function TicketsModule() {
                     <select
                       value={busFilter}
                       onChange={(e) => setBusFilter(e.target.value)}
-                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-1)] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                      className={cn(
+                        ccmgcNativeSelectClassName,
+                        "w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs focus:ring-2 focus:ring-[var(--color-accent)]",
+                      )}
                     >
                       <option value="todas">Todos los buses</option>
                       {catalog.map((bus) => (
@@ -2271,7 +2283,7 @@ export function TicketsModule() {
                       <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value as "todos" | TicketStatus)}
-                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-2 text-xs text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                        className={cn(ccmgcNativeSelectClassName, "!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs focus:ring-2 focus:ring-[var(--color-accent)]")}
                       >
                         <option value="todos">Todos los estados</option>
                         <option value="abierto">Abierto</option>
@@ -2282,7 +2294,7 @@ export function TicketsModule() {
                       <select
                         value={priorityFilter}
                         onChange={(e) => setPriorityFilter(e.target.value as "todos" | TicketPriority)}
-                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-2 text-xs text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                        className={cn(ccmgcNativeSelectClassName, "!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs focus:ring-2 focus:ring-[var(--color-accent)]")}
                         aria-label="Filtrar por prioridad"
                       >
                         <option value="todos">Todas las prioridades</option>
@@ -2293,7 +2305,7 @@ export function TicketsModule() {
                       <select
                         value={operatorFilter}
                         onChange={(e) => setOperatorFilter(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-2 text-xs text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                        className={cn(ccmgcNativeSelectClassName, "!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs focus:ring-2 focus:ring-[var(--color-accent)]")}
                       >
                         <option value="todas">Todas las operadoras</option>
                         {operators.map((op) => (
@@ -2305,7 +2317,7 @@ export function TicketsModule() {
                       <select
                         value={busFilter}
                         onChange={(e) => setBusFilter(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-2 text-xs text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                        className={cn(ccmgcNativeSelectClassName, "!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs focus:ring-2 focus:ring-[var(--color-accent)]")}
                       >
                         <option value="todas">Todos los buses</option>
                         {catalog.map((bus) => (
@@ -2849,7 +2861,10 @@ export function TicketsModule() {
                             },
                           }))
                         }
-                        className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2 py-1.5 text-[11px] text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                        className={cn(
+                          ccmgcNativeSelectClassName,
+                          "!min-h-9 rounded-md px-2 py-1.5 text-[11px] focus:ring-2 focus:ring-[var(--color-accent)]",
+                        )}
                       >
                         <option value="">Asignar tecnico</option>
                         {technicians.map((technician) => (

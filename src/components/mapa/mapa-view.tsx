@@ -170,6 +170,71 @@ function MapLayoutInvalidate({ layoutKey }: { layoutKey: string }) {
   return null;
 }
 
+const ISLAND_CORE_BOUNDS = L.latLngBounds(GRAN_CANARIA_BOUNDS);
+/** Océano alrededor del rectángulo mínimo: el clamp se siente menos “cajón” y reduce saltos al activarse. */
+const ISLAND_CLAMP_BOUNDS = ISLAND_CORE_BOUNDS.pad(0.32);
+/** Límites “mundiales” suaves: desactiva el clamp de isla sin dejar `maxBounds` inválido. */
+const WORLD_SOFT_BOUNDS = L.latLngBounds(L.latLng(-85, -180), L.latLng(85, 180));
+
+/**
+ * - Zoom alejado: si el viewport es más ancho/alto que el rectángulo de clamp, `maxBounds` estricto rompe el pan;
+ *   en ese caso usamos límites mundiales.
+ * - Zoom intermedio (~escala 3 km): sin histérisis, alternar modos recoloca la vista (“centra la isla”) y el
+ *   rectángulo mínimo se nota como jaula. Entramos al clamp solo cuando el encuadre queda claramente dentro
+ *   (ratio bajo) y salimos antes de rozar el borde (ratio alto), y solo llamamos `setMaxBounds` al cambiar.
+ */
+function MapIslandMaxBoundsWhenFitting() {
+  const map = useMap();
+  const islandClampActiveRef = useRef(false);
+
+  const apply = useCallback(() => {
+    const vb = map.getBounds();
+    const vh = vb.getNorth() - vb.getSouth();
+    const vw = vb.getEast() - vb.getWest();
+    const mb = ISLAND_CLAMP_BOUNDS;
+    const mh = mb.getNorth() - mb.getSouth();
+    const mw = mb.getEast() - mb.getWest();
+
+    const physicallyWontFit = vh >= mh - 1e-6 || vw >= mw - 1e-6;
+    if (physicallyWontFit) {
+      islandClampActiveRef.current = false;
+      const cur = map.options.maxBounds;
+      if (!cur || !WORLD_SOFT_BOUNDS.equals(cur)) {
+        map.setMaxBounds(WORLD_SOFT_BOUNDS);
+      }
+      return;
+    }
+
+    let useIslandClamp: boolean;
+    if (islandClampActiveRef.current) {
+      const exitIsland = vh >= mh * 0.94 || vw >= mw * 0.94;
+      if (exitIsland) islandClampActiveRef.current = false;
+      useIslandClamp = islandClampActiveRef.current;
+    } else {
+      const enterIsland = vh <= mh * 0.8 && vw <= mw * 0.8;
+      if (enterIsland) islandClampActiveRef.current = true;
+      useIslandClamp = islandClampActiveRef.current;
+    }
+
+    const target = useIslandClamp ? mb : WORLD_SOFT_BOUNDS;
+    const cur = map.options.maxBounds;
+    if (cur && target.equals(cur)) return;
+    map.setMaxBounds(target);
+  }, [map]);
+
+  useEffect(() => {
+    apply();
+    map.on("zoomend", apply);
+    map.on("resize", apply);
+    return () => {
+      map.off("zoomend", apply);
+      map.off("resize", apply);
+    };
+  }, [map, apply]);
+
+  return null;
+}
+
 /**
  * Centra la vista solo al cambiar el ticket seleccionado.
  * - No resetea el “último vuelo” si faltan coords un instante (refresco API), para no disparar otro flyTo al mismo id.
@@ -1452,7 +1517,6 @@ export function MapaView() {
               zoom={11}
               className="z-0 h-full min-h-0 w-full flex-1 rounded-xl [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:opacity-90"
               scrollWheelZoom
-              maxBounds={GRAN_CANARIA_BOUNDS}
               maxBoundsViscosity={0.85}
             >
               <LayersControl position="bottomright">
@@ -1486,6 +1550,7 @@ export function MapaView() {
               ) : null}
               <MapResizeHandler />
               <MapLayoutInvalidate layoutKey={mapLayoutKey} />
+              <MapIslandMaxBoundsWhenFitting />
               <MapLeafletScale />
               <MapFlyTo targetId={flyTargetId} lat={flyLatLng.lat} lng={flyLatLng.lng} />
               <MapToolbarControls features={data.features} mapShellRef={mapShellRef} selectedId={selectedId} />

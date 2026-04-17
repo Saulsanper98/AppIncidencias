@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-import { Textarea } from "@/components/ui/input";
+import { ccmgcNativeSelectClassName, Textarea } from "@/components/ui/input";
 import type { MetricFormat } from "@/lib/dashboard/chart-theme";
 import type { ChartType } from "@/lib/dashboard/chart-types";
 import { cn } from "@/lib/utils";
@@ -302,7 +302,7 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
             <select
               value={dataSource}
               onChange={(e) => setDataSource(e.target.value)}
-              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-sm text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] transition-all"
+              className={cn(ccmgcNativeSelectClassName, "focus:ring-2 focus:ring-[var(--color-accent)]")}
             >
               <option value="tickets_by_status">Tickets por estado</option>
               <option value="tickets_by_operator">Tickets por operadora</option>
@@ -432,7 +432,7 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
                 <select
                   value={metricFormat}
                   onChange={(e) => setMetricFormat(e.target.value as MetricFormat)}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] transition-all"
+                  className={cn(ccmgcNativeSelectClassName, "py-2 focus:ring-2 focus:ring-[var(--color-accent)]")}
                 >
                   <option value="number">Formato: Número</option>
                   <option value="compact">Formato: Compacto (k, M)</option>
@@ -485,7 +485,7 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
             <select
               value={size}
               onChange={(e) => setSize(e.target.value as "small" | "medium" | "large")}
-              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-sm text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] transition-all"
+              className={cn(ccmgcNativeSelectClassName, "focus:ring-2 focus:ring-[var(--color-accent)]")}
             >
               <option value="small">Pequeño (1/4)</option>
               <option value="medium">Mediano (1/2)</option>

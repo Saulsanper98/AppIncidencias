@@ -38,6 +38,7 @@ import {
 } from "recharts";
 
 import { CHART_THEME, formatMetric, type MetricFormat } from "@/lib/dashboard/chart-theme";
+import { ccmgcNativeSelectClassName } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ChartType } from "@/lib/dashboard/chart-types";
 
@@ -854,7 +855,10 @@ export function WidgetRenderer({
                 value={widget.size}
                 onChange={(e) => onResize(widget.id, e.target.value)}
                 onClick={(e) => e.stopPropagation()}
-                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2 py-1 text-xs text-[var(--color-text-1)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] transition-all"
+                className={cn(
+                  ccmgcNativeSelectClassName,
+                  "w-auto !min-h-8 rounded-md bg-[var(--color-surface-3)] px-2 py-1 text-xs focus:ring-1 focus:ring-[var(--color-accent)]",
+                )}
               >
                 <option value="small">Pequeño (1/4)</option>
                 <option value="medium">Mediano (1/2)</option>
@@ -1488,7 +1492,10 @@ export function WidgetRenderer({
               value={widget.size}
               onChange={(e) => onResize(widget.id, e.target.value)}
               onClick={(e) => e.stopPropagation()}
-              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2 py-1 text-xs text-[var(--color-text-1)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] transition-all"
+              className={cn(
+                ccmgcNativeSelectClassName,
+                "w-auto !min-h-8 rounded-md bg-[var(--color-surface-3)] px-2 py-1 text-xs focus:ring-1 focus:ring-[var(--color-accent)]",
+              )}
             >
               <option value="small">Pequeño (1/4)</option>
               <option value="medium">Mediano (1/2)</option>
