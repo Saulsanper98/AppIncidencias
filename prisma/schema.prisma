@@ -1,0 +1,238 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum AssetType {
+  validadora
+  sae
+  router
+  pantalla
+}
+
+enum TicketStatus {
+  abierto
+  en_proceso
+  esperando_repuesto
+  resuelto
+}
+
+enum TicketPriority {
+  alta
+  media
+  baja
+}
+
+enum WarehouseType {
+  almacen_central
+  cochera
+}
+
+enum ReservationStatus {
+  reservado
+  consumido
+  cancelado
+}
+
+enum UserRole {
+  conductor
+  tecnico_campo
+  gestor_centro_control
+}
+
+enum PreventiveTaskStatus {
+  pendiente
+  programada
+  completada
+  cancelada
+}
+
+model Bus {
+  id        String   @id
+  operator  String
+  municipio String
+  lineas    String
+  assets    Asset[]
+  tickets   Ticket[]
+  preventiveTasks PreventiveTask[]
+}
+
+model Asset {
+  id           String    @id
+  busId        String
+  type         AssetType
+  serialNumber String
+  bus          Bus       @relation(fields: [busId], references: [id], onDelete: Cascade)
+  tickets      Ticket[]
+}
+
+model Ticket {
+  id           String           @id @default(cuid())
+  busId        String
+  assetId      String
+  tipo         String?
+  subtipo      String?
+  subsubtipo   String?
+  dominio      String?
+  nivelImpacto String?
+  origenTecnico String?
+  observaciones String?
+  title        String
+  description  String
+  status       TicketStatus
+  priority     TicketPriority
+  slaDeadline  DateTime
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  bus          Bus              @relation(fields: [busId], references: [id], onDelete: Restrict)
+  asset        Asset            @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  comments     TicketComment[]
+  attachments  TicketAttachment[]
+  reservations TicketPartReservation[]
+}
+
+model TicketComment {
+  id        String   @id @default(cuid())
+  ticketId  String
+  author    String
+  body      String
+  createdAt DateTime @default(now())
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+model TicketAttachment {
+  id           String   @id @default(cuid())
+  ticketId     String
+  fileName     String
+  mimeType     String?
+  sizeBytes    Int?
+  /// Nombre del fichero en disco (carpeta uploads/tickets/{ticketId}/); null = solo metadato legacy
+  diskFileName String?
+  createdAt    DateTime @default(now())
+  ticket       Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+model Warehouse {
+  id        String           @id @default(cuid())
+  name      String
+  municipio String
+  type      WarehouseType
+  stocks    InventoryStock[]
+  reservations TicketPartReservation[]
+  @@unique([name, municipio])
+}
+
+model SparePart {
+  id                  String                 @id @default(cuid())
+  code                String                 @unique
+  name                String
+  compatibleAssetType AssetType
+  minimumLevel        Int                    @default(1)
+  stocks              InventoryStock[]
+  reservations        TicketPartReservation[]
+}
+
+model InventoryStock {
+  id          String    @id @default(cuid())
+  warehouseId String
+  sparePartId String
+  quantity    Int       @default(0)
+  reserved    Int       @default(0)
+  updatedAt   DateTime  @updatedAt
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  sparePart   SparePart @relation(fields: [sparePartId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, sparePartId])
+}
+
+model TicketPartReservation {
+  id          String            @id @default(cuid())
+  ticketId    String
+  sparePartId String
+  warehouseId String
+  quantity    Int               @default(1)
+  status      ReservationStatus @default(reservado)
+  createdAt   DateTime          @default(now())
+  ticket      Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sparePart   SparePart         @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+  warehouse   Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+}
+
+model User {
+  id         String       @id @default(cuid())
+  name       String
+  email      String       @unique
+  role       UserRole
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @default(now()) @updatedAt
+  auditEvents AuditEvent[]
+  createdPreventiveTasks PreventiveTask[] @relation("PreventiveTaskCreator")
+  assignedPreventiveTasks PreventiveTask[] @relation("PreventiveTaskAssignee")
+  createdDashboards CustomDashboard[] @relation("DashboardCreator")
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  userId     String?
+  ticketId   String?
+  action     String
+  detail     String?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+model PreventiveTask {
+  id              String               @id @default(cuid())
+  busId           String
+  assetType       AssetType
+  reason          String
+  status          PreventiveTaskStatus @default(pendiente)
+  scheduledAt     DateTime?
+  createdByUserId String?
+  assignedToUserId String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  bus             Bus                  @relation(fields: [busId], references: [id], onDelete: Cascade)
+  createdByUser   User?                @relation("PreventiveTaskCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  assignedToUser  User?                @relation("PreventiveTaskAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+}
+
+model CustomDashboard {
+  id              String            @id @default(cuid())
+  name            String
+  createdByUserId String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  createdBy       User?             @relation("DashboardCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  widgets         DashboardWidget[]
+}
+
+model DashboardWidget {
+  id          String          @id @default(cuid())
+  dashboardId String
+  title       String
+  chartType   String
+  dataSource  String
+  size        String          @default("medium")
+  order       Int             @default(0)
+  config      String          @default("{}")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  dashboard   CustomDashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@index([dashboardId, order])
+  @@index([dashboardId, updatedAt])
+}

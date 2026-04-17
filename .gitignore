@@ -12,6 +12,16 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
+
+# SQLite y datos locales (se recrean con `npx prisma migrate deploy`)
+**/*.db
+
+# Adjuntos subidos en local (solo se versiona la carpeta vacía)
+/public/uploads/**
+!/public/uploads/.gitkeep
 
 # next.js
 /.next/
@@ -32,6 +42,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +50,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma

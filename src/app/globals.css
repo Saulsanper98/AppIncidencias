@@ -1,26 +1,469 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-bg: #0a1628;
+  --color-surface: #0f1f3d;
+  --color-surface-2: #162440;
+  --color-surface-3: #1c2e50;
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-light: rgba(37, 99, 235, 0.15);
+  --color-success: #059669;
+  --color-success-light: rgba(5, 150, 105, 0.15);
+  --color-warning: #d97706;
+  --color-warning-light: rgba(217, 119, 6, 0.15);
+  --color-error: #dc2626;
+  --color-error-light: rgba(220, 38, 38, 0.15);
+  --color-text-1: #f1f5f9;
+  --color-text-2: #94a3b8;
+  /* Texto terciario un poco más claro para mejor contraste AA sobre surface oscuro */
+  --color-text-3: #94a3b8;
+  --color-border: rgba(148, 163, 184, 0.12);
+  --color-border-hover: rgba(148, 163, 184, 0.25);
+  --login-space-header: 24px;
+  --login-space-meta: 20px;
+  --login-space-form: 20px;
+  --login-space-actions: 16px;
+  --login-space-footer: 24px;
+  /* Fase 4: ritmo baseline y curvas de animación unificadas */
+  --login-baseline: 4px;
+  --login-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --login-motion-duration-fast: 0.18s;
+  --login-motion-duration-card: 0.32s;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text-1);
+  --color-panel: var(--color-surface);
+  --color-accent: var(--color-accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+body {
+  background: var(--color-bg);
+  color: var(--color-text-1);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background-image: radial-gradient(circle at 20% 0%, rgba(37, 99, 235, 0.22) 0%, transparent 32%),
+    radial-gradient(circle at 85% 15%, rgba(5, 150, 105, 0.14) 0%, transparent 34%),
+    linear-gradient(180deg, #0a1628 0%, #0a1628 50%, #0d1b31 100%);
+  background-attachment: fixed;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+::placeholder {
+  color: var(--color-text-3);
+  opacity: 1;
+}
+
+@layer utilities {
+  .text-display {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-text-1);
+  }
+
+  .text-heading {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--color-text-1);
+  }
+
+  .text-subheading {
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--color-text-1);
+  }
+
+  .text-body {
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--color-text-2);
+  }
+
+  .text-caption {
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--color-text-2);
+  }
+
+  .text-label {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-2);
+  }
+
+  /* Login: jerarquía tipográfica responsive (mejor en móvil que text-display fijo) */
+  .login-hero-title {
+    font-size: clamp(1.35rem, 4.2vw, 1.85rem);
+    font-weight: 650;
+    line-height: 1.22;
+    letter-spacing: -0.014em;
+    color: var(--color-text-1);
+  }
+
+  .login-hero-lead {
+    font-size: clamp(0.875rem, 2.8vw, 1rem);
+    font-weight: 400;
+    line-height: 1.55;
+    letter-spacing: 0.01em;
+    max-width: 28ch;
+  }
+
+  /* Patrón tipo “mapa / tráfico” muy sutil detrás del login */
+  .ccmgc-login-pattern {
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.14) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 72%);
+  }
+
+  /* Modo claro futuro: el logo usa currentColor; asegurar contraste mínimo en tarjeta clara */
+  .light .login-hero-title,
+  :root.light .login-hero-title {
+    color: var(--color-text-1);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.login-card-shell {
+  border-radius: 16px;
+}
+
+.login-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--login-space-form);
+}
+
+.login-meta-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--login-space-actions);
+}
+
+.login-segmented {
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--color-surface-2) 70%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-border-hover) 70%, transparent);
+  padding: 3px;
+}
+
+.login-segmented-item {
+  min-width: 40px;
+  min-height: 32px;
+  border-radius: 10px;
+}
+
+.login-primary-cta {
+  min-height: 48px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  box-shadow:
+    0 8px 22px -12px rgba(37, 99, 235, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.login-secondary-text {
+  color: color-mix(in oklab, var(--color-text-2) 76%, white);
+  font-size: 13px;
+}
+
+[data-login-contrast="high"] {
+  --color-text-2: #c4d3ea;
+  --color-text-3: #d1def2;
+  --color-border: rgba(186, 206, 236, 0.24);
+}
+
+/* Login: sin anillo azul al hacer clic con ratón; foco visible solo con teclado (WCAG) */
+[data-login-page] button:focus:not(:focus-visible),
+[data-login-page] a:focus:not(:focus-visible),
+[data-login-page] select:focus:not(:focus-visible) {
+  outline: none;
+}
+
+[data-login-page] button:focus-visible,
+[data-login-page] a:focus-visible,
+[data-login-page] select:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-text-1) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.login-ui-transition {
+  transition: box-shadow var(--login-motion-duration-fast) var(--login-ease-out);
+}
+
+.login-motion-transform {
+  transition: transform var(--login-motion-duration-fast) var(--login-ease-out);
+}
+
+.login-card-surface-transition {
+  transition:
+    box-shadow var(--login-motion-duration-fast) var(--login-ease-out),
+    transform var(--login-motion-duration-fast) var(--login-ease-out);
+}
+
+.login-card-elevation {
+  box-shadow:
+    0 24px 80px -12px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+[data-login-chrono="night"] .login-card-elevation {
+  box-shadow:
+    0 24px 80px -12px rgba(0, 0, 0, 0.58),
+    0 0 0 1px rgba(37, 99, 235, 0.1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .login-card-elevation:hover {
+    box-shadow:
+      0 28px 90px -12px rgba(0, 0, 0, 0.58),
+      0 0 0 1px rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+  }
+
+  [data-login-chrono="night"] .login-card-elevation:hover {
+    box-shadow:
+      0 28px 92px -12px rgba(0, 0, 0, 0.6),
+      0 0 0 1px rgba(37, 99, 235, 0.12);
+  }
+}
+
+.login-card-motion-root {
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-card-motion-root {
+    will-change: auto;
+  }
+}
+
+/* Retícula baseline 4px + columnas cada 16px (solo depuración) */
+.login-baseline-grid {
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(96, 165, 250, 0.09) 0,
+      rgba(96, 165, 250, 0.09) 1px,
+      transparent 1px,
+      transparent var(--login-baseline)
+    ),
+    repeating-linear-gradient(
+      to right,
+      rgba(96, 165, 250, 0.055) 0,
+      rgba(96, 165, 250, 0.055) 1px,
+      transparent 1px,
+      transparent calc(var(--login-baseline) * 4)
+    );
+  mix-blend-mode: screen;
+  opacity: 0.42;
+}
+
+[data-login-debug-grid="1"] .login-baseline-grid {
+  opacity: 0.48;
+}
+
+/* Anchura de tarjeta por viewport (1366 / 1440 / 1920) */
+.login-card-responsive-width {
+  max-width: min(456px, 92vw);
+}
+
+@media (min-width: 1366px) {
+  :root {
+    --login-space-header: 26px;
+    --login-space-meta: 22px;
+    --login-space-form: 22px;
+    --login-space-actions: 18px;
+    --login-space-footer: 26px;
+  }
+
+  .login-card-responsive-width {
+    max-width: 472px;
+  }
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --login-space-header: 28px;
+    --login-space-meta: 24px;
+    --login-space-form: 24px;
+    --login-space-actions: 18px;
+    --login-space-footer: 28px;
+  }
+
+  .login-card-responsive-width {
+    max-width: 484px;
+  }
+
+  .login-hero-title {
+    font-size: clamp(1.45rem, 2.2vw, 1.95rem);
+  }
+}
+
+@media (min-width: 1920px) {
+  :root {
+    --login-space-header: 32px;
+    --login-space-meta: 26px;
+    --login-space-form: 26px;
+    --login-space-actions: 20px;
+    --login-space-footer: 32px;
+  }
+
+  .login-card-responsive-width {
+    max-width: 504px;
+  }
+
+  .login-hero-title {
+    font-size: clamp(1.5rem, 1.6vw, 2.05rem);
+  }
+}
+
+@media (min-width: 1366px) {
+  .login-card-elevation {
+    box-shadow:
+      0 28px 96px -14px rgba(0, 0, 0, 0.58),
+      0 0 0 1px rgba(255, 255, 255, 0.07);
+  }
+
+  [data-login-chrono="night"] .login-card-elevation {
+    box-shadow:
+      0 32px 104px -14px rgba(0, 0, 0, 0.62),
+      0 0 0 1px rgba(37, 99, 235, 0.12);
+  }
+}
+
+.login-grain {
+  background-image: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.04) 0.8px, transparent 0.8px);
+  background-size: 2px 2px;
+  mix-blend-mode: soft-light;
+  opacity: 0.12;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ccmgc-login-pattern {
+    opacity: 0.035 !important;
+  }
+}
+
+/* P7: matiz día/noche muy sutil en el fondo del login */
+.login-ambient-gradient-a {
+  background: radial-gradient(ellipse 85% 55% at 50% -15%, rgba(37, 99, 235, 0.36), transparent);
+}
+
+.login-ambient-gradient-b {
+  background: radial-gradient(ellipse 55% 45% at 85% 85%, rgba(5, 150, 105, 0.12), transparent);
+}
+
+.login-ambient-gradient-c {
+  background: radial-gradient(ellipse 65% 42% at 75% 100%, rgba(5, 150, 105, 0.14), transparent);
+}
+
+.login-ambient-gradient-d {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 34%);
+}
+
+[data-login-chrono="night"] .login-ambient-gradient-a {
+  background: radial-gradient(ellipse 85% 55% at 50% -18%, rgba(37, 99, 235, 0.46), transparent);
+}
+
+[data-login-chrono="night"] .login-ambient-gradient-b {
+  background: radial-gradient(ellipse 55% 45% at 85% 88%, rgba(5, 150, 105, 0.1), transparent);
+}
+
+[data-login-chrono="night"] .login-ambient-gradient-c {
+  background: radial-gradient(ellipse 65% 42% at 78% 100%, rgba(5, 150, 105, 0.12), transparent);
+}
+
+[data-login-chrono="night"] .login-ambient-gradient-d {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 38%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-login-chrono="night"] .login-ambient-gradient-a,
+  [data-login-chrono="night"] .login-ambient-gradient-b,
+  [data-login-chrono="night"] .login-ambient-gradient-c {
+    /* Sin animación: solo fijamos el estado “noche” estático */
+    filter: none;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+}
+
+@keyframes ccmgc-draft-step-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5);
+    filter: brightness(1.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+    filter: brightness(1);
+  }
+}
+
+.ccmgc-draft-step-flash {
+  animation: ccmgc-draft-step-flash 0.65s ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ccmgc-draft-step-flash {
+    animation: none;
+  }
+}
+
+@media print {
+  aside {
+    display: none !important;
+  }
+  .ticket-detail-mobile-bar {
+    display: none !important;
+  }
+  header {
+    border: 0 !important;
+    background: #fff !important;
+    color: #0f172a !important;
+  }
+  main {
+    padding: 12px !important;
+    background: #fff !important;
+    color: #0f172a !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  .ticket-detail-print-root,
+  .ticket-detail-print-root * {
+    box-shadow: none !important;
+  }
+
+  .inventory-print-root article,
+  .inventory-print-root .shadow-sm,
+  .inventory-print-root .shadow-md {
+    box-shadow: none !important;
+  }
 }
