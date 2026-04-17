@@ -3,7 +3,10 @@ import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type T
 import { cn } from "@/lib/utils";
 
 const baseControlClasses =
-  "w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-sm text-[var(--color-text-1)] min-h-[44px] transition-all duration-150 placeholder:text-[var(--color-text-3)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]";
+  "w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-sm text-[var(--color-text-1)] min-h-[44px] transition-all duration-150 placeholder:text-[var(--color-text-3)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] [color-scheme:dark]";
+
+const SELECT_CHEVRON =
+  "appearance-none bg-[length:1.125rem_1.125rem] bg-[right_0.55rem_center] bg-no-repeat pr-10 [background-image:url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2220%22%20fill%3D%22none%22%3E%3Cpath%20stroke%3D%22%2394a3b8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.6%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')]";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
   { className, ...props },
@@ -16,7 +19,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   { className, ...props },
   ref,
 ) {
-  return <select ref={ref} className={cn(baseControlClasses, className)} {...props} />;
+  return <select ref={ref} className={cn(baseControlClasses, SELECT_CHEVRON, className)} {...props} />;
 });
 
 type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {

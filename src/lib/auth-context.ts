@@ -1,8 +1,22 @@
+import { cookies } from "next/headers";
+
 import type { UserRole } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
 import { parseUserRole } from "@/lib/rbac";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 
+function readSessionUserIdFromCookieHeader(cookieHeader: string | null): string | null {
+  if (!cookieHeader) return null;
+  const parts = cookieHeader.split(";").map((item) => item.trim());
+  const sessionCookie = parts.find((item) => item.startsWith(`${SESSION_COOKIE_NAME}=`));
+  if (!sessionCookie) return null;
+  const value = sessionCookie.slice(SESSION_COOKIE_NAME.length + 1);
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
 export type RequestActor = {
   userId: string | null;
   role: UserRole;
@@ -10,18 +24,21 @@ export type RequestActor = {
 };
 
 export async function resolveRequestActor(request: Request): Promise<RequestActor> {
-  const headerUserId = request.headers.get("x-user-id");
-  const cookieUserId = (() => {
-    const cookieHeader = request.headers.get("cookie");
-    if (!cookieHeader) {
-      return null;
-    }
-    const cookies = cookieHeader.split(";").map((item) => item.trim());
-    const sessionCookie = cookies.find((item) => item.startsWith(`${SESSION_COOKIE_NAME}=`));
-    return sessionCookie ? decodeURIComponent(sessionCookie.split("=")[1] ?? "") : null;
-  })();
-  const userId = headerUserId ?? cookieUserId;
+  const headerUserId = request.headers.get("x-user-id")?.trim() || null;
 
+  let cookieUserId: string | null = null;
+  try {
+    const store = await cookies();
+    const fromStore = store.get(SESSION_COOKIE_NAME)?.value;
+    if (fromStore) cookieUserId = fromStore;
+  } catch {
+    /* cookies() solo en App Router / Route Handlers */
+  }
+  if (!cookieUserId) {
+    cookieUserId = readSessionUserIdFromCookieHeader(request.headers.get("cookie"));
+  }
+
+  const userId = headerUserId || cookieUserId;
   if (userId) {
     const user = await prisma.user.findUnique({
       where: { id: userId },

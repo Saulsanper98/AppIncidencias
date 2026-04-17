@@ -101,13 +101,24 @@ export default function PrivateLayout({
     if (pathname.startsWith("/inventory")) {
       return [root, { label: "Inventario", href: "/inventory" }];
     }
+    if (pathname.startsWith("/mapa")) {
+      return [root, { label: "Mapa", href: "/mapa" }];
+    }
     return [root];
   }, [pathname, ticketCrumbTitle]);
 
+  const isMapaRoute = pathname.startsWith("/mapa");
+
   return (
-    <div className="flex min-h-screen bg-[var(--color-bg)]">
+    <div
+      className={
+        isMapaRoute
+          ? "flex h-[100dvh] min-h-0 overflow-hidden bg-[var(--color-bg)]"
+          : "flex min-h-screen bg-[var(--color-bg)]"
+      }
+    >
       {inventoryControlRoom ? null : <AppSidebar />}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header
           className={
             inventoryControlRoom
@@ -160,7 +171,9 @@ export default function PrivateLayout({
           className={
             inventoryControlRoom
               ? "flex-1 overflow-auto px-3 pb-3 pt-2 md:px-4 md:pb-4 md:pt-3"
-              : "flex-1 overflow-auto px-6 pb-6 pt-4"
+              : isMapaRoute
+                ? "flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-4"
+                : "flex-1 overflow-auto px-6 pb-6 pt-4"
           }
         >
           {children}

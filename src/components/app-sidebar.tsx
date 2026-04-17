@@ -26,7 +26,7 @@ const menu = [
   { label: "Custom Dashboards", icon: LayoutDashboard, href: "/dashboards" },
   { label: "Tickets", icon: ClipboardList, href: "/tickets" },
   { label: "Inventario", icon: Package, href: "/inventory" },
-  { label: "Mapa", icon: MapPinned, href: "#" },
+  { label: "Mapa", icon: MapPinned, href: "/mapa" },
   { label: "Base de Conocimiento", icon: BookOpenCheck, href: "#" },
   { label: "Administración", icon: UserCircle2, href: "/admin/users" },
 ];
@@ -96,6 +96,7 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
     if (href === "/dashboard") return pathname === "/dashboard";
     if (href === "/admin/users") return pathname.startsWith("/admin");
     if (href === "/inventory") return pathname.startsWith("/inventory");
+    if (href === "/mapa") return pathname.startsWith("/mapa");
     return pathname.startsWith(href) && href !== "#";
   };
 
@@ -183,6 +184,11 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
                 href={href}
                 onClick={() => setOpen(false)}
                 onMouseEnter={(e) => {
+                  if (href === "/mapa") {
+                    window.setTimeout(() => {
+                      void fetch("/api/map/tickets", { credentials: "include", cache: "no-store" }).catch(() => {});
+                    }, 80);
+                  }
                   if (expanded) return;
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   setTooltip({ label, y: rect.top + rect.height / 2 });

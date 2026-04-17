@@ -1,0 +1,119 @@
+/* Fondo del mapa (evita rectángulo claro al modo Enfoque / tiles cargando) */
+.ccmgc-map-shell .leaflet-container {
+  background: #0f1f3d !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  /* Tamaño base coherente si falla la carga de Geist (Leaflet hereda del contenedor) */
+  font-family: var(--font-geist-sans), system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+/* Evitar rendija clara entre controles y el lienzo del mapa */
+.ccmgc-map-shell .leaflet-control-container .leaflet-control {
+  background-clip: padding-box;
+}
+
+.ccmgc-map-shell .leaflet-top.leaflet-left .leaflet-control {
+  margin-left: 2px;
+  margin-top: 2px;
+}
+
+.ccmgc-map-shell .leaflet-control-layers-toggle {
+  background-color: rgba(15, 31, 61, 0.94) !important;
+  background-image: none !important;
+  border: 1px solid var(--color-border, rgba(148, 163, 184, 0.25)) !important;
+  border-radius: 0.5rem !important;
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.ccmgc-map-shell .leaflet-control-layers-expanded {
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Leaflet alineado con tema oscuro CCMGC (mapa operativo) */
+.ccmgc-map-shell .leaflet-bar {
+  border: 1px solid var(--color-border, rgba(148, 163, 184, 0.2));
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.ccmgc-map-shell .leaflet-bar a {
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+  background: rgba(15, 31, 61, 0.92);
+  color: var(--color-text-1, #f1f5f9);
+  border-bottom: 1px solid var(--color-border, rgba(148, 163, 184, 0.15));
+}
+
+.ccmgc-map-shell .leaflet-bar a:hover {
+  background: rgba(28, 46, 80, 0.95);
+  color: #fff;
+}
+
+.ccmgc-map-shell .leaflet-bar a:last-child {
+  border-bottom: 0;
+}
+
+.ccmgc-map-shell .leaflet-control-layers {
+  background: rgba(15, 31, 61, 0.94) !important;
+  color: var(--color-text-1, #f1f5f9) !important;
+  border: 1px solid var(--color-border, rgba(148, 163, 184, 0.2)) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+}
+
+.ccmgc-map-shell .leaflet-control-layers-expanded {
+  padding: 0.5rem 0.65rem !important;
+  min-width: 10rem;
+}
+
+.ccmgc-map-shell .leaflet-control-layers-separator {
+  border-top-color: var(--color-border, rgba(148, 163, 184, 0.2)) !important;
+}
+
+.ccmgc-map-shell .leaflet-control-layers-base label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.2rem 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-2, #94a3b8);
+}
+
+.ccmgc-map-shell .leaflet-control-layers-base label span {
+  color: var(--color-text-1, #f1f5f9);
+}
+
+.ccmgc-map-shell .leaflet-control-scale-line {
+  border: 1px solid var(--color-border, rgba(148, 163, 184, 0.25)) !important;
+  background: rgba(10, 22, 40, 0.82) !important;
+  color: var(--color-text-2, #94a3b8) !important;
+  border-radius: 0.25rem !important;
+}
+
+.ccmgc-map-shell .leaflet-popup-content-wrapper,
+.ccmgc-map-shell .leaflet-popup-tip {
+  background: rgba(15, 31, 61, 0.98) !important;
+  color: var(--color-text-1, #f1f5f9) !important;
+  border: 1px solid var(--color-border, rgba(148, 163, 184, 0.2)) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+}
+
+.ccmgc-map-shell .leaflet-popup-content {
+  margin: 0.65rem 0.75rem !important;
+}
+
+.ccmgc-map-shell .leaflet-tooltip {
+  background: rgba(15, 31, 61, 0.95) !important;
+  color: var(--color-text-1, #f1f5f9) !important;
+  border: 1px solid var(--color-border, rgba(148, 163, 184, 0.25)) !important;
+  border-radius: 0.35rem !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+}

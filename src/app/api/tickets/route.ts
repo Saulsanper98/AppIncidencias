@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
-import type { TicketStatus } from "@/lib/domain";
+import type { TicketPriority, TicketStatus } from "@/lib/domain";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { ensureCatalogSeeded } from "@/lib/catalog";
 import { reservePartForAssetType } from "@/lib/inventory";
@@ -28,7 +28,15 @@ const createTicketSchema = z.object({
   serviceStopped: z.boolean(),
   photoNames: z.array(z.string()).default([]),
   comment: z.string().optional(),
-});
+  latitude: z.number().finite().gte(-90).lte(90).optional(),
+  longitude: z.number().finite().gte(-180).lte(180).optional(),
+  mapPlaceMunicipio: z.string().trim().max(160).optional(),
+}).refine(
+  (d) =>
+    (d.latitude === undefined && d.longitude === undefined) ||
+    (d.latitude !== undefined && d.longitude !== undefined),
+  { message: "Latitud y longitud deben enviarse juntas", path: ["latitude"] },
+);
 
 function normalizeStatus(value: string | null): TicketStatus | "todos" {
   if (!value || value === "todos") {
@@ -47,12 +55,19 @@ function normalizeStatus(value: string | null): TicketStatus | "todos" {
   return "todos";
 }
 
+function normalizePriorityFilter(value: string | null): TicketPriority | "todos" {
+  if (!value || value === "todos") return "todos";
+  if (value === "alta" || value === "media" || value === "baja") return value;
+  return "todos";
+}
+
 export async function GET(request: Request) {
   try {
     const actor = await resolveRequestActor(request);
     await ensureCatalogSeeded();
     const { searchParams } = new URL(request.url);
     const status = normalizeStatus(searchParams.get("status"));
+    const priority = normalizePriorityFilter(searchParams.get("priority"));
     const operator = searchParams.get("operator");
     const busId = searchParams.get("busId");
     const partCodeRaw = searchParams.get("partCode")?.trim() ?? "";
@@ -80,6 +95,7 @@ export async function GET(request: Request) {
     const tickets = await prisma.ticket.findMany({
       where: {
         status: status === "todos" ? undefined : status,
+        priority: priority === "todos" ? undefined : priority,
         busId: busId && busId !== "todas" ? busId : undefined,
         bus: operator && operator !== "todas" ? { operator } : undefined,
         ...(partTicketIds !== null
@@ -136,12 +152,14 @@ export async function GET(request: Request) {
         origenTecnico: ticket.origenTecnico,
         observaciones: ticket.observaciones,
         operator: ticket.bus.operator,
-        municipio: ticket.bus.municipio,
+        municipio: ticket.mapPlaceMunicipio?.trim() || ticket.bus.municipio,
         title: ticket.title,
         description: ticket.description,
         status: ticket.status,
         priority: ticket.priority,
         slaDeadline: ticket.slaDeadline.toISOString(),
+        latitude: ticket.latitude ?? null,
+        longitude: ticket.longitude ?? null,
         createdAt: ticket.createdAt.toISOString(),
         updatedAt: ticket.updatedAt.toISOString(),
         attachments: ticket.attachments.map((item) => {
@@ -247,6 +265,9 @@ export async function POST(request: Request) {
       serviceStopped,
       photoNames,
       comment,
+      latitude,
+      longitude,
+      mapPlaceMunicipio,
     } = parsed;
 
     const asset = await prisma.asset.findUnique({
@@ -286,6 +307,13 @@ export async function POST(request: Request) {
         status: "abierto",
         priority,
         slaDeadline: new Date(addMinutesIso(new Date(), slaMinutes)),
+        ...(latitude !== undefined && longitude !== undefined
+          ? {
+              latitude,
+              longitude,
+              ...(mapPlaceMunicipio?.trim() ? { mapPlaceMunicipio: mapPlaceMunicipio.trim() } : { mapPlaceMunicipio: null }),
+            }
+          : {}),
         comments: {
           create: {
             author: actor.displayName,

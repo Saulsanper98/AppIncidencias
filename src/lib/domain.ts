@@ -34,6 +34,11 @@ export type Ticket = {
   status: TicketStatus;
   priority: TicketPriority;
   slaDeadline: string;
+  /** WGS84 opcional para mapa */
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Municipio o lugar asociado al pin del mapa (si existe). */
+  mapPlaceMunicipio?: string | null;
   createdAt: string;
   updatedAt: string;
 };

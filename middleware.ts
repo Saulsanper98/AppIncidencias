@@ -10,10 +10,12 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/tickets") ||
     pathname.startsWith("/dashboards") ||
-    pathname.startsWith("/inventory");
+    pathname.startsWith("/inventory") ||
+    pathname.startsWith("/mapa");
   const isAdminPage = pathname.startsWith("/admin");
   const isProtectedApi =
     pathname.startsWith("/api/tickets") ||
+    pathname.startsWith("/api/map") ||
     pathname.startsWith("/api/audit") ||
     pathname.startsWith("/api/users/manage") ||
     pathname.startsWith("/api/maintenance");
@@ -40,8 +42,12 @@ export const config = {
     "/dashboard/:path*",
     "/dashboards/:path*",
     "/inventory/:path*",
+    "/mapa",
+    "/mapa/:path*",
     "/admin/:path*",
     "/api/tickets/:path*",
+    "/api/map",
+    "/api/map/:path*",
     "/api/audit/:path*",
     "/api/users/manage/:path*",
     "/api/maintenance/:path*",

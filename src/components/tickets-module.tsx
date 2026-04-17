@@ -15,6 +15,7 @@ import {
   Filter,
   Keyboard,
   Link2,
+  MapPinned,
   MoreHorizontal,
   PackageSearch,
   Plus,
@@ -24,6 +25,7 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -53,6 +55,21 @@ import {
   ticketStatusBadgeVariant,
 } from "@/lib/ticket-ui";
 import { cn } from "@/lib/utils";
+
+const TicketLocationPicker = dynamic(
+  () => import("@/components/tickets/ticket-location-picker").then((m) => m.TicketLocationPicker),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="flex min-h-[200px] items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] text-caption text-[var(--color-text-3)]"
+        aria-busy="true"
+      >
+        Cargando selector de mapa…
+      </div>
+    ),
+  },
+);
 
 type TicketAttachmentView = {
   id: string;
@@ -98,6 +115,11 @@ type FormState = {
   impactedLines: number;
   serviceStopped: boolean;
   comment: string;
+  /** WGS84 opcional; ambas vacías o ambas numéricas para el mapa. */
+  mapLatitude: string;
+  mapLongitude: string;
+  /** Municipio o lugar inferido al colocar el pin (geocodificación inversa). */
+  mapPlaceMunicipio: string;
 };
 
 type InventorySummaryItem = {
@@ -168,6 +190,9 @@ const defaultForm = (busId = ""): FormState => ({
   impactedLines: 1,
   serviceStopped: false,
   comment: "",
+  mapLatitude: "",
+  mapLongitude: "",
+  mapPlaceMunicipio: "",
 });
 
 const statusMap: Record<TicketStatus, string> = {
@@ -498,6 +523,7 @@ export function TicketsModule() {
   const searchParams = useSearchParams();
   const busIdFromQuery = searchParams.get("busId");
   const statusFromQuery = searchParams.get("status");
+  const priorityFromQuery = searchParams.get("priority");
   const partCodeFromQuery = searchParams.get("partCode")?.trim() ?? "";
 
   const [users, setUsers] = useState<LocalUser[]>([]);
@@ -508,6 +534,7 @@ export function TicketsModule() {
   const [tipologias, setTipologias] = useState<TipologiaItem[]>([]);
   const [form, setForm] = useState<FormState>(defaultForm());
   const [statusFilter, setStatusFilter] = useState<"todos" | TicketStatus>("todos");
+  const [priorityFilter, setPriorityFilter] = useState<"todos" | TicketPriority>("todos");
   const [operatorFilter, setOperatorFilter] = useState<"todas" | string>("todas");
   const [busFilter, setBusFilter] = useState<"todas" | string>("todas");
   const [tickets, setTickets] = useState<TicketView[]>([]);
@@ -540,6 +567,7 @@ export function TicketsModule() {
   const [formDraftHydrated, setFormDraftHydrated] = useState(false);
   const [bandejaCompacta, setBandejaCompacta] = useState(false);
   const [showTicketsUiHint, setShowTicketsUiHint] = useState(false);
+  const [mapLocationHint, setMapLocationHint] = useState<string | null>(null);
 
   const selectedBus = useMemo(() => catalog.find((bus) => bus.id === form.busId), [catalog, form.busId]);
   const availableAssets = selectedBus?.assets ?? [];
@@ -673,6 +701,14 @@ export function TicketsModule() {
       setStatusFilter(statusFromQuery as "todos" | TicketStatus);
     }
   }, [statusFromQuery]);
+
+  useEffect(() => {
+    if (!priorityFromQuery) return;
+    const allowed: Array<TicketPriority | "todos"> = ["todos", "alta", "media", "baja"];
+    if (allowed.includes(priorityFromQuery as TicketPriority | "todos")) {
+      setPriorityFilter(priorityFromQuery as "todos" | TicketPriority);
+    }
+  }, [priorityFromQuery]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -858,15 +894,19 @@ export function TicketsModule() {
     if (loading || pathname !== "/tickets") return;
     const id = window.setTimeout(() => {
       const desiredStatus = statusFilter === "todos" ? "" : statusFilter;
+      const desiredPri = priorityFilter === "todos" ? "" : priorityFilter;
       const desiredOp = operatorFilter === "todas" ? "" : operatorFilter;
       const desiredBus = busFilter === "todas" ? "" : busFilter;
       const curStatus = searchParams.get("status") ?? "";
+      const curPri = searchParams.get("priority") ?? "";
       const curOp = searchParams.get("operator") ?? "";
       const curBus = searchParams.get("busId") ?? "";
       const curPart = searchParams.get("partCode")?.trim() ?? "";
-      if (curStatus === desiredStatus && curOp === desiredOp && curBus === desiredBus) return;
+      if (curStatus === desiredStatus && curPri === desiredPri && curOp === desiredOp && curBus === desiredBus)
+        return;
       const q = new URLSearchParams();
       if (desiredStatus) q.set("status", desiredStatus);
+      if (desiredPri) q.set("priority", desiredPri);
       if (desiredOp) q.set("operator", desiredOp);
       if (desiredBus) q.set("busId", desiredBus);
       if (curPart) q.set("partCode", curPart);
@@ -874,7 +914,7 @@ export function TicketsModule() {
       router.replace(qs ? `/tickets?${qs}` : "/tickets", { scroll: false });
     }, 0);
     return () => window.clearTimeout(id);
-  }, [loading, pathname, statusFilter, operatorFilter, busFilter, router, searchParams]);
+  }, [loading, pathname, statusFilter, priorityFilter, operatorFilter, busFilter, router, searchParams]);
 
   const fetchCatalog = async () => {
     const response = await fetch("/api/catalog", { cache: "no-store" });
@@ -923,8 +963,17 @@ export function TicketsModule() {
   }, []);
 
   const fetchTickets = useCallback(
-    async (status: "todos" | TicketStatus, operator: "todas" | string, busId: "todas" | string, partCode = "") => {
+    async (
+      status: "todos" | TicketStatus,
+      operator: "todas" | string,
+      busId: "todas" | string,
+      partCode = "",
+      priority: "todos" | TicketPriority = "todos",
+    ) => {
       const query = new URLSearchParams({ status, operator, busId });
+      if (priority !== "todos") {
+        query.set("priority", priority);
+      }
       if (partCode.trim()) {
         query.set("partCode", partCode.trim());
       }
@@ -1021,12 +1070,12 @@ export function TicketsModule() {
 
   useEffect(() => {
     if (!loading) {
-      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery).catch((filterError) => {
+      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter).catch((filterError) => {
         console.error(filterError);
         setError("No se pudo refrescar la bandeja de tickets.");
       });
     }
-  }, [statusFilter, operatorFilter, busFilter, partCodeFromQuery, loading, fetchTickets, role]);
+  }, [statusFilter, priorityFilter, operatorFilter, busFilter, partCodeFromQuery, loading, fetchTickets, role]);
 
   const mergeStagedUploadFiles = useCallback((prev: File[], added: File[]) => {
     const seen = new Set(prev.map((f) => `${f.name.toLowerCase()}:${f.size}`));
@@ -1090,6 +1139,21 @@ export function TicketsModule() {
       return;
     }
 
+    const latStr = form.mapLatitude.trim();
+    const lngStr = form.mapLongitude.trim();
+    if (latStr !== lngStr && (!latStr || !lngStr)) {
+      setError("Coordenadas: indica latitud y longitud juntas, o déjalas vacías.");
+      return;
+    }
+    if (latStr && lngStr) {
+      const la = Number(latStr.replace(",", "."));
+      const lo = Number(lngStr.replace(",", "."));
+      if (!Number.isFinite(la) || !Number.isFinite(lo)) {
+        setError("Latitud y longitud deben ser números válidos (WGS84).");
+        return;
+      }
+    }
+
     setSaving(true);
     setError(null);
     setNotice(null);
@@ -1112,6 +1176,15 @@ export function TicketsModule() {
       serviceStopped: form.serviceStopped,
       photoNames: [] as string[],
       comment: form.comment,
+      ...(latStr && lngStr
+        ? {
+            latitude: Number(latStr.replace(",", ".")),
+            longitude: Number(lngStr.replace(",", ".")),
+            ...(form.mapPlaceMunicipio.trim()
+              ? { mapPlaceMunicipio: form.mapPlaceMunicipio.trim() }
+              : {}),
+          }
+        : {}),
     };
 
     let response: Response;
@@ -1177,7 +1250,7 @@ export function TicketsModule() {
     setForm((prev) => ({ ...defaultForm(prev.busId), busId: prev.busId }));
     setStagedUploadFiles([]);
     setFormSectionOpen(normalizeAccordionOpen(undefined, "equipment"));
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter);
     await fetchInventorySummary();
     await fetchAuditEvents();
     await fetchMaintenanceAlerts();
@@ -1224,7 +1297,7 @@ export function TicketsModule() {
       setNoticeTone("success");
       setNoticePlacement("toast");
       setNotice("Estado del ticket actualizado correctamente.");
-      await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery);
+      await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter);
       await fetchAuditEvents();
       await fetchMaintenanceAlerts();
       await fetchPreventiveTasks();
@@ -1343,7 +1416,7 @@ export function TicketsModule() {
     setNoticeTone("success");
     setNoticePlacement("card");
     setNotice(`Sesión iniciada como ${data.user.name}.`);
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter);
     await fetchAuditEvents();
   };
 
@@ -1360,6 +1433,7 @@ export function TicketsModule() {
 
   const handleClearFilters = () => {
     setStatusFilter("todos");
+    setPriorityFilter("todos");
     setOperatorFilter("todas");
     setBusFilter("todas");
     router.replace("/tickets");
@@ -1368,11 +1442,12 @@ export function TicketsModule() {
   const clearPartCodeFilter = useCallback(() => {
     const q = new URLSearchParams();
     if (statusFilter !== "todos") q.set("status", statusFilter);
+    if (priorityFilter !== "todos") q.set("priority", priorityFilter);
     if (operatorFilter !== "todas") q.set("operator", operatorFilter);
     if (busFilter !== "todas") q.set("busId", busFilter);
     const qs = q.toString();
     router.replace(qs ? `/tickets?${qs}` : "/tickets", { scroll: false });
-  }, [statusFilter, operatorFilter, busFilter, router]);
+  }, [statusFilter, priorityFilter, operatorFilter, busFilter, router]);
 
   const handleExportTicketsCsv = () => {
     const delimiter = ";";
@@ -1430,11 +1505,19 @@ export function TicketsModule() {
 
   const inboxScreenReaderSummary = useMemo(() => {
     const estado = statusFilter === "todos" ? "Todos los estados" : statusMap[statusFilter];
+    const priTxt =
+      priorityFilter === "todos"
+        ? "todas las prioridades"
+        : priorityFilter === "alta"
+          ? "prioridad alta"
+          : priorityFilter === "media"
+            ? "prioridad media"
+            : "prioridad baja";
     const operadora = operatorFilter === "todas" ? "Todas las operadoras" : operatorFilter;
     const busTxt = busFilter === "todas" ? "Todos los buses" : busFilter;
     const pieza = partCodeFromQuery ? `, repuesto ${partCodeFromQuery}` : "";
-    return `Bandeja: ${tickets.length} ticket(s) visibles. Filtros activos: estado ${estado}, operadora ${operadora}, bus ${busTxt}${pieza}.`;
-  }, [tickets.length, statusFilter, operatorFilter, busFilter, partCodeFromQuery]);
+    return `Bandeja: ${tickets.length} ticket(s) visibles. Filtros activos: estado ${estado}, ${priTxt}, operadora ${operadora}, bus ${busTxt}${pieza}.`;
+  }, [tickets.length, statusFilter, priorityFilter, operatorFilter, busFilter, partCodeFromQuery]);
 
   const formSectionLiveMessage = useMemo(() => {
     const id = TICKET_FORM_SECTION_ORDER.find((k) => formSectionOpen[k]);
@@ -1801,6 +1884,27 @@ export function TicketsModule() {
                 wrapperClassName="mt-3"
               />
 
+              <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-label">Ubicación en mapa (opcional)</span>
+                </div>
+                {mapLocationHint ? (
+                  <p className="mb-2 text-[12px] text-[var(--color-error)]">{mapLocationHint}</p>
+                ) : null}
+                <TicketLocationPicker
+                  mapLatitude={form.mapLatitude}
+                  mapLongitude={form.mapLongitude}
+                  mapPlaceMunicipio={form.mapPlaceMunicipio}
+                  onMapLatitudeChange={(v) => setForm((prev) => ({ ...prev, mapLatitude: v }))}
+                  onMapLongitudeChange={(v) => setForm((prev) => ({ ...prev, mapLongitude: v }))}
+                  onMapPlaceMunicipioChange={(v) =>
+                    setForm((prev) => ({ ...prev, mapPlaceMunicipio: v?.trim() ? v.trim() : "" }))
+                  }
+                  busMunicipio={selectedBus?.municipio ?? ""}
+                  onNotify={setMapLocationHint}
+                />
+              </div>
+
               <div className="mt-3 grid grid-cols-2 gap-3">
                 <label className="block space-y-1">
                   <span className="text-label">Líneas afectadas</span>
@@ -2107,6 +2211,17 @@ export function TicketsModule() {
                       <option value="resuelto">Resuelto</option>
                     </select>
                     <select
+                      value={priorityFilter}
+                      onChange={(e) => setPriorityFilter(e.target.value as "todos" | TicketPriority)}
+                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-1)] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                      aria-label="Filtrar por prioridad"
+                    >
+                      <option value="todos">Todas las prioridades</option>
+                      <option value="alta">Prioridad alta</option>
+                      <option value="media">Prioridad media</option>
+                      <option value="baja">Prioridad baja</option>
+                    </select>
+                    <select
                       value={operatorFilter}
                       onChange={(e) => setOperatorFilter(e.target.value)}
                       className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-1)] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
@@ -2163,6 +2278,17 @@ export function TicketsModule() {
                         <option value="en_proceso">En Proceso</option>
                         <option value="esperando_repuesto">Esperando Repuesto</option>
                         <option value="resuelto">Resuelto</option>
+                      </select>
+                      <select
+                        value={priorityFilter}
+                        onChange={(e) => setPriorityFilter(e.target.value as "todos" | TicketPriority)}
+                        className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-2 text-xs text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                        aria-label="Filtrar por prioridad"
+                      >
+                        <option value="todos">Todas las prioridades</option>
+                        <option value="alta">Prioridad alta</option>
+                        <option value="media">Prioridad media</option>
+                        <option value="baja">Prioridad baja</option>
                       </select>
                       <select
                         value={operatorFilter}
@@ -2368,12 +2494,22 @@ export function TicketsModule() {
                             className="align-top border-b border-[var(--color-border)] transition-[background-color,box-shadow] duration-200 ease-out hover:bg-[var(--color-surface-2)]/55 hover:shadow-[inset_0_0_0_9999px_rgba(0,0,0,0.015)] last:border-0"
                           >
                             <td className={bandejaTdPad}>
-                              <Link
-                                href={`/tickets/${ticket.id}`}
-                                className="font-mono text-caption text-[var(--color-accent)] hover:underline"
-                              >
-                                {ticket.id.slice(-8).toUpperCase()}
-                              </Link>
+                              <div className="flex flex-wrap items-center gap-1">
+                                <Link
+                                  href={`/tickets/${ticket.id}`}
+                                  className="font-mono text-caption text-[var(--color-accent)] hover:underline"
+                                >
+                                  {ticket.id.slice(-8).toUpperCase()}
+                                </Link>
+                                <Link
+                                  href={`/mapa?ticket=${encodeURIComponent(ticket.id)}`}
+                                  className="inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]"
+                                  title="Ver en mapa"
+                                  aria-label={`Ver ticket ${ticket.id.slice(-8).toUpperCase()} en mapa`}
+                                >
+                                  <MapPinned size={14} aria-hidden />
+                                </Link>
+                              </div>
                             </td>
                             <td className={cn("min-w-0 max-w-[min(380px,36vw)] xl:max-w-md", bandejaTdPad)}>
                               <p className="truncate font-medium text-[var(--color-text-1)]">{ticket.title}</p>
@@ -2496,7 +2632,17 @@ export function TicketsModule() {
                     >
                       <div className="mb-2 flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="font-mono text-caption text-[var(--color-text-3)]">{ticket.id.slice(-8).toUpperCase()}</p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="font-mono text-caption text-[var(--color-text-3)]">{ticket.id.slice(-8).toUpperCase()}</p>
+                            <Link
+                              href={`/mapa?ticket=${encodeURIComponent(ticket.id)}`}
+                              className="inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]"
+                              title="Ver en mapa"
+                              aria-label={`Mapa · ${ticket.id.slice(-8).toUpperCase()}`}
+                            >
+                              <MapPinned size={14} aria-hidden />
+                            </Link>
+                          </div>
                           <Link href={`/tickets/${ticket.id}`}>
                             <h4 className="mt-0.5 truncate text-sm font-medium text-[var(--color-text-1)] transition-colors hover:text-[var(--color-accent)]">
                               {ticket.title}

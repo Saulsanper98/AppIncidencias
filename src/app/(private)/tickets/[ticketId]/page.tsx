@@ -21,6 +21,7 @@ import {
   FileText,
   ImageIcon,
   Lock,
+  MapPinned,
   MessageSquare,
   MoreHorizontal,
   Package,
@@ -509,14 +510,23 @@ export default function TicketDetailPage() {
           <ArrowLeft size={14} />
           Volver a la bandeja
         </Link>
-        <button
-          type="button"
-          onClick={copyTicketLink}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-accent)]/35 hover:text-[var(--color-accent)]"
-        >
-          <Copy size={12} aria-hidden />
-          {copyLinkFeedback ? "Enlace copiado" : "Copiar enlace"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/mapa?ticket=${encodeURIComponent(ticket.id)}`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-accent)]/35 hover:text-[var(--color-accent)]"
+          >
+            <MapPinned size={12} aria-hidden />
+            Ver en mapa
+          </Link>
+          <button
+            type="button"
+            onClick={copyTicketLink}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-accent)]/35 hover:text-[var(--color-accent)]"
+          >
+            <Copy size={12} aria-hidden />
+            {copyLinkFeedback ? "Enlace copiado" : "Copiar enlace"}
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">

@@ -91,6 +91,11 @@ model Ticket {
   status       TicketStatus
   priority     TicketPriority
   slaDeadline  DateTime
+  /// Coordenadas WGS84 opcionales para el mapa (si null, se usa municipio del bus).
+  latitude     Float?
+  longitude    Float?
+  /// Municipio / lugar reconocido junto al pin del mapa (p. ej. geocodificación inversa).
+  mapPlaceMunicipio String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   bus          Bus              @relation(fields: [busId], references: [id], onDelete: Restrict)

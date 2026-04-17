@@ -1,0 +1,221 @@
+/* Tema oscuro CCMGC para react-day-picker (v9) — anula estilos por defecto claros */
+.map-date-field-popover {
+  min-width: 17.5rem;
+  color-scheme: dark;
+}
+
+/* Portal: sin recorte del aside con overflow */
+.map-date-field-popover-portal {
+  overscroll-behavior: contain;
+}
+
+.map-date-field-popover .rdp-root,
+.map-date-field-rdp {
+  --rdp-accent-color: #2563eb;
+  --rdp-accent-background-color: rgba(37, 99, 235, 0.22);
+  --rdp-day-height: 2.35rem;
+  --rdp-day-width: 2.35rem;
+  --rdp-day_button-border-radius: 0.375rem;
+  --rdp-disabled-opacity: 0.35;
+  --rdp-outside-opacity: 0.45;
+  color: var(--color-text-1, #f1f5f9);
+  font-size: 0.875rem;
+}
+
+/* style.css de la librería pone max-width: fit-content → banda vacía a la derecha */
+.map-date-field-popover .rdp-months,
+.map-date-field-rdp .rdp-months {
+  width: 100%;
+  max-width: none !important;
+  justify-content: center;
+}
+
+.map-date-field-popover .rdp-month,
+.map-date-field-rdp .rdp-month {
+  width: 100%;
+}
+
+.map-date-field-popover .rdp-month_caption,
+.map-date-field-rdp .rdp-month_caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0 0.5rem;
+  position: relative;
+  /* react-day-picker/style.css usa font-size: large en el caption */
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  height: auto !important;
+  min-height: 2.5rem;
+}
+
+.map-date-field-popover .rdp-month_grid,
+.map-date-field-rdp .rdp-month_grid {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.map-date-field-popover .rdp-weekdays,
+.map-date-field-popover .rdp-week {
+  width: 100%;
+}
+
+.map-date-field-popover .rdp-weekday,
+.map-date-field-popover .rdp-day {
+  width: 14.285714% !important;
+  box-sizing: border-box;
+}
+
+.map-date-field-popover .rdp-day {
+  height: auto;
+}
+
+/* El default pone font-size: large en la celda seleccionada y desbalancea la cuadrícula */
+.map-date-field-popover .rdp-selected {
+  font-size: inherit !important;
+}
+
+.map-date-field-popover .rdp-button_previous,
+.map-date-field-popover .rdp-button_next,
+.map-date-field-rdp .rdp-button_previous,
+.map-date-field-rdp .rdp-button_next {
+  color: var(--color-text-1, #f1f5f9);
+  border-radius: 0.375rem;
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-date-field-popover .rdp-button_previous:hover,
+.map-date-field-popover .rdp-button_next:hover,
+.map-date-field-rdp .rdp-button_previous:hover,
+.map-date-field-rdp .rdp-button_next:hover {
+  background: var(--color-surface-3, #1c2e50);
+}
+
+.map-date-field-popover .rdp-weekdays,
+.map-date-field-rdp .rdp-weekdays {
+  margin-top: 0.25rem;
+}
+
+.map-date-field-popover .rdp-weekday,
+.map-date-field-rdp .rdp-weekday {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--color-text-3, #94a3b8);
+  opacity: 1;
+}
+
+.map-date-field-popover .rdp-week,
+.map-date-field-rdp .rdp-week {
+  margin-top: 0.15rem;
+}
+
+.map-date-field-popover .rdp-day,
+.map-date-field-rdp .rdp-day {
+  padding: 0.1rem;
+}
+
+.map-date-field-popover .rdp-day_button,
+.map-date-field-rdp .rdp-day_button {
+  width: 100%;
+  min-height: 2.25rem;
+  border-radius: 0.375rem;
+  color: var(--color-text-1, #f1f5f9);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.map-date-field-popover .rdp-day_button:hover:not([disabled]),
+.map-date-field-rdp .rdp-day_button:hover:not([disabled]) {
+  background: var(--color-surface-3, #1c2e50);
+}
+
+.map-date-field-day-selected:not([disabled]),
+.map-date-field-popover .rdp-selected .rdp-day_button {
+  background: var(--color-accent, #2563eb) !important;
+  color: #fff !important;
+  font-weight: 600;
+  border-color: transparent !important;
+}
+
+.map-date-field-day-today:not(.map-date-field-day-selected),
+.map-date-field-popover .rdp-today:not(.rdp-selected) .rdp-day_button {
+  outline: 1px solid var(--color-accent, #2563eb);
+  outline-offset: -1px;
+}
+
+.map-date-field-rdp button.rdp-day_button:hover:not([disabled]):not(.map-date-field-day-selected) {
+  background: var(--color-surface-3);
+}
+
+/* Anular fondos claros del style.css por defecto de la librería */
+.map-date-field-popover .rdp-root,
+.map-date-field-rdp.rdp-root {
+  width: 100%;
+  max-width: 100%;
+  background: transparent !important;
+}
+
+.map-date-field-popover .rdp-day_button:focus-visible,
+.map-date-field-rdp .rdp-day_button:focus-visible {
+  outline: 2px solid var(--color-accent, #2563eb);
+  outline-offset: 1px;
+}
+
+/*
+ * navLayout="around": la librería usa position:absolute; con portal/overflow a veces
+ * las flechas se apilan. Forzamos una fila con CSS Grid (orden DOM: prev, caption, next, grid).
+ */
+.map-date-field-popover .rdp-root[data-nav-layout="around"] .rdp-month {
+  display: grid !important;
+  grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
+  grid-template-rows: auto auto;
+  align-items: center;
+  width: 100%;
+  position: relative;
+}
+
+.map-date-field-popover .rdp-root[data-nav-layout="around"] .rdp-button_previous,
+.map-date-field-popover .rdp-root[data-nav-layout="around"] .rdp-button_next {
+  position: static !important;
+  inset: auto !important;
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+  width: 2.5rem !important;
+  height: 2.5rem !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  justify-self: center;
+}
+
+.map-date-field-popover .rdp-root[data-nav-layout="around"] .rdp-button_previous {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.map-date-field-popover .rdp-root[data-nav-layout="around"] .rdp-month_caption {
+  grid-column: 2;
+  grid-row: 1;
+  margin-inline: 0 !important;
+  min-height: 2.5rem !important;
+  height: auto !important;
+  padding: 0.25rem 0 !important;
+  justify-content: center !important;
+}
+
+.map-date-field-popover .rdp-root[data-nav-layout="around"] .rdp-button_next {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.map-date-field-popover .rdp-root[data-nav-layout="around"] .rdp-month_grid {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}

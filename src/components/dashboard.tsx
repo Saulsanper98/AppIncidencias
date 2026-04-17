@@ -11,6 +11,7 @@ import {
   Search,
   Wrench,
 } from "lucide-react";
+import Link from "next/link";
 import {
   Area,
   AreaChart,
@@ -220,10 +221,16 @@ export function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <article className="min-h-[200px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-            <div className="flex items-center gap-2">
-              <MapPinned size={16} className="text-[var(--color-text-3)]" />
-              <h3 className="text-subheading">Mapa de incidencias</h3>
+          <Link
+            href="/mapa"
+            className="group block min-h-[200px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 transition-all duration-200 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-2)]/30"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <MapPinned size={16} className="text-[var(--color-text-3)] group-hover:text-[var(--color-accent)]" />
+                <h3 className="text-subheading">Mapa de incidencias</h3>
+              </div>
+              <ChevronRight size={16} className="shrink-0 text-[var(--color-text-3)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-accent)]" />
             </div>
             <ul className="mt-4 space-y-2">
               {municipalityIncidents.map((item) => (
@@ -238,7 +245,8 @@ export function Dashboard() {
                 </li>
               ))}
             </ul>
-          </article>
+            <p className="mt-3 text-xs font-medium text-[var(--color-accent)]">Abrir mapa operativo</p>
+          </Link>
 
           <DashboardPreventiveAgenda />
 
