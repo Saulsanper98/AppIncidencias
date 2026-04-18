@@ -13,6 +13,7 @@
     "test:login:visual:update": "playwright test tests/login.visual.spec.ts --update-snapshots",
     "test:admin-users": "playwright test tests/admin-users.spec.ts",
     "db:migrate": "prisma migrate dev",
+    "db:seed": "node --env-file=.env --import tsx ./scripts/seed-dev.ts",
     "db:backfill-tipologia": "node scripts/backfill-tipologia.js",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate"
@@ -50,6 +51,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
     "prisma": "^6.16.2",
+    "tsx": "^4.19.4",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
