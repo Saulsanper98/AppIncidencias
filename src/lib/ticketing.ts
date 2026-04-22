@@ -30,6 +30,9 @@ export function calculatePriority(input: PriorityRuleInput): TicketPriority {
   return "baja";
 }
 
+// Valores acordados con operaciones en reunión de arranque.
+// Alta=30min porque corte de servicio; media/baja son estimaciones conservadoras.
+// TODO: mover a config cuando haya más rodaje con los tiempos reales.
 export function calculateSlaMinutes(priority: TicketPriority): number {
   if (priority === "alta") {
     return 30;
@@ -66,3 +69,6 @@ export function formatSlaOverdueLabel(minsLate: number): string {
   const rem = m % 60;
   return rem ? `${h} h ${rem} min` : `${h} h`;
 }
+
+// TODO: tests unitarios para calculatePriority — los casos edge con
+// nivelImpacto=Medio y serviceStopped=true no están cubiertos todavía.

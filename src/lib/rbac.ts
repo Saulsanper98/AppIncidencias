@@ -13,6 +13,8 @@ export function canCreateTicket(role: UserRole) {
   return role === "conductor" || role === "tecnico_campo" || role === "gestor_centro_control";
 }
 
+// Los conductores reportan pero no operan: si pudieran cambiar estado
+// se arriesga a que cierren tickets antes de que el técnico los valide.
 export function canUpdateTicketStatus(role: UserRole) {
   return role === "tecnico_campo" || role === "gestor_centro_control";
 }

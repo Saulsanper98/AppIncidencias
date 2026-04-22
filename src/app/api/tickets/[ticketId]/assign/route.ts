@@ -36,6 +36,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ ticke
       return NextResponse.json({ message: "Los técnicos solo pueden asignarse a sí mismos" }, { status: 403 });
     }
 
+    // Solo técnicos de campo activos pueden recibir tickets; si el usuario
+    // fue desactivado después de asignarse tickets anteriores no bloqueamos
+    // los ya asignados, solo los nuevos.
     if (parsed.data.assignedToUserId) {
       const technician = await prisma.user.findUnique({
         where: { id: parsed.data.assignedToUserId },
@@ -58,12 +61,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ ticke
       },
     });
 
-    const assigneeName = ticket.assignedTo?.name ?? "nadie";
+    const assignedName = ticket.assignedTo?.name ?? "nadie";
     await writeAuditEvent({
       userId: actor.userId,
       ticketId,
       action: "ticket.assigned",
-      detail: `${actor.displayName} asignó ticket a ${assigneeName}`,
+      detail: `${actor.displayName} asignó ticket a ${assignedName}`,
     });
 
     if (parsed.data.assignedToUserId) {

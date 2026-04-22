@@ -118,6 +118,9 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
     });
 
+    // Los metadatos de adjunto (mimeType, sizeBytes) están en columnas que Prisma
+    // no genera todavía en el select de include, así que tiramos de raw query.
+    // Feo pero funciona hasta que migremos a un campo calculado.
     const attachmentIds = tickets.flatMap((t) => t.attachments.map((a) => a.id));
     type AttachmentMetaRow = {
       id: string;
@@ -165,15 +168,15 @@ export async function GET(request: Request) {
         assignedToUserName: ticket.assignedTo?.name ?? null,
         createdAt: ticket.createdAt.toISOString(),
         updatedAt: ticket.updatedAt.toISOString(),
-        attachments: ticket.attachments.map((item) => {
-          const meta = metaById.get(item.id);
+        attachments: ticket.attachments.map((a) => {
+          const meta = metaById.get(a.id);
           const diskFileName = meta?.diskFileName ?? null;
           return {
-            id: item.id,
-            fileName: item.fileName,
+            id: a.id,
+            fileName: a.fileName,
             mimeType: meta?.mimeType ?? null,
             sizeBytes: meta?.sizeBytes ?? null,
-            downloadUrl: diskFileName ? `/api/tickets/attachments/${item.id}` : null,
+            downloadUrl: diskFileName ? `/api/tickets/attachments/${a.id}` : null,
           };
         }),
         comments: ticket.comments.map((comment) => ({

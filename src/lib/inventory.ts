@@ -27,12 +27,12 @@ export async function getInventorySummary(): Promise<StockSummary[]> {
     where: { status: { in: ["reservado", "consumido"] } },
     select: { sparePartId: true, ticketId: true },
   });
-  const ticketsByPartId = new Map<string, Set<string>>();
+  const ticketSetByPartId = new Map<string, Set<string>>();
   for (const row of reservations) {
-    let set = ticketsByPartId.get(row.sparePartId);
+    let set = ticketSetByPartId.get(row.sparePartId);
     if (!set) {
       set = new Set<string>();
-      ticketsByPartId.set(row.sparePartId, set);
+      ticketSetByPartId.set(row.sparePartId, set);
     }
     set.add(row.ticketId);
   }
@@ -41,7 +41,7 @@ export async function getInventorySummary(): Promise<StockSummary[]> {
     const totalAvailable = part.stocks.reduce((acc, item) => acc + (item.quantity - item.reserved), 0);
     const totalReserved = part.stocks.reduce((acc, item) => acc + item.reserved, 0);
     const status = totalAvailable <= 0 ? "agotado" : totalAvailable <= part.minimumLevel ? "bajo" : "ok";
-    const ticketCount = ticketsByPartId.get(part.id)?.size ?? 0;
+    const ticketCount = ticketSetByPartId.get(part.id)?.size ?? 0;
 
     return {
       assetType: part.compatibleAssetType,
@@ -78,6 +78,8 @@ export async function reservePartForAssetType(assetType: AssetType, ticketId: st
     return { reserved: false as const, reason: "sin_stock", partCode: part.code, partName: part.name };
   }
 
+  // Cogemos el primer almacén con stock libre. El orden (cochera antes que central)
+  // favorece que el técnico coja el repuesto del sitio más cercano.
   await prisma.$transaction([
     prisma.inventoryStock.update({
       where: { id: candidateStock.id },

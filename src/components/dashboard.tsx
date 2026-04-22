@@ -130,6 +130,8 @@ export function Dashboard() {
   useEffect(() => {
     const load = async () => {
       try {
+        // TODO: añadir intervalo de refresco automático (cada 2-3 min).
+        // De momento el usuario refresca manualmente; suficiente para el piloto.
         const [kpisRes, trendRes] = await Promise.all([
           fetch("/api/dashboard/kpis", { cache: "no-store" }),
           fetch(`/api/dashboard/trend?days=${trendDays}`, { cache: "no-store" }),
