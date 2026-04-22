@@ -28,7 +28,7 @@ const menu = [
   { label: "Inventario", icon: Package, href: "/inventory" },
   { label: "Mapa", icon: MapPinned, href: "/mapa" },
   { label: "Base de Conocimiento", icon: BookOpenCheck, href: "#" },
-  { label: "Administración", icon: UserCircle2, href: "/admin/users" },
+  { label: "Administración", icon: UserCircle2, href: "/admin" },
 ];
 
 const SIDEBAR_STATE_KEY = "ccmgc_sidebar_expanded";
@@ -94,7 +94,7 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
-    if (href === "/admin/users") return pathname.startsWith("/admin");
+    if (href === "/admin") return pathname.startsWith("/admin");
     if (href === "/inventory") return pathname.startsWith("/inventory");
     if (href === "/mapa") return pathname.startsWith("/mapa");
     return pathname.startsWith(href) && href !== "#";

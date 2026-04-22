@@ -34,6 +34,14 @@ export function canCreatePreventiveTask(role: UserRole) {
   return role === "tecnico_campo" || role === "gestor_centro_control";
 }
 
+export function canAssignTicket(role: UserRole) {
+  return role === "tecnico_campo" || role === "gestor_centro_control";
+}
+
+export function canManageCatalog(role: UserRole) {
+  return role === "gestor_centro_control";
+}
+
 export function getAllowedTransitions(role: UserRole, current: TicketStatus): TicketStatus[] {
   if (role === "conductor") {
     return [];

@@ -13,6 +13,7 @@ import {
   Maximize2,
   PanelLeftClose,
   RefreshCw,
+  SlidersHorizontal,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -420,6 +421,8 @@ export function MapaView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const ticketFromUrl = searchParams.get("ticket");
+  /** Muro / videowall: `?muro=1` — el layout quita sidebar y cabecera de app; aquí solo mapa + bandeja (sin tocar el modo Enfoque del uso normal). */
+  const mapaMuro = searchParams.get("muro") === "1";
 
   const [status, setStatus] = useState<TicketStatus | "todos">("todos");
   const [priority, setPriority] = useState<TicketPriority | "todos">("todos");
@@ -455,6 +458,7 @@ export function MapaView() {
   const [selectionAnnounced, setSelectionAnnounced] = useState("");
   const [highlightTicketId, setHighlightTicketId] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"panel" | "map">("panel");
+  const [filtersMenuOpen, setFiltersMenuOpen] = useState(false);
   const [presentationMode, setPresentationMode] = useState(false);
   const [overlayLabels, setOverlayLabels] = useState(false);
   const [mapTileOpacity, setMapTileOpacity] = useState(100);
@@ -490,6 +494,12 @@ export function MapaView() {
     return { "x-user-id": actorUserId, "x-user-role": actorRole };
   }, [actorUserId, actorRole]);
 
+  const exitMuroHref = useMemo(() => {
+    const t = searchParams.get("ticket");
+    if (!t) return "/mapa";
+    return `/mapa?ticket=${encodeURIComponent(t)}`;
+  }, [searchParams]);
+
   useEffect(() => {
     void (async () => {
       try {
@@ -508,6 +518,11 @@ export function MapaView() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!mapaMuro) return;
+    setPresentationMode(false);
+  }, [mapaMuro]);
 
   useEffect(() => {
     const t = setTimeout(() => setPartCodeDebounced(partCodeInput.trim()), PART_DEBOUNCE_MS);
@@ -535,6 +550,15 @@ export function MapaView() {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [shortcutsOpen]);
+
+  useEffect(() => {
+    if (!filtersMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFiltersMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filtersMenuOpen]);
 
   useEffect(() => {
     void (async () => {
@@ -739,8 +763,9 @@ export function MapaView() {
       if (createdAfter.trim()) p.set("createdAfter", new Date(createdAfter).toISOString());
       if (createdBefore.trim()) p.set("createdBefore", new Date(createdBefore).toISOString());
       if (selectedId) p.set("ticket", selectedId);
+      if (mapaMuro) p.set("muro", "1");
       const qs = p.toString();
-      router.replace(qs ? `/mapa?${qs}` : "/mapa", { scroll: false });
+      router.replace(qs ? `/mapa?${qs}` : mapaMuro ? "/mapa?muro=1" : "/mapa", { scroll: false });
     }, URL_DEBOUNCE_MS);
     return () => {
       if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
@@ -757,6 +782,7 @@ export function MapaView() {
     selectedId,
     router,
     hydratedUrl,
+    mapaMuro,
   ]);
 
   const flyTargetId = selectedId ?? ticketFromUrl ?? null;
@@ -863,10 +889,11 @@ export function MapaView() {
     setCreatedBefore("");
   }, []);
 
-  const mapLayoutKey = `${presentationMode ? 1 : 0}-${mobileTab}`;
+  const mapLayoutKey = `${presentationMode ? 1 : 0}-${mapaMuro ? 1 : 0}-${mobileTab}-${filtersMenuOpen ? 1 : 0}`;
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-3">
+    <div className={cn("flex h-full min-h-0 w-full min-w-0 flex-1 flex-col", mapaMuro ? "gap-2" : "gap-3")}>
+      {!mapaMuro ? (
       <header className="shrink-0 border-b border-[var(--color-border)] pb-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -962,6 +989,7 @@ export function MapaView() {
           </div>
         </div>
       </header>
+      ) : null}
 
       <p className="sr-only" aria-live="polite">
         {liveSummary}
@@ -1002,7 +1030,12 @@ export function MapaView() {
         </div>
       ) : null}
 
-      <div className="mb-2 flex gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 lg:hidden">
+      <div
+        className={cn(
+          "mb-2 flex gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 lg:hidden",
+          mapaMuro && "hidden",
+        )}
+      >
         <button
           type="button"
           onClick={() => setMobileTab("panel")}
@@ -1013,7 +1046,7 @@ export function MapaView() {
               : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
           )}
         >
-          Filtros y lista
+          Bandeja
         </button>
         <button
           type="button"
@@ -1032,11 +1065,150 @@ export function MapaView() {
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-4">
         <aside
           className={cn(
-            "flex max-h-[min(52vh,480px)] min-h-0 w-full flex-col gap-3 overflow-y-auto overflow-x-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] lg:max-h-[min(calc(100dvh-10.5rem),900px)] lg:w-full lg:max-w-sm lg:shrink-0 lg:overflow-y-auto lg:p-4",
+            "flex min-h-0 w-full min-w-0 flex-1 flex-col gap-2 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] lg:max-h-[min(calc(100dvh-10.5rem),900px)] lg:w-[min(20rem,28vw)] lg:max-w-[min(20rem,28vw)] lg:shrink-0",
+            "max-h-[min(52vh,520px)] max-lg:min-h-0",
             presentationMode && "hidden",
-            mobileTab === "map" && "max-lg:hidden",
+            mobileTab === "map" && !mapaMuro && "max-lg:hidden",
           )}
         >
+          <div className="flex shrink-0 flex-wrap items-start justify-between gap-x-2 gap-y-2 border-b border-[var(--color-border)] pb-2.5">
+            <div className="min-w-0 flex-1 pr-2">
+              <h2 className="text-sm font-semibold leading-tight text-[var(--color-text-1)]">Tickets</h2>
+              <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-[var(--color-text-3)]">{filterSummary}</p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              {mapaMuro ? (
+                <Link
+                  href={exitMuroHref}
+                  className="inline-flex min-h-9 items-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--color-text-1)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface-3)]"
+                >
+                  Salir muro
+                </Link>
+              ) : null}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                onClick={() => setFiltersMenuOpen(true)}
+                aria-expanded={filtersMenuOpen}
+                aria-controls="mapa-opciones-panel"
+              >
+                <SlidersHorizontal size={14} aria-hidden />
+                Opciones
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/18 p-3 lg:min-h-[12rem]">
+            <p className="mb-2 shrink-0 text-label text-[var(--color-text-3)]">
+              Tickets en lista ({sortedFilteredList.length})
+            </p>
+            <div
+              className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]/40 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]"
+              onMouseLeave={() => setHighlightTicketId(null)}
+            >
+              {loading && !data ? (
+                <ul className="divide-y divide-[var(--color-border)] p-2" aria-busy="true" aria-label="Cargando lista">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <li key={i} className="animate-pulse py-3">
+                      <div className="mb-1 h-3 w-20 rounded bg-[var(--color-surface-3)]" />
+                      <div className="mb-1 h-4 w-full rounded bg-[var(--color-surface-3)]" />
+                      <div className="h-3 w-40 rounded bg-[var(--color-surface-3)]" />
+                    </li>
+                  ))}
+                </ul>
+              ) : error ? (
+                <div className="p-4 text-sm text-[var(--color-text-2)]">
+                  <p className="text-[var(--color-error)]">Error al cargar datos del mapa.</p>
+                  <p className="mt-2 text-caption">Usa <strong>Reintentar</strong> en el mapa si falla la carga, o <strong>Opciones</strong> → Actualizar.</p>
+                </div>
+              ) : !sortedFilteredList.length ? (
+                <div className="p-4 text-sm text-[var(--color-text-2)]">Sin coincidencias en lista o filtros.</div>
+              ) : (
+                <ul className="divide-y divide-[var(--color-border)]" role="listbox" aria-label="Tickets en el mapa">
+                  {sortedFilteredList.map((t) => {
+                    const slaOver = new Date(t.slaDeadline).getTime() < Date.now();
+                    return (
+                      <li key={t.id}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={selectedId === t.id}
+                          ref={(el) => {
+                            if (el) listItemRefs.current.set(t.id, el);
+                            else listItemRefs.current.delete(t.id);
+                          }}
+                          onMouseEnter={() => setHighlightTicketId(t.id)}
+                          onClick={() => setSelectedId(t.id)}
+                          className={cn(
+                            "flex w-full flex-col gap-1 px-3 py-2.5 text-left text-sm transition-colors hover:bg-[var(--color-surface-2)]",
+                            selectedId === t.id
+                              ? "border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent-light)]/45"
+                              : highlightTicketId === t.id
+                                ? "border-l-2 border-l-sky-400/60 bg-sky-500/10"
+                                : "border-l-2 border-l-transparent",
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-[11px] text-[var(--color-text-3)]">
+                              {t.id.slice(-8).toUpperCase()}
+                            </span>
+                            <Badge
+                              variant={ticketStatusBadgeVariant(t.status)}
+                              className={cn("!py-0 text-[10px]", ticketStatusBadgeClassName(t.status))}
+                            >
+                              {STATUS_LABEL[t.status]}
+                            </Badge>
+                            <Badge
+                              variant={priorityBadgeProps(t.priority).variant}
+                              className={cn("!py-0 text-[10px]", priorityBadgeProps(t.priority).className)}
+                            >
+                              {PRIORITY_LABEL[t.priority]}
+                            </Badge>
+                            {slaOver ? (
+                              <span className="text-[10px] font-medium text-[var(--color-error)]">SLA vencido</span>
+                            ) : null}
+                          </div>
+                          <span className="line-clamp-2 font-medium text-[var(--color-text-1)]">{t.title}</span>
+                          <span className="text-caption">
+                            {t.municipio} · {t.busId}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+
+
+        </aside>
+        {filtersMenuOpen ? (
+          <>
+            <div
+              className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-[1px]"
+              role="presentation"
+              aria-hidden
+              onClick={() => setFiltersMenuOpen(false)}
+            />
+            <div
+              id="mapa-opciones-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="mapa-opciones-titulo"
+              className="fixed inset-y-0 left-0 z-[90] flex w-[min(24rem,94vw)] flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
+            >
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-border)] px-4 py-3">
+                <h2 id="mapa-opciones-titulo" className="text-subheading text-[var(--color-text-1)]">
+                  Opciones del mapa
+                </h2>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setFiltersMenuOpen(false)}>
+                  Cerrar
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden p-4">
           <AsideSection title="Lista y orden (solo columna izquierda)">
             <div className="space-y-3">
               <p className="text-label text-[var(--color-text-3)]">Buscar en lista lateral</p>
@@ -1271,12 +1443,12 @@ export function MapaView() {
           <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50">
             <button
               type="button"
-              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-label text-[var(--color-text-3)] md:cursor-default md:pointer-events-none"
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-label text-[var(--color-text-3)]"
               onClick={() => setLegendOpen((v) => !v)}
               aria-expanded={legendOpen}
             >
               Leyenda
-              <span className="md:hidden">
+              <span>
                 {legendOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </span>
             </button>
@@ -1284,7 +1456,6 @@ export function MapaView() {
               className={cn(
                 "space-y-1.5 px-3 pb-3 text-xs text-[var(--color-text-2)]",
                 legendOpen ? "block" : "hidden",
-                "md:!block",
               )}
             >
               {(Object.keys(STATUS_LABEL) as TicketStatus[]).map((s) => (
@@ -1321,88 +1492,6 @@ export function MapaView() {
           </div>
           </AsideSection>
 
-          <div className="flex min-h-[min(14rem,28vh)] flex-1 flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/18 p-3 lg:min-h-[12rem]">
-            <p className="mb-2 shrink-0 text-label text-[var(--color-text-3)]">
-              Tickets en lista ({sortedFilteredList.length})
-            </p>
-            <div
-              className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]/40 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]"
-              onMouseLeave={() => setHighlightTicketId(null)}
-            >
-              {loading && !data ? (
-                <ul className="divide-y divide-[var(--color-border)] p-2" aria-busy="true" aria-label="Cargando lista">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <li key={i} className="animate-pulse py-3">
-                      <div className="mb-1 h-3 w-20 rounded bg-[var(--color-surface-3)]" />
-                      <div className="mb-1 h-4 w-full rounded bg-[var(--color-surface-3)]" />
-                      <div className="h-3 w-40 rounded bg-[var(--color-surface-3)]" />
-                    </li>
-                  ))}
-                </ul>
-              ) : error ? (
-                <div className="p-4 text-sm text-[var(--color-text-2)]">
-                  <p className="text-[var(--color-error)]">Error al cargar datos del mapa.</p>
-                  <p className="mt-2 text-caption">Usa <strong>Reintentar</strong> en el panel derecho.</p>
-                </div>
-              ) : !sortedFilteredList.length ? (
-                <div className="p-4 text-sm text-[var(--color-text-2)]">Sin coincidencias en lista o filtros.</div>
-              ) : (
-                <ul className="divide-y divide-[var(--color-border)]" role="listbox" aria-label="Tickets en el mapa">
-                  {sortedFilteredList.map((t) => {
-                    const slaOver = new Date(t.slaDeadline).getTime() < Date.now();
-                    return (
-                      <li key={t.id}>
-                        <button
-                          type="button"
-                          role="option"
-                          aria-selected={selectedId === t.id}
-                          ref={(el) => {
-                            if (el) listItemRefs.current.set(t.id, el);
-                            else listItemRefs.current.delete(t.id);
-                          }}
-                          onMouseEnter={() => setHighlightTicketId(t.id)}
-                          onClick={() => setSelectedId(t.id)}
-                          className={cn(
-                            "flex w-full flex-col gap-1 px-3 py-2.5 text-left text-sm transition-colors hover:bg-[var(--color-surface-2)]",
-                            selectedId === t.id
-                              ? "border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent-light)]/45"
-                              : highlightTicketId === t.id
-                                ? "border-l-2 border-l-sky-400/60 bg-sky-500/10"
-                                : "border-l-2 border-l-transparent",
-                          )}
-                        >
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-mono text-[11px] text-[var(--color-text-3)]">
-                              {t.id.slice(-8).toUpperCase()}
-                            </span>
-                            <Badge
-                              variant={ticketStatusBadgeVariant(t.status)}
-                              className={cn("!py-0 text-[10px]", ticketStatusBadgeClassName(t.status))}
-                            >
-                              {STATUS_LABEL[t.status]}
-                            </Badge>
-                            <Badge
-                              variant={priorityBadgeProps(t.priority).variant}
-                              className={cn("!py-0 text-[10px]", priorityBadgeProps(t.priority).className)}
-                            >
-                              {PRIORITY_LABEL[t.priority]}
-                            </Badge>
-                            {slaOver ? (
-                              <span className="text-[10px] font-medium text-[var(--color-error)]">SLA vencido</span>
-                            ) : null}
-                          </div>
-                          <span className="line-clamp-2 font-medium text-[var(--color-text-1)]">{t.title}</span>
-                          <span className="text-caption">
-                            {t.municipio} · {t.busId}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </div>
 
           <AsideSection title="Actualización" bodyClassName="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -1430,13 +1519,18 @@ export function MapaView() {
             {refreshUi === "loading" ? "Actualizando…" : refreshUi === "ok" ? "Actualizado" : "Actualizar"}
           </Button>
           </AsideSection>
-        </aside>
+              </div>
+            </div>
+          </>
+        ) : null}
+
+
 
         <section
           ref={mapShellRef}
           className={cn(
             "ccmgc-map-shell relative z-0 flex min-h-0 min-h-[min(280px,42dvh)] w-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[#0f1f3d] shadow-[inset_0_2px_12px_rgba(0,0,0,0.18)] lg:min-h-0",
-            mobileTab === "panel" && "max-lg:hidden",
+            mobileTab === "panel" && !mapaMuro && "max-lg:hidden",
             presentationMode && "lg:min-h-[min(70dvh,720px)]",
           )}
           style={mapTileOpacity < 100 ? { filter: `brightness(${mapTileOpacity / 100})` } : undefined}

@@ -22,7 +22,7 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true, isActive: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true, preferredDashboardId: true },
     });
     if (!user || !user.isActive) {
       cookieStore.delete(SESSION_COOKIE_NAME);
@@ -36,6 +36,7 @@ export async function GET() {
         name: user.name,
         email: user.email,
         role: user.role,
+        preferredDashboardId: user.preferredDashboardId,
       },
     });
     response.cookies.set(SESSION_COOKIE_NAME, user.id, {
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: parsed.data.userId },
-      select: { id: true, name: true, email: true, role: true, isActive: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true, preferredDashboardId: true },
     });
     if (!user || !user.isActive) {
       return NextResponse.json({ message: "Usuario no disponible" }, { status: 404 });
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
         name: user.name,
         email: user.email,
         role: user.role,
+        preferredDashboardId: user.preferredDashboardId,
       },
     });
 

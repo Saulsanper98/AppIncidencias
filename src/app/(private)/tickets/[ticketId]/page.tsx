@@ -56,6 +56,15 @@ type TicketView = Ticket & {
   comments: { id: string; author: string; body: string; createdAt: string }[];
 };
 
+type BusHistoryItem = {
+  id: string;
+  title: string;
+  status: TicketStatus;
+  priority: "alta" | "media" | "baja";
+  assetType: string;
+  createdAt: string;
+};
+
 type DetailSidebarSection = "operacion" | "clasificacion" | "fechas";
 
 function formatBytes(n: number | null | undefined): string | null {
@@ -158,6 +167,7 @@ export default function TicketDetailPage() {
   const [noteError, setNoteError] = useState<string | null>(null);
   const [copyLinkFeedback, setCopyLinkFeedback] = useState(false);
   const [copyShortIdFeedback, setCopyShortIdFeedback] = useState(false);
+  const [busHistory, setBusHistory] = useState<BusHistoryItem[]>([]);
   const reduceMotion = useReducedMotion();
 
   const toggleDetailSidebarSection = useCallback((id: DetailSidebarSection) => {
@@ -259,6 +269,21 @@ export default function TicketDetailPage() {
     };
     bootstrap();
   }, [role, sessionUser?.id, ticketId]);
+
+  useEffect(() => {
+    if (!ticket?.busId) return;
+    const loadBusHistory = async () => {
+      try {
+        const response = await fetch(`/api/buses/${encodeURIComponent(ticket.busId)}/history`, { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { history: BusHistoryItem[] };
+        setBusHistory(data.history ?? []);
+      } catch {
+        setBusHistory([]);
+      }
+    };
+    void loadBusHistory();
+  }, [ticket?.busId]);
 
   useEffect(() => {
     if (!detailActionsOpen) return;
@@ -559,6 +584,14 @@ export default function TicketDetailPage() {
                   <span>{ticket.operator}</span>
                   <span className="text-[var(--color-border)]">·</span>
                   <span>{ticket.municipio}</span>
+                </p>
+                <p className="mt-1.5 text-[12px] text-[var(--color-text-2)]">
+                  <span className="font-medium text-[var(--color-text-3)]">Asignado a: </span>
+                  {ticket.assignedToUserName?.trim()
+                    ? ticket.assignedToUserName
+                    : ticket.assignedToUserId
+                      ? "Usuario (sin nombre en catálogo)"
+                      : "Sin asignar"}
                 </p>
                 <p className="mt-1.5 text-[12px] text-[var(--color-text-3)]">
                   Creado {new Date(ticket.createdAt).toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
@@ -899,6 +932,34 @@ export default function TicketDetailPage() {
                   );
                 })}
               </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 transition-shadow duration-200 hover:shadow-md">
+            <h2 className="mb-4 text-subheading">Historial por bus</h2>
+            {busHistory.length <= 1 ? (
+              <p className="text-sm text-[var(--color-text-3)]">Aún no hay historial suficiente para este bus.</p>
+            ) : (
+              <ul className="space-y-2">
+                {busHistory
+                  .filter((item) => item.id !== ticket.id)
+                  .slice(0, 8)
+                  .map((item) => (
+                    <li key={item.id} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Link href={`/tickets/${item.id}`} className="truncate text-sm font-medium text-[var(--color-accent)] hover:underline">
+                          {item.title}
+                        </Link>
+                        <Badge variant={ticketStatusBadgeVariant(item.status)} className={ticketStatusBadgeClassName(item.status)}>
+                          {statusMap[item.status]}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-[11px] text-[var(--color-text-3)]">
+                        {item.assetType} · {new Date(item.createdAt).toLocaleString("es-ES")}
+                      </p>
+                    </li>
+                  ))}
+              </ul>
             )}
           </div>
         </div>

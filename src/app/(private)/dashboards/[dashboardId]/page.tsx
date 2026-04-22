@@ -20,6 +20,7 @@ import { SortableWidget } from "@/components/dashboard-builder/sortable-widget";
 import { WidgetRenderer } from "@/components/dashboard-builder/widget-renderer";
 import { Badge } from "@/components/ui/badge";
 import { CHART_TYPES, type ChartType } from "@/lib/dashboard/chart-types";
+import { mergeLayoutIntoConfig, parseWidgetLayout } from "@/lib/dashboard/widget-layout";
 import { cn } from "@/lib/utils";
 import type { SessionUser, UserRole } from "@/lib/domain";
 
@@ -68,6 +69,12 @@ const emptyData: DashboardData = {
   sla_compliance: [],
 };
 
+/**
+ * Redimensionado manual del grid (columnas + asa de altura). Desactivado porque el flujo aún no es fiable en producción.
+ * Para reactivarlo: poner en `true`, entrar como `gestor_centro_control`, modo edición, y validar guardado vía PATCH en `/api/dashboards/[id]/widgets`.
+ */
+const WIDGET_MANUAL_LAYOUT_EDIT_ENABLED = false;
+
 export default function DashboardBuilderPage() {
   const params = useParams<{ dashboardId: string }>();
   const dashboardId = params.dashboardId;
@@ -92,7 +99,10 @@ export default function DashboardBuilderPage() {
   const widgetRootRefs = useRef<Record<string, HTMLDivElement | null>>({});
   dashboardRef.current = dashboard;
 
-  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
+    useSensor(KeyboardSensor),
+  );
   const presetStorageKey = useMemo(
     () => `dashboard-presets:${sessionUserId ?? "anon"}:${dashboardId}`,
     [sessionUserId, dashboardId],
@@ -255,23 +265,6 @@ export default function DashboardBuilderPage() {
     }
   };
 
-  const handleResizeWidget = async (widgetId: string, size: string) => {
-    pushUndoSnapshot();
-    const response = await fetch(`/api/dashboards/${dashboardId}/widgets`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ widgetId, size }),
-    });
-    if (!response.ok) return;
-    setDashboard((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        widgets: prev.widgets.map((widget) => (widget.id === widgetId ? { ...widget, size } : widget)),
-      };
-    });
-  };
-
   const parseWidgetConfig = (config: string) => {
     try {
       return JSON.parse(config) as Record<string, unknown>;
@@ -284,6 +277,7 @@ export default function DashboardBuilderPage() {
     const response = await fetch(`/api/dashboards/${dashboardId}/widgets`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ widgetId, ...patch }),
     });
     return response.ok;
@@ -300,6 +294,44 @@ export default function DashboardBuilderPage() {
     }
     if (undoStackRef.current.length > 20) undoStackRef.current.shift();
   }, []);
+
+  const handleWidgetLayoutPatch = useCallback(
+    async (widgetId: string, patch: { colSpan?: number; minHeightPx?: number }) => {
+      if (role !== "gestor_centro_control") return;
+      pushUndoSnapshot();
+      const w = dashboardRef.current?.widgets.find((item) => item.id === widgetId);
+      if (!w) return;
+      const nextConfig = mergeLayoutIntoConfig(w.config, patch);
+      const prevConfig = w.config;
+      setError(null);
+      setDashboard((prev) =>
+        prev
+          ? {
+              ...prev,
+              widgets: prev.widgets.map((widget) =>
+                widget.id === widgetId ? { ...widget, config: nextConfig } : widget,
+              ),
+            }
+          : prev,
+      );
+      const ok = await updateWidget(widgetId, { config: nextConfig });
+      if (!ok) {
+        setError("No se pudo guardar el tamaño del widget. ¿Sigues en sesión como gestor?");
+        setDashboard((prev) =>
+          prev
+            ? {
+                ...prev,
+                widgets: prev.widgets.map((widget) =>
+                  widget.id === widgetId ? { ...widget, config: prevConfig } : widget,
+                ),
+              }
+            : prev,
+        );
+        await fetchDashboard();
+      }
+    },
+    [role, pushUndoSnapshot, updateWidget, fetchDashboard],
+  );
 
   const handleUndo = useCallback(async () => {
     const stack = undoStackRef.current;
@@ -791,15 +823,33 @@ export default function DashboardBuilderPage() {
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={sortedWidgets.map((widget) => widget.id)} strategy={rectSortingStrategy}>
-            <div className={cn("grid grid-cols-4 gap-4", presentationMode && "gap-3")}>
-              {sortedWidgets.map((widget, index) => (
-                <SortableWidget key={widget.id} id={widget.id} size={widget.size} isEditing={isEditing}>
+            <div
+              className={cn(
+                "grid grid-cols-4 gap-4 [grid-auto-rows:minmax(min-content,auto)]",
+                presentationMode && "gap-3",
+              )}
+            >
+              {sortedWidgets.map((widget, index) => {
+                const layout = parseWidgetLayout(widget.config, widget.size);
+                return (
+                <SortableWidget
+                  key={widget.id}
+                  id={widget.id}
+                  layoutColSpan={layout.colSpan}
+                  layoutMinHeightPx={layout.minHeightPx}
+                  isEditing={isEditing}
+                  onLayoutPatch={
+                    WIDGET_MANUAL_LAYOUT_EDIT_ENABLED && role === "gestor_centro_control" && isEditing
+                      ? (patch) => void handleWidgetLayoutPatch(widget.id, patch)
+                      : undefined
+                  }
+                >
+                  <div className="h-full min-h-0">
                   <WidgetRenderer
                     widget={{ ...widget, chartType: widget.chartType as ChartType }}
                     data={data ?? emptyData}
                     isEditing={isEditing}
                     onRemove={handleRemoveWidget}
-                    onResize={handleResizeWidget}
                     onDuplicate={handleDuplicateWidget}
                     onQuickToggleLegend={handleToggleLegendWidget}
                     onQuickCycleChartType={handleCycleChartType}
@@ -819,8 +869,10 @@ export default function DashboardBuilderPage() {
                         : undefined
                     }
                   />
+                  </div>
                 </SortableWidget>
-              ))}
+                );
+              })}
             </div>
           </SortableContext>
         </DndContext>

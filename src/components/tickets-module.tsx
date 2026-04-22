@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
   PackageSearch,
   Plus,
+  Search,
   SignalHigh,
   SignalLow,
   SignalMedium,
@@ -45,7 +46,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ccmgcNativeSelectClassName, Input, Select, Textarea } from "@/components/ui/input";
 import type { AssetType, SessionUser, Ticket, TicketPriority, TicketStatus, UserRole } from "@/lib/domain";
-import { canUseFilters, getAllowedTransitions } from "@/lib/rbac";
+import { canAssignTicket, canUseFilters, getAllowedTransitions } from "@/lib/rbac";
 import { calculatePriority, calculateSlaMinutes, formatSlaOverdueLabel, toUiPriority } from "@/lib/ticketing";
 import type { NivelImpacto, TipologiaItem } from "@/lib/tipologia";
 import {
@@ -92,7 +93,7 @@ type CatalogBus = {
   operator: string;
   municipio: string;
   lineas: string[];
-  assets: { id: string; type: AssetType; serialNumber: string }[];
+  assets: { id: string; type: AssetType; serialNumber: string; slaMinutes?: number | null }[];
 };
 
 type CatalogPayload = {
@@ -549,6 +550,11 @@ export function TicketsModule() {
   const [maintenanceAlerts, setMaintenanceAlerts] = useState<MaintenanceAlertView[]>([]);
   const [preventiveTasks, setPreventiveTasks] = useState<PreventiveTaskView[]>([]);
   const [taskPlans, setTaskPlans] = useState<Record<string, { assignedToUserId: string; scheduledAt: string }>>({});
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const [completionNote, setCompletionNote] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [assignTarget, setAssignTarget] = useState<string | null>(null);
+  const [assignTechnicianId, setAssignTechnicianId] = useState("");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [actionMenuTicketId, setActionMenuTicketId] = useState<string | null>(null);
   const [actionMenuViewport, setActionMenuViewport] = useState<{ top: number; left: number } | null>(null);
@@ -610,7 +616,10 @@ export function TicketsModule() {
     });
   }, [selectedAsset, form.impactedLines, form.serviceStopped, form.nivelImpacto]);
 
-  const computedSla = calculateSlaMinutes(computedPriority);
+  const computedSla =
+    selectedAsset?.slaMinutes != null && selectedAsset.slaMinutes > 0
+      ? selectedAsset.slaMinutes
+      : calculateSlaMinutes(computedPriority);
   const ticketFormProgress = useMemo(() => {
     const checks = [
       Boolean(form.busId && form.assetId),
@@ -1363,6 +1372,35 @@ export function TicketsModule() {
     await fetchAuditEvents();
   };
 
+  const handleCompleteTask = async (taskId: string) => {
+    if (!sessionUser) {
+      setError("Debes iniciar sesión para completar tareas preventivas.");
+      return;
+    }
+    const response = await fetch("/api/maintenance/tasks", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-user-role": role, "x-user-id": currentUserId },
+      body: JSON.stringify({
+        taskId,
+        status: "completada",
+        completionNotes: completionNote.trim() || undefined,
+      }),
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      const payload = JSON.parse(text || "{}") as { message?: string };
+      setError(payload.message ?? "No se pudo completar la tarea preventiva.");
+      return;
+    }
+    setCompletingTaskId(null);
+    setCompletionNote("");
+    setNoticeTone("success");
+    setNoticePlacement("toast");
+    setNotice("Tarea preventiva completada.");
+    await fetchPreventiveTasks();
+    await fetchAuditEvents();
+  };
+
   const handlePlanPreventiveTask = async (taskId: string) => {
     if (!sessionUser) {
       setError("Debes iniciar sesión para planificar tareas preventivas.");
@@ -1431,6 +1469,27 @@ export function TicketsModule() {
   void handleLogin;
   void handleLogout;
 
+  const handleAssignTicket = async () => {
+    if (!assignTarget || !sessionUser) return;
+    const response = await fetch(`/api/tickets/${assignTarget}/assign`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignedToUserId: assignTechnicianId || null }),
+    });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      setError(data.message ?? "No se pudo asignar el ticket.");
+      return;
+    }
+    setAssignTarget(null);
+    setAssignTechnicianId("");
+    setActionMenuTicketId(null);
+    setNoticeTone("success");
+    setNoticePlacement("toast");
+    setNotice("Ticket asignado correctamente.");
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter);
+  };
+
   const handleClearFilters = () => {
     setStatusFilter("todos");
     setPriorityFilter("todos");
@@ -1461,8 +1520,9 @@ export function TicketsModule() {
       "prioridad",
       "sla_deadline_iso",
       "activo",
+      "asignado_a",
     ];
-    const lines = tickets.map((t) =>
+    const lines = filteredTickets.map((t) =>
       [
         t.id,
         t.title,
@@ -1472,6 +1532,7 @@ export function TicketsModule() {
         toUiPriority(t.priority),
         t.slaDeadline,
         t.subsubtipo ?? t.assetType,
+        t.assignedToUserName ?? "",
       ]
         .map((cell) => escape(String(cell)))
         .join(delimiter),
@@ -1489,9 +1550,24 @@ export function TicketsModule() {
     setNoticeTone("success");
     setNoticePlacement("toast");
     setNotice(
-      `Exportados ${tickets.length} ticket(s). Archivo: ${downloadName} (zona horaria del navegador en el nombre).`,
+      `Exportados ${filteredTickets.length} ticket(s). Archivo: ${downloadName} (zona horaria del navegador en el nombre).`,
     );
   };
+
+  const filteredTickets = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return tickets;
+    return tickets.filter(
+      (t) =>
+        t.title.toLowerCase().includes(q) ||
+        t.busId.toLowerCase().includes(q) ||
+        t.operator.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        (t.subsubtipo?.toLowerCase().includes(q) ?? false) ||
+        (t.assignedToUserName?.toLowerCase().includes(q) ?? false) ||
+        t.id.toLowerCase().includes(q),
+    );
+  }, [tickets, searchQuery]);
 
   const ticketCountByPriority = useMemo(() => {
     return tickets.reduce(
@@ -2198,6 +2274,25 @@ export function TicketsModule() {
               {canUseFilters(role) ? (
                 <>
                   <div className="hidden flex-wrap items-center gap-2 md:flex">
+                    <div className="relative">
+                      <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]" aria-hidden />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Buscar tickets…"
+                        className="w-44 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] py-1.5 pl-8 pr-7 text-xs text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                      />
+                      {searchQuery && (
+                        <button
+                          onClick={() => setSearchQuery("")}
+                          aria-label="Limpiar búsqueda"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-3)] hover:text-[var(--color-text-1)]"
+                        >
+                          <X size={12} aria-hidden />
+                        </button>
+                      )}
+                    </div>
                     <select
                       ref={statusFilterSelectRef}
                       value={statusFilter}
@@ -2500,7 +2595,7 @@ export function TicketsModule() {
                         </tr>
                       </thead>
                       <tbody className="[&>tr:nth-child(even)]:bg-[var(--color-surface-2)]/40">
-                        {tickets.map((ticket) => (
+                        {filteredTickets.map((ticket) => (
                           <tr
                             key={ticket.id}
                             className="align-top border-b border-[var(--color-border)] transition-[background-color,box-shadow] duration-200 ease-out hover:bg-[var(--color-surface-2)]/55 hover:shadow-[inset_0_0_0_9999px_rgba(0,0,0,0.015)] last:border-0"
@@ -2526,6 +2621,11 @@ export function TicketsModule() {
                             <td className={cn("min-w-0 max-w-[min(380px,36vw)] xl:max-w-md", bandejaTdPad)}>
                               <p className="truncate font-medium text-[var(--color-text-1)]">{ticket.title}</p>
                               <p className="truncate text-caption">{ticket.operator}</p>
+                              {ticket.assignedToUserName && (
+                                <p className="truncate text-[10px] text-[var(--color-accent)]">
+                                  → {ticket.assignedToUserName}
+                                </p>
+                              )}
                             </td>
                             <td className={bandejaTdPad}>
                               <p className="text-[var(--color-text-1)]">{ticket.busId}</p>
@@ -2836,16 +2936,56 @@ export function TicketsModule() {
                     {task.scheduledAt ? new Date(task.scheduledAt).toLocaleString("es-ES") : "Sin fecha"}
                   </p>
                   {(role === "tecnico_campo" || role === "gestor_centro_control") && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {(["pendiente", "programada", "completada", "cancelada"] as const).map((status) => (
-                        <button
-                          key={`${task.id}-${status}`}
-                          onClick={() => handleUpdatePreventiveTaskStatus(task.id, status)}
-                          className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2 py-1 text-[11px] text-[var(--color-text-2)] transition-all duration-150 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]"
-                        >
-                          {status}
-                        </button>
-                      ))}
+                    <div className="mt-2 space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["pendiente", "programada", "cancelada"] as const)
+                          .filter((s) => s !== task.status)
+                          .map((status) => (
+                            <button
+                              key={`${task.id}-${status}`}
+                              onClick={() => handleUpdatePreventiveTaskStatus(task.id, status)}
+                              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2 py-1 text-[11px] text-[var(--color-text-2)] transition-all duration-150 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]"
+                            >
+                              {status}
+                            </button>
+                          ))}
+                        {task.status !== "completada" && (
+                          <button
+                            onClick={() => {
+                              setCompletingTaskId(completingTaskId === task.id ? null : task.id);
+                              setCompletionNote("");
+                            }}
+                            className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-400 transition-all duration-150 hover:bg-emerald-500/20"
+                          >
+                            Completar…
+                          </button>
+                        )}
+                      </div>
+                      {completingTaskId === task.id && (
+                        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-2.5 space-y-2">
+                          <textarea
+                            value={completionNote}
+                            onChange={(e) => setCompletionNote(e.target.value)}
+                            placeholder="Notas de cierre (opcional)…"
+                            rows={2}
+                            className="w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[11px] text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+                          />
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => void handleCompleteTask(task.id)}
+                              className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-emerald-500"
+                            >
+                              Confirmar
+                            </button>
+                            <button
+                              onClick={() => { setCompletingTaskId(null); setCompletionNote(""); }}
+                              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1 text-[11px] text-[var(--color-text-2)] transition-colors hover:bg-[var(--color-surface)]"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {role === "gestor_centro_control" && (
@@ -2937,7 +3077,90 @@ export function TicketsModule() {
                   </button>
                 </li>
               ))}
+              {canAssignTicket(role) && actionMenuTicket.status !== "resuelto" && (
+                <>
+                  {getAllowedTransitions(role, actionMenuTicket.status).length > 0 && (
+                    <li role="none">
+                      <hr className="my-1 border-[var(--color-border)]" />
+                    </li>
+                  )}
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-[var(--color-text-2)] transition-colors duration-200 hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
+                      onClick={() => {
+                        setAssignTarget(actionMenuTicket.id);
+                        setAssignTechnicianId(actionMenuTicket.assignedToUserId ?? "");
+                        setActionMenuTicketId(null);
+                      }}
+                    >
+                      Asignar técnico…
+                    </button>
+                  </li>
+                </>
+              )}
             </ul>,
+            document.body,
+          )
+        : null}
+
+      {assignTarget && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="assign-ticket-title"
+              className="fixed inset-0 z-[95] flex items-center justify-center bg-black/45 p-4"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) {
+                  setAssignTarget(null);
+                  setAssignTechnicianId("");
+                }
+              }}
+            >
+              <div
+                className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2 id="assign-ticket-title" className="text-sm font-semibold text-[var(--color-text-1)]">
+                  Asignar técnico
+                </h2>
+                <p className="mt-1 text-xs text-[var(--color-text-3)]">Ticket {assignTarget}</p>
+                <label className="mt-4 block text-xs font-medium text-[var(--color-text-2)]" htmlFor="assign-tech-select">
+                  Técnico
+                </label>
+                <select
+                  id="assign-tech-select"
+                  value={assignTechnicianId}
+                  onChange={(event) => setAssignTechnicianId(event.target.value)}
+                  className={cn(ccmgcNativeSelectClassName, "mt-1.5 w-full")}
+                >
+                  <option value="">Sin asignar</option>
+                  {technicians.map((technician) => (
+                    <option key={technician.id} value={technician.id}>
+                      {technician.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-5 flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setAssignTarget(null);
+                      setAssignTechnicianId("");
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="button" size="sm" onClick={() => void handleAssignTicket()}>
+                    Guardar
+                  </Button>
+                </div>
+              </div>
+            </div>,
             document.body,
           )
         : null}

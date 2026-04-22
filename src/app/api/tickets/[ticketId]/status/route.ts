@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import type { TicketStatus } from "@/lib/domain";
+import { consumeReservedPartsForTicket } from "@/lib/inventory";
+import { notifyTicketExternally } from "@/lib/external-notifications";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { canUpdateTicketStatus, getAllowedTransitions } from "@/lib/rbac";
@@ -33,7 +35,7 @@ export async function PATCH(
 
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, busId: true, title: true },
     });
     if (!ticket) {
       return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 });
@@ -52,6 +54,12 @@ export async function PATCH(
       data: { status: parsed.data.nextStatus },
     });
 
+    let consumedCount = 0;
+    if (parsed.data.nextStatus === "resuelto") {
+      const consumed = await consumeReservedPartsForTicket(ticket.id);
+      consumedCount = consumed.consumedCount;
+    }
+
     await prisma.ticketComment.create({
       data: {
         ticketId: ticket.id,
@@ -64,10 +72,24 @@ export async function PATCH(
       userId: actor.userId,
       ticketId: ticket.id,
       action: "ticket.status_changed",
-      detail: `${ticket.status} -> ${parsed.data.nextStatus} por ${actor.displayName}. ${parsed.data.comment}`,
+      detail: `${ticket.status} -> ${parsed.data.nextStatus} por ${actor.displayName}. ${parsed.data.comment}${consumedCount > 0 ? ` · repuestos consumidos: ${consumedCount}` : ""}`,
     });
 
-    return NextResponse.json({ ok: true, ticketId: ticket.id, nextStatus: parsed.data.nextStatus });
+    if (parsed.data.nextStatus === "resuelto") {
+      notifyTicketExternally({
+        kind: "ticket_resolved",
+        ticketId: ticket.id,
+        title: ticket.title,
+        busId: ticket.busId,
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      ticketId: ticket.id,
+      nextStatus: parsed.data.nextStatus,
+      inventory: { consumedReservations: consumedCount },
+    });
   } catch (error) {
     console.error("Error updating ticket status:", error);
     return NextResponse.json({ message: "No se pudo actualizar el estado" }, { status: 500 });

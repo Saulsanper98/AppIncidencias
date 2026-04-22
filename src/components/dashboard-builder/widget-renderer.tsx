@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Ref } from "react";
 import { Copy, Download, EyeOff, RotateCcw, Wand2, X } from "lucide-react";
@@ -37,8 +38,10 @@ import {
   ZAxis,
 } from "recharts";
 
+import { DashboardPreventiveAgenda } from "@/components/dashboard-preventive-agenda";
+import { InventoryCompactWidget } from "@/components/dashboard-embeds/inventory-compact-widget";
+import { TicketsBandejaWidget } from "@/components/dashboard-embeds/tickets-bandeja-widget";
 import { CHART_THEME, formatMetric, type MetricFormat } from "@/lib/dashboard/chart-theme";
-import { ccmgcNativeSelectClassName } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ChartType } from "@/lib/dashboard/chart-types";
 
@@ -54,7 +57,6 @@ type WidgetRendererProps = {
   data: DashboardData;
   isEditing?: boolean;
   onRemove?: (id: string) => void;
-  onResize?: (id: string, size: string) => void;
   onRequestEdit?: () => void;
   onDuplicate?: (id: string) => void;
   onQuickToggleLegend?: (id: string) => void;
@@ -199,6 +201,11 @@ function getDataSourceLabel(dataSource: string) {
   if (dataSource === "tickets_by_priority") return "Tickets por prioridad";
   if (dataSource === "sla_compliance") return "Cumplimiento SLA (7 días)";
   if (dataSource === "manual") return "Datos manuales";
+  if (dataSource === "operation_links") return "Enlaces de operación";
+  if (dataSource === "embed_tickets") return "Bandeja de tickets (resumen)";
+  if (dataSource === "embed_inventory") return "Inventario (resumen)";
+  if (dataSource === "embed_map") return "Mapa embebido (descontinuado)";
+  if (dataSource === "embed_preventive") return "Agenda preventiva (resumen)";
   return "Fuente personalizada";
 }
 
@@ -208,6 +215,8 @@ function getDataSourceMicrocopy(dataSource: string, totalPoints: number) {
   if (dataSource === "tickets_by_operator") return "Snapshot: tickets agrupados por operadora.";
   if (dataSource === "tickets_by_status") return "Snapshot: tickets agrupados por estado.";
   if (dataSource === "manual") return "Origen manual para analisis puntual.";
+  if (dataSource === "operation_links") return "Accesos al contenido habitual del panel.";
+  if (dataSource.startsWith("embed_")) return "Vista embebida de la aplicación.";
   return `${totalPoints} puntos en visualizacion`;
 }
 
@@ -391,6 +400,14 @@ const QUICK_DATA_SOURCES = [
   { id: "tickets_by_priority", label: "Prioridad" },
   { id: "sla_compliance", label: "SLA" },
   { id: "manual", label: "Manual" },
+  { id: "operation_links", label: "Enlaces" },
+] as const;
+
+const OPERATION_QUICK_LINKS = [
+  { href: "/tickets", label: "Bandeja de tickets", hint: "Listado y alta de tickets" },
+  { href: "/dashboard", label: "Panel operativo", hint: "KPIs e incidencias activas" },
+  { href: "/mapa", label: "Mapa de incidencias", hint: "Vista geográfica" },
+  { href: "/inventory", label: "Inventario", hint: "Repuestos y almacenes" },
 ] as const;
 
 function getEmptyStateBySource(dataSource: string) {
@@ -481,7 +498,6 @@ export function WidgetRenderer({
   data,
   isEditing,
   onRemove,
-  onResize,
   onRequestEdit,
   onDuplicate,
   onQuickToggleLegend,
@@ -828,6 +844,161 @@ export function WidgetRenderer({
     );
   };
 
+  const embedCardClass = cn(
+    "flex h-full min-h-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] relative",
+    cardPaddingClass,
+    isEditing && "ring-1 ring-[var(--color-accent)]/40",
+    isKeyboardFocused && "ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface)]",
+  );
+
+  const embedHeader = (
+    <div className={cn("mb-3 shrink-0 border-b border-[var(--color-border)] pb-3 flex items-start justify-between", presentationMode && "pb-2")}>
+      <div>
+        <h3 className={cn("text-subheading", isEditing && "pl-5", presentationMode && "text-[15px]")}>{widget.title}</h3>
+        <p className={cn("text-caption text-[var(--color-text-3)] mt-1", isEditing && "pl-5")}>{dataSourceLabel}</p>
+        <p className={cn("text-[10px] text-[var(--color-text-3)] mt-1", isEditing && "pl-5")}>{dataSourceMicrocopy}</p>
+      </div>
+      <div className={cn("flex items-center gap-2", presentationMode && "hidden")}>
+        {isEditing && onRemove ? (
+          <button
+            type="button"
+            onClick={() => onRemove(widget.id)}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--color-error)] hover:bg-[var(--color-error-light)] transition-all"
+          >
+            <X size={14} />
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  if (widget.dataSource === "embed_tickets") {
+    return (
+      <div
+        ref={exportRootRef}
+        role="region"
+        aria-label={widget.title}
+        onMouseDown={() => onWidgetPaneMouseDown?.()}
+        className={embedCardClass}
+      >
+        {embedHeader}
+        <div className="min-h-0 flex-1 overflow-auto [-webkit-overflow-scrolling:touch]">
+          <TicketsBandejaWidget />
+        </div>
+      </div>
+    );
+  }
+
+  if (widget.dataSource === "embed_inventory") {
+    return (
+      <div
+        ref={exportRootRef}
+        role="region"
+        aria-label={widget.title}
+        onMouseDown={() => onWidgetPaneMouseDown?.()}
+        className={embedCardClass}
+      >
+        {embedHeader}
+        <div className="min-h-0 flex-1 overflow-auto">
+          <InventoryCompactWidget />
+        </div>
+      </div>
+    );
+  }
+
+  if (widget.dataSource === "embed_map") {
+    return (
+      <div
+        ref={exportRootRef}
+        role="region"
+        aria-label={widget.title}
+        onMouseDown={() => onWidgetPaneMouseDown?.()}
+        className={embedCardClass}
+      >
+        {embedHeader}
+        <div className="min-h-0 flex-1 space-y-3 p-2 text-sm leading-relaxed text-[var(--color-text-2)]">
+          <p>
+            El mapa embebido en dashboards ya no está disponible. Para la vista geográfica usa la pantalla{" "}
+            <Link className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline" href="/mapa">
+              Mapa
+            </Link>{" "}
+            o añade el widget de bandeja de tickets.
+          </p>
+          {isEditing ? (
+            <p className="text-caption text-[var(--color-text-3)]">
+              En modo edición puedes eliminar este bloque o cambiar su fuente de datos desde la barra del widget.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (widget.dataSource === "embed_preventive") {
+    return (
+      <div
+        ref={exportRootRef}
+        role="region"
+        aria-label={widget.title}
+        onMouseDown={() => onWidgetPaneMouseDown?.()}
+        className={embedCardClass}
+      >
+        {embedHeader}
+        <div className="max-h-[min(420px,55vh)] min-h-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]">
+          <DashboardPreventiveAgenda />
+        </div>
+      </div>
+    );
+  }
+
+  if (widget.dataSource === "operation_links") {
+    return (
+      <div
+        ref={exportRootRef}
+        role="region"
+        aria-label={widget.title}
+        onMouseDown={() => onWidgetPaneMouseDown?.()}
+        className={cn(
+          "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] relative",
+          cardPaddingClass,
+          isEditing && "ring-1 ring-[var(--color-accent)]/40",
+          isKeyboardFocused && "ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface)]",
+        )}
+      >
+        <div className={cn("mb-3 border-b border-[var(--color-border)] pb-3 flex items-start justify-between", presentationMode && "pb-2")}>
+          <div>
+            <h3 className={cn("text-subheading", isEditing && "pl-5", presentationMode && "text-[15px]")}>{widget.title}</h3>
+            <p className={cn("text-caption text-[var(--color-text-3)] mt-1", isEditing && "pl-5")}>{dataSourceLabel}</p>
+            <p className={cn("text-[10px] text-[var(--color-text-3)] mt-1", isEditing && "pl-5")}>{dataSourceMicrocopy}</p>
+          </div>
+          <div className={cn("flex items-center gap-2", presentationMode && "hidden")}>
+            {isEditing && onRemove ? (
+              <button
+                onClick={() => onRemove(widget.id)}
+                className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--color-error)] hover:bg-[var(--color-error-light)] transition-all"
+              >
+                <X size={14} />
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <ul className="space-y-2">
+          {OPERATION_QUICK_LINKS.map((item) => (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                className="flex flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-sm text-[var(--color-text-1)] transition-colors hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-3)]"
+              >
+                <span className="font-medium text-[var(--color-accent)]">{item.label}</span>
+                <span className="text-[11px] text-[var(--color-text-3)]">{item.hint}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   if (!sourceData || sourceData.length === 0) {
     return (
       <div
@@ -850,21 +1021,6 @@ export function WidgetRenderer({
             <p className={cn("text-[10px] text-[var(--color-text-3)] mt-1", isEditing && "pl-5")}>{dataSourceMicrocopy}</p>
           </div>
           <div className={cn("flex items-center gap-2", presentationMode && "hidden")}>
-            {isEditing && onResize ? (
-              <select
-                value={widget.size}
-                onChange={(e) => onResize(widget.id, e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                className={cn(
-                  ccmgcNativeSelectClassName,
-                  "w-auto !min-h-8 rounded-md bg-[var(--color-surface-3)] px-2 py-1 text-xs focus:ring-1 focus:ring-[var(--color-accent)]",
-                )}
-              >
-                <option value="small">Pequeño (1/4)</option>
-                <option value="medium">Mediano (1/2)</option>
-                <option value="large">Grande (completo)</option>
-              </select>
-            ) : null}
             {isEditing && onRemove ? (
               <button
                 onClick={() => onRemove(widget.id)}
@@ -1487,21 +1643,6 @@ export function WidgetRenderer({
           ) : null}
         </div>
         <div className={cn("flex items-center gap-2", presentationMode && "hidden")}>
-          {isEditing && onResize ? (
-            <select
-              value={widget.size}
-              onChange={(e) => onResize(widget.id, e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              className={cn(
-                ccmgcNativeSelectClassName,
-                "w-auto !min-h-8 rounded-md bg-[var(--color-surface-3)] px-2 py-1 text-xs focus:ring-1 focus:ring-[var(--color-accent)]",
-              )}
-            >
-              <option value="small">Pequeño (1/4)</option>
-              <option value="medium">Mediano (1/2)</option>
-              <option value="large">Grande (completo)</option>
-            </select>
-          ) : null}
           {isEditing && onRemove ? (
             <button
               onClick={() => onRemove(widget.id)}

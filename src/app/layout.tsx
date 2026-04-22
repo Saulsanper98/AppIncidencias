@@ -1,6 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+
+import { RegisterServiceWorker } from "@/components/register-service-worker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,6 +23,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "CCMGC Ticketing",
   description: "Sistema integral de gestión de incidencias de movilidad",
+  appleWebApp: {
+    capable: true,
+    title: "CCMGC",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
 };
 
 export default function RootLayout({
@@ -31,6 +41,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <RegisterServiceWorker />
         {children}
       </body>
     </html>

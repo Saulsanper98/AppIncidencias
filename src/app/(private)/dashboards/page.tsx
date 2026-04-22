@@ -1,12 +1,13 @@
 "use client";
 
-import { LayoutDashboard, Plus, Trash2 } from "lucide-react";
+import { LayoutDashboard, Plus, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/ui/section-header";
 import type { SessionUser, UserRole } from "@/lib/domain";
+import { cn } from "@/lib/utils";
 
 type DashboardListItem = {
   id: string;
@@ -22,6 +23,8 @@ export default function DashboardsPage() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole>("conductor");
   const [newName, setNewName] = useState("");
+  const [preferredDashboardId, setPreferredDashboardId] = useState<string | null>(null);
+  const [prefMessage, setPrefMessage] = useState<string | null>(null);
 
   const fetchDashboards = async () => {
     const response = await fetch("/api/dashboards", { cache: "no-store" });
@@ -40,6 +43,7 @@ export default function DashboardsPage() {
         const sessionData = (await sessionResponse.json()) as { authenticated: boolean; user?: SessionUser };
         if (sessionData.authenticated && sessionData.user) {
           setRole(sessionData.user.role);
+          setPreferredDashboardId(sessionData.user.preferredDashboardId ?? null);
         }
 
         await fetchDashboards();
@@ -69,6 +73,26 @@ export default function DashboardsPage() {
       await fetchDashboards();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "No se pudo crear el dashboard");
+    }
+  };
+
+  const patchPreferredDashboard = async (id: string | null) => {
+    try {
+      setPrefMessage(null);
+      const response = await fetch("/api/auth/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ preferredDashboardId: id }),
+      });
+      const payload = (await response.json()) as { message?: string };
+      if (!response.ok) {
+        throw new Error(payload.message ?? "No se pudo guardar la preferencia");
+      }
+      setPreferredDashboardId(id);
+      setPrefMessage(id ? "Este panel se abrirá al ir a Dashboard." : "Se mostrará de nuevo el panel operativo estándar.");
+    } catch (prefError) {
+      setPrefMessage(prefError instanceof Error ? prefError.message : "No se pudo guardar la preferencia");
     }
   };
 
@@ -104,6 +128,25 @@ export default function DashboardsPage() {
   return (
     <div className="space-y-4">
       <SectionHeader title="Custom Dashboards" description="Crea paneles personalizados para operación y análisis." />
+
+      {preferredDashboardId ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text-2)]">
+          <span>Tienes un panel personalizado como inicio.</span>
+          <button
+            type="button"
+            onClick={() => void patchPreferredDashboard(null)}
+            className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs font-medium text-[var(--color-text-1)] hover:bg-[var(--color-surface-3)]"
+          >
+            Restaurar panel estándar
+          </button>
+        </div>
+      ) : null}
+
+      {prefMessage ? (
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-xs text-[var(--color-text-2)]">
+          {prefMessage}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error-light)] px-4 py-3 text-sm text-[var(--color-error)]">
@@ -146,39 +189,57 @@ export default function DashboardsPage() {
               key={dashboard.id}
               className="relative group rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-border-hover)] transition-all"
             >
-              <Link
-                href={`/dashboards/${dashboard.id}`}
-                prefetch={false}
-                className="block p-5"
-              >
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <h3 className="text-subheading pr-8">{dashboard.name}</h3>
-                  <Badge variant="neutral" className="flex-shrink-0 mr-10">
+              <Link href={`/dashboards/${dashboard.id}`} prefetch={false} className="block p-5 pr-14">
+                <h3 className="text-subheading pr-1">{dashboard.name}</h3>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-caption">
+                    <span>Creado {new Date(dashboard.createdAt).toLocaleDateString("es-ES")}</span>
+                    <span className="text-[var(--color-text-3)]">·</span>
+                    <span>
+                      {dashboard.widgets.length === 0
+                        ? "Vacío"
+                        : `${dashboard.widgets.length} elemento${dashboard.widgets.length !== 1 ? "s" : ""}`}
+                    </span>
+                  </div>
+                  <Badge variant="neutral" className="flex-shrink-0">
                     {dashboard.widgets.length} {dashboard.widgets.length === 1 ? "widget" : "widgets"}
                   </Badge>
                 </div>
-                <div className="flex items-center gap-3 text-caption">
-                  <span>Creado {new Date(dashboard.createdAt).toLocaleDateString("es-ES")}</span>
-                  <span>·</span>
-                  <span>
-                    {dashboard.widgets.length === 0
-                      ? "Vacío"
-                      : `${dashboard.widgets.length} gráfica${dashboard.widgets.length !== 1 ? "s" : ""}`}
-                  </span>
-                </div>
               </Link>
-              {role === "gestor_centro_control" ? (
+              <div className="absolute right-2 top-2 z-10 flex flex-col gap-1 sm:flex-row sm:items-center">
                 <button
+                  type="button"
+                  title={
+                    preferredDashboardId === dashboard.id
+                      ? "Es tu panel principal"
+                      : "Marcar como panel principal al abrir Dashboard"
+                  }
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    void handleDelete(dashboard.id);
+                    void patchPreferredDashboard(preferredDashboardId === dashboard.id ? null : dashboard.id);
                   }}
-                  className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-md pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 text-[var(--color-text-3)] hover:text-[var(--color-error)] hover:bg-[var(--color-error-light)] transition-all"
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-[var(--color-text-3)] transition-all hover:bg-[var(--color-surface-3)] hover:text-[var(--color-accent)]",
+                    preferredDashboardId === dashboard.id && "text-[var(--color-accent)]",
+                  )}
                 >
-                  <Trash2 size={14} />
+                  <Star size={14} className={preferredDashboardId === dashboard.id ? "fill-current" : undefined} />
                 </button>
-              ) : null}
+                {role === "gestor_centro_control" ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void handleDelete(dashboard.id);
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--color-text-3)] opacity-0 transition-all hover:text-[var(--color-error)] hover:bg-[var(--color-error-light)] group-hover:opacity-100"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>

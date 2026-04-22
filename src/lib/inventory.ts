@@ -103,3 +103,42 @@ export async function reservePartForAssetType(assetType: AssetType, ticketId: st
     warehouseName: candidateStock.warehouse.name,
   };
 }
+
+export async function consumeReservedPartsForTicket(ticketId: string) {
+  const activeReservations = await prisma.ticketPartReservation.findMany({
+    where: {
+      ticketId,
+      status: "reservado",
+    },
+    select: {
+      id: true,
+      warehouseId: true,
+      sparePartId: true,
+      quantity: true,
+    },
+  });
+
+  if (activeReservations.length === 0) return { consumedCount: 0 };
+
+  await prisma.$transaction(async (tx) => {
+    for (const reservation of activeReservations) {
+      await tx.inventoryStock.updateMany({
+        where: {
+          warehouseId: reservation.warehouseId,
+          sparePartId: reservation.sparePartId,
+        },
+        data: {
+          quantity: { decrement: reservation.quantity },
+          reserved: { decrement: reservation.quantity },
+        },
+      });
+
+      await tx.ticketPartReservation.update({
+        where: { id: reservation.id },
+        data: { status: "consumido" },
+      });
+    }
+  });
+
+  return { consumedCount: activeReservations.length };
+}

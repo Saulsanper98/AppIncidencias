@@ -107,6 +107,7 @@ export async function GET(request: Request) {
       include: {
         bus: true,
         asset: true,
+        assignedTo: { select: { id: true, name: true } },
         comments: {
           orderBy: { createdAt: "desc" },
         },
@@ -160,6 +161,8 @@ export async function GET(request: Request) {
         slaDeadline: ticket.slaDeadline.toISOString(),
         latitude: ticket.latitude ?? null,
         longitude: ticket.longitude ?? null,
+        assignedToUserId: ticket.assignedToUserId ?? null,
+        assignedToUserName: ticket.assignedTo?.name ?? null,
         createdAt: ticket.createdAt.toISOString(),
         updatedAt: ticket.updatedAt.toISOString(),
         attachments: ticket.attachments.map((item) => {
@@ -284,7 +287,8 @@ export async function POST(request: Request) {
       serviceStopped,
       nivelImpacto: nivelImpacto as NivelImpacto,
     });
-    const slaMinutes = calculateSlaMinutes(priority);
+    const slaMinutes =
+      asset.slaMinutes != null && asset.slaMinutes > 0 ? asset.slaMinutes : calculateSlaMinutes(priority);
 
     const attachmentCreates =
       uploadedFiles.length === 0 && photoNames.length > 0

@@ -100,6 +100,10 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
     setSeriesLabelC(defaults.serieC);
   }, [chartType, dataSource, lockSeriesLabels]);
 
+  useEffect(() => {
+    if (dataSource === "operation_links" || dataSource.startsWith("embed_")) setChartType("bar");
+  }, [dataSource]);
+
   if (!open) {
     return null;
   }
@@ -176,7 +180,7 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
       }
     } else {
       const defaults = getDefaultSeriesLabels(dataSource);
-      config = JSON.stringify({
+      const base: Record<string, unknown> = {
         accentColor,
         showLegend,
         showGrid,
@@ -188,7 +192,20 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
           serieC: seriesLabelC.trim() || defaults.serieC,
         },
         lockSeriesLabels,
-      });
+      };
+      if (dataSource.startsWith("embed_") || dataSource === "operation_links") {
+        const minH =
+          dataSource === "embed_tickets"
+            ? 520
+            : dataSource === "embed_inventory"
+              ? 400
+              : dataSource === "embed_preventive"
+                ? 360
+                : 320;
+        const col = dataSource === "embed_tickets" ? 4 : 2;
+        base.layout = { colSpan: col, minHeightPx: minH };
+      }
+      config = JSON.stringify(base);
     }
 
     try {
@@ -234,68 +251,70 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
             />
           </div>
 
-          <div>
-            <label className="text-label block mb-1.5">Tipo de gráfica</label>
-            <select
-              id="chart-type"
-              value={chartType}
-              onChange={(e) => setChartType(e.target.value as ChartType)}
-              className="sr-only"
-            >
-              <option value="area">Área</option>
-              <option value="bar">Barras</option>
-              <option value="stacked_bar">Barras apiladas</option>
-              <option value="bar_horizontal">Barras horizontales</option>
-              <option value="pie">Circular (donut)</option>
-              <option value="rose">Rosa (polar)</option>
-              <option value="line">Líneas</option>
-              <option value="stacked_area">Área apilada</option>
-              <option value="composed">Compuesta (barras + línea)</option>
-              <option value="radar">Radar</option>
-              <option value="radialbar">Barras radiales</option>
-              <option value="scatter">Dispersión</option>
-              <option value="bubble">Burbujas</option>
-              <option value="treemap">Treemap</option>
-              <option value="sankey">Sankey (flujo)</option>
-              <option value="funnel">Embudo</option>
-            </select>
+          {dataSource !== "operation_links" && !dataSource.startsWith("embed_") ? (
+            <div>
+              <label className="text-label block mb-1.5">Tipo de gráfica</label>
+              <select
+                id="chart-type"
+                value={chartType}
+                onChange={(e) => setChartType(e.target.value as ChartType)}
+                className="sr-only"
+              >
+                <option value="area">Área</option>
+                <option value="bar">Barras</option>
+                <option value="stacked_bar">Barras apiladas</option>
+                <option value="bar_horizontal">Barras horizontales</option>
+                <option value="pie">Circular (donut)</option>
+                <option value="rose">Rosa (polar)</option>
+                <option value="line">Líneas</option>
+                <option value="stacked_area">Área apilada</option>
+                <option value="composed">Compuesta (barras + línea)</option>
+                <option value="radar">Radar</option>
+                <option value="radialbar">Barras radiales</option>
+                <option value="scatter">Dispersión</option>
+                <option value="bubble">Burbujas</option>
+                <option value="treemap">Treemap</option>
+                <option value="sankey">Sankey (flujo)</option>
+                <option value="funnel">Embudo</option>
+              </select>
 
-            <div className="grid grid-cols-5 gap-1.5 mt-2 max-h-56 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0">
-              {[
-                { value: "bar", label: "Barras", icon: "▊▊▊" },
-                { value: "stacked_bar", label: "Stack B", icon: "▇▅▃" },
-                { value: "bar_horizontal", label: "H.Bar", icon: "≡≡" },
-                { value: "line", label: "Línea", icon: "∿∿" },
-                { value: "stacked_area", label: "Stack A", icon: "◨◧" },
-                { value: "area", label: "Área", icon: "◭◭" },
-                { value: "pie", label: "Donut", icon: "◎" },
-                { value: "rose", label: "Rose", icon: "✿" },
-                { value: "composed", label: "Mix", icon: "▊∿" },
-                { value: "radar", label: "Radar", icon: "⬡" },
-                { value: "radialbar", label: "Radial", icon: "◉" },
-                { value: "scatter", label: "Puntos", icon: "∴∵" },
-                { value: "bubble", label: "Bubble", icon: "◌◍" },
-                { value: "treemap", label: "Tree", icon: "▦" },
-                { value: "sankey", label: "Flujo", icon: "⇉" },
-                { value: "funnel", label: "Embudo", icon: "▽" },
-              ].map(({ value, label, icon }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setChartType(value as ChartType)}
-                  className={cn(
-                    "flex flex-col items-center justify-center rounded-lg border p-2 text-center transition-all",
-                    chartType === value
-                      ? "border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)]"
-                      : "border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-text-3)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-2)]",
-                  )}
-                >
-                  <span className="text-base leading-none mb-1">{icon}</span>
-                  <span className="text-[10px] leading-tight">{label}</span>
-                </button>
-              ))}
+              <div className="grid grid-cols-5 gap-1.5 mt-2 max-h-56 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0">
+                {[
+                  { value: "bar", label: "Barras", icon: "▊▊▊" },
+                  { value: "stacked_bar", label: "Stack B", icon: "▇▅▃" },
+                  { value: "bar_horizontal", label: "H.Bar", icon: "≡≡" },
+                  { value: "line", label: "Línea", icon: "∿∿" },
+                  { value: "stacked_area", label: "Stack A", icon: "◨◧" },
+                  { value: "area", label: "Área", icon: "◭◭" },
+                  { value: "pie", label: "Donut", icon: "◎" },
+                  { value: "rose", label: "Rose", icon: "✿" },
+                  { value: "composed", label: "Mix", icon: "▊∿" },
+                  { value: "radar", label: "Radar", icon: "⬡" },
+                  { value: "radialbar", label: "Radial", icon: "◉" },
+                  { value: "scatter", label: "Puntos", icon: "∴∵" },
+                  { value: "bubble", label: "Bubble", icon: "◌◍" },
+                  { value: "treemap", label: "Tree", icon: "▦" },
+                  { value: "sankey", label: "Flujo", icon: "⇉" },
+                  { value: "funnel", label: "Embudo", icon: "▽" },
+                ].map(({ value, label, icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setChartType(value as ChartType)}
+                    className={cn(
+                      "flex flex-col items-center justify-center rounded-lg border p-2 text-center transition-all",
+                      chartType === value
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)]"
+                        : "border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-text-3)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-2)]",
+                    )}
+                  >
+                    <span className="text-base leading-none mb-1">{icon}</span>
+                    <span className="text-[10px] leading-tight">{label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div>
             <label className="text-label block mb-1.5">Fuente de datos</label>
@@ -309,8 +328,22 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
               <option value="tickets_by_priority">Tickets por prioridad</option>
               <option value="sla_compliance">Cumplimiento SLA (7 días)</option>
               <option value="manual">Datos manuales</option>
+              <option value="operation_links">Menú: varios enlaces de operación</option>
+              <optgroup label="Vistas embebidas (cada una es un widget)">
+                <option value="embed_tickets">Bandeja de tickets</option>
+                <option value="embed_inventory">Inventario</option>
+                <option value="embed_preventive">Agenda preventiva</option>
+              </optgroup>
             </select>
           </div>
+
+          {dataSource === "operation_links" || dataSource.startsWith("embed_") ? (
+            <p className="text-[11px] text-[var(--color-text-3)]">
+              {dataSource === "operation_links"
+                ? "Varios accesos en un solo bloque. El tipo de gráfica no aplica."
+                : "Resumen compacto (lista o tabla), no la pantalla completa. Enlace a la vista detallada. Ajusta ancho y alto en modo edición."}
+            </p>
+          ) : null}
 
           {dataSource === "manual" ? (
             <Textarea

@@ -203,7 +203,45 @@ El `playwright.config.ts` puede levantar solo el servidor en el puerto **4173**;
 5. **`npx prisma migrate deploy`**.  
 6. **`npm run dev`** → navegador en `http://localhost:3000`.  
 7. (Opcional) **`npx playwright install`** si vas a correr E2E.
+8. (Opcional) Leer **§11** si vas a tocar código y no sabes por dónde empezar.
 
 **Cuando ya tengas el repo y solo actualices código:** repite el paso **5** (`npx prisma migrate deploy`) después de un `git pull` si hubo cambios bajo `prisma/migrations/`.
 
 Con eso deberías tener el mismo stack que en tu PC actual para seguir desarrollando en el del trabajo.
+
+---
+
+## 11. Por dónde anda el código (si te incorporas al repo)
+
+Esto no sustituye leer el código, pero te ahorra dar vueltas el primer día. La idea es: **saber qué fichero tocar** cuando te pidan “esto del mapa”, “el login”, “quién puede cerrar tickets”, etc.
+
+### Dónde vive cada cosa “gorda”
+
+| Si te preguntan por… | Empieza por… |
+|----------------------|----------------|
+| “Sin login no debería entrar nadie” | `middleware.ts`: solo mira **cookie de sesión** en las rutas del `matcher`. Si no hay cookie, redirige a `/login` (páginas) o devuelve 401 (APIs listadas ahí). **No** decide si eres gestor o conductor: eso va después. |
+| “¿Quién es el usuario de esta petición?” | `src/lib/auth-context.ts` → `resolveRequestActor`. Coge usuario por cookie y/o cabecera `x-user-id`, mira Prisma, y te devuelve `role` y `displayName`. Muchas rutas API lo usan al principio del handler. |
+| “¿Este rol puede hacer X?” | `src/lib/rbac.ts` y a veces comprobaciones sueltas en la ruta. Si añades un permiso nuevo, lo ideal es **centralizarlo aquí** y llamar a una función con nombre claro (`can…`). |
+| Pantallas con menú lateral (tickets, mapa, inventario…) | `src/app/(private)/layout.tsx` (cliente: carga sesión con `/api/auth/session`, sidebar, etc.). Las páginas “de aplicación” cuelgan de `(private)/…`. |
+| Tickets (lista, detalle, API) | Páginas bajo `src/app/(private)/tickets/`. API principal: `src/app/api/tickets/route.ts` (GET lista, POST crear). El detalle hoy reutiliza ese listado para encontrar el ticket por id (no hay GET `/api/tickets/[id]` suelto). |
+| Mapa | `src/components/mapa/mapa-view.tsx` (mucho estado + Leaflet). APIs bajo `src/app/api/map/`. **Videowall:** `/mapa?muro=1` en **cualquier** pantalla (no es solo el muro físico): quita sidebar y cabecera de la app y la cabecera “marketing” del mapa; **mapa + bandeja + Opciones**. El sincronizado de filtros a la URL **conserva** `muro=1`. Enlace *Salir modo muro*. Sin `?muro=1`, todo igual que antes. |
+| Dashboards personalizados (widgets, gráficas embebidas) | Página: `src/app/(private)/dashboards/[dashboardId]/page.tsx`. Widgets sueltos: `src/components/dashboard-builder/` (el `widget-renderer.tsx` es **largo**: no te asustes, está troceado por `dataSource`). Las APIs de dashboards están bajo `src/app/api/dashboards/`; el middleware **no** lista todas las APIs de ahí, pero cada `route.ts` sigue comprobando sesión/rol donde toque. |
+| Modelo de datos (tablas, relaciones) | `prisma/schema.prisma` + migraciones en `prisma/migrations/`. |
+| Login / sesión simulada en dev | `src/lib/dev-auth.ts` y lo que el manual ya dice del login en §6. |
+
+### Cabeceras `x-user-id` y `x-user-role`
+
+En varios `fetch` del cliente se mandan esas cabeceras además de la cookie. **No es doble auth rara**: en la práctica ayuda en desarrollo y en algunos flujos donde el servidor necesita el actor explícito. Si algo falla “como usuario equivocado”, mira si el `fetch` lleva cabeceras coherentes con la sesión.
+
+### Cosas que sé que chocan al principio
+
+- **`widget-renderer.tsx`** mezcla muchas gráficas Recharts y los widgets “embebidos” (bandeja compacta, inventario, etc.). Si solo vas a tocar un embed, busca el `if (widget.dataSource === "embed_…")` y no te leas todo el fichero de golpe.
+- **Redimensionado manual del grid de widgets** (columnas / altura) está **apagado** en código con una constante en la página del builder (`WIDGET_MANUAL_LAYOUT_EDIT_ENABLED`). Si lo reactiváis, probadlo siempre con usuario **gestor** y mirad la red (PATCH al guardar).
+
+### Cómo localizar algo rápido
+
+1. **Nombre de ruta en el navegador** → misma jerarquía bajo `src/app/(private)/…` (App Router de Next).
+2. **`/api/algo`** → `src/app/api/algo/.../route.ts`.
+3. Si no encuentras: búsqueda global del string (nombre de componente, texto visible en español, etc.).
+
+Si alguien mete una sección nueva a este manual, mejor **enlazar** desde aquí a un apartado concreto en vez de duplicar párrafos en dos sitios.

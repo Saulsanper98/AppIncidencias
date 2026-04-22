@@ -16,6 +16,7 @@ const updateTaskSchema = z.object({
   status: z.enum(["pendiente", "programada", "completada", "cancelada"]).optional(),
   assignedToUserId: z.string().min(1).nullable().optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
+  completionNotes: z.string().trim().max(500).optional(),
 }).refine(
   (payload) =>
     payload.status !== undefined || payload.assignedToUserId !== undefined || payload.scheduledAt !== undefined,
@@ -170,10 +171,12 @@ export async function PATCH(request: Request) {
       select: { id: true, busId: true, assetType: true, status: true, assignedToUserId: true, scheduledAt: true },
     });
 
+    const notesSuffix =
+      parsed.data.completionNotes ? ` — Notas: ${parsed.data.completionNotes}` : "";
     await writeAuditEvent({
       userId: actor.userId,
       action: "maintenance.task_status_changed",
-      detail: `${actor.displayName} actualizo tarea ${updated.id} (estado: ${updated.status})`,
+      detail: `${actor.displayName} actualizo tarea ${updated.id} (estado: ${updated.status})${notesSuffix}`,
     });
 
     return NextResponse.json({ task: updated });

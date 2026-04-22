@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 
+/** Sin cookie de sesión no entras (rutas del `matcher`). No mira roles: eso va en cada API / `rbac.ts`. Ver manual §11. */
 export function middleware(request: NextRequest) {
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const { pathname } = request.nextUrl;

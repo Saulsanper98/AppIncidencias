@@ -71,6 +71,8 @@ model Asset {
   busId        String
   type         AssetType
   serialNumber String
+  /// Si está definido, sustituye el SLA por prioridad al crear tickets para este activo (minutos).
+  slaMinutes   Int?
   bus          Bus       @relation(fields: [busId], references: [id], onDelete: Cascade)
   tickets      Ticket[]
 }
@@ -96,10 +98,13 @@ model Ticket {
   longitude    Float?
   /// Municipio / lugar reconocido junto al pin del mapa (p. ej. geocodificación inversa).
   mapPlaceMunicipio String?
+  /// Técnico de campo asignado al ticket (opcional).
+  assignedToUserId String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   bus          Bus              @relation(fields: [busId], references: [id], onDelete: Restrict)
   asset        Asset            @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  assignedTo   User?            @relation("TicketAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   comments     TicketComment[]
   attachments  TicketAttachment[]
   reservations TicketPartReservation[]
@@ -178,12 +183,16 @@ model User {
   email      String       @unique
   role       UserRole
   isActive   Boolean      @default(true)
+  /// Si está definido, `/dashboard` redirige a este panel personalizado.
+  preferredDashboardId String?
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @default(now()) @updatedAt
   auditEvents AuditEvent[]
   createdPreventiveTasks PreventiveTask[] @relation("PreventiveTaskCreator")
   assignedPreventiveTasks PreventiveTask[] @relation("PreventiveTaskAssignee")
+  assignedTickets Ticket[] @relation("TicketAssignee")
   createdDashboards CustomDashboard[] @relation("DashboardCreator")
+  preferredDashboard CustomDashboard? @relation("UserPreferredDashboard", fields: [preferredDashboardId], references: [id], onDelete: SetNull)
 }
 
 model AuditEvent {
@@ -223,6 +232,7 @@ model CustomDashboard {
   updatedAt       DateTime          @updatedAt
   createdBy       User?             @relation("DashboardCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   widgets         DashboardWidget[]
+  usersPreferringThis User[]        @relation("UserPreferredDashboard")
 }
 
 model DashboardWidget {

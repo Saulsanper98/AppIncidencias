@@ -1,12 +1,23 @@
 "use client";
 
-import { Bell, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { NotificationBell } from "@/components/notification-bell";
 import type { SessionUser } from "@/lib/domain";
+
+function MapaMuroUrlSync({ setMapaMuro }: { setMapaMuro: (value: boolean) => void }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const active = pathname.startsWith("/mapa") && searchParams.get("muro") === "1";
+    setMapaMuro(active);
+  }, [pathname, searchParams, setMapaMuro]);
+  return null;
+}
 
 export default function PrivateLayout({
   children,
@@ -17,7 +28,7 @@ export default function PrivateLayout({
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [ticketCrumbTitle, setTicketCrumbTitle] = useState<string | null>(null);
   const [inventoryControlRoom, setInventoryControlRoom] = useState(false);
-
+  const [mapaMuro, setMapaMuro] = useState(false);
   useEffect(() => {
     const loadSession = async () => {
       try {
@@ -77,7 +88,13 @@ export default function PrivateLayout({
   const breadcrumbs = useMemo((): Crumb[] => {
     const root: Crumb = { label: "CCMGC", href: "/dashboard" };
     if (pathname.startsWith("/admin/users")) {
-      return [root, { label: "Administracion", href: "/admin/users" }, { label: "Usuarios" }];
+      return [root, { label: "Administracion", href: "/admin" }, { label: "Usuarios" }];
+    }
+    if (pathname.startsWith("/admin/catalog")) {
+      return [root, { label: "Administracion", href: "/admin" }, { label: "Catálogo" }];
+    }
+    if (pathname === "/admin") {
+      return [root, { label: "Administracion", href: "/admin" }];
     }
     if (pathname.startsWith("/dashboards")) {
       return [root, { label: "Dashboards", href: "/dashboards" }];
@@ -108,6 +125,7 @@ export default function PrivateLayout({
   }, [pathname, ticketCrumbTitle]);
 
   const isMapaRoute = pathname.startsWith("/mapa");
+  const mapaMuroChrome = isMapaRoute && mapaMuro;
 
   return (
     <div
@@ -117,8 +135,12 @@ export default function PrivateLayout({
           : "flex min-h-screen bg-[var(--color-bg)]"
       }
     >
-      {inventoryControlRoom ? null : <AppSidebar />}
+      <Suspense fallback={null}>
+        <MapaMuroUrlSync setMapaMuro={setMapaMuro} />
+      </Suspense>
+      {inventoryControlRoom || mapaMuro ? null : <AppSidebar />}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {mapaMuroChrome ? null : (
         <header
           className={
             inventoryControlRoom
@@ -160,17 +182,18 @@ export default function PrivateLayout({
             })}
           </nav>
           <div className="flex items-center gap-3">
-            <button className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-2)] transition-all duration-150 hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]">
-              <Bell size={16} />
-            </button>
+            <NotificationBell />
             <span className="h-6 w-px bg-[var(--color-border)]" />
             <p className="text-caption text-[var(--color-text-1)]">{sessionUser?.name ?? "Sin sesion"}</p>
           </div>
         </header>
+        )}
         <main
           className={
             inventoryControlRoom
               ? "flex-1 overflow-auto px-3 pb-3 pt-2 md:px-4 md:pb-4 md:pt-3"
+              : mapaMuroChrome
+                ? "flex min-h-0 flex-1 flex-col overflow-hidden px-1 pb-1 pt-1 sm:px-2 sm:pb-2 sm:pt-2"
               : isMapaRoute
                 ? "flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-4"
                 : "flex-1 overflow-auto px-6 pb-6 pt-4"

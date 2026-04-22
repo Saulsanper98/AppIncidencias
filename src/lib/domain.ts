@@ -16,6 +16,8 @@ export type BusAsset = {
   type: AssetType;
   serialNumber: string;
   installedAt: string;
+  /** Minutos de SLA fijos para este activo (opcional). */
+  slaMinutes?: number | null;
 };
 
 export type Ticket = {
@@ -39,6 +41,8 @@ export type Ticket = {
   longitude?: number | null;
   /** Municipio o lugar asociado al pin del mapa (si existe). */
   mapPlaceMunicipio?: string | null;
+  assignedToUserId?: string | null;
+  assignedToUserName?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -104,6 +108,7 @@ export type SessionUser = {
   name: string;
   email: string;
   role: UserRole;
+  preferredDashboardId?: string | null;
 };
 
 export type AuditEvent = {

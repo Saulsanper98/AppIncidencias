@@ -14,6 +14,10 @@ const createWidgetSchema = z.object({
     "tickets_by_priority",
     "sla_compliance",
     "manual",
+    "operation_links",
+    "embed_tickets",
+    "embed_inventory",
+    "embed_preventive",
   ]),
   size: z.enum(["small", "medium", "large"]),
   config: z.string().default("{}"),
@@ -38,7 +42,17 @@ const updateWidgetSchema = z.object({
   title: z.string().trim().min(2).optional(),
   chartType: z.enum(CHART_TYPES).optional(),
   dataSource: z
-    .enum(["tickets_by_status", "tickets_by_operator", "tickets_by_priority", "sla_compliance", "manual"])
+    .enum([
+      "tickets_by_status",
+      "tickets_by_operator",
+      "tickets_by_priority",
+      "sla_compliance",
+      "manual",
+      "operation_links",
+      "embed_tickets",
+      "embed_inventory",
+      "embed_preventive",
+    ])
     .optional(),
   size: z.enum(["small", "medium", "large"]).optional(),
   config: z.string().optional(),
