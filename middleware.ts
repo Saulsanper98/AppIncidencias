@@ -12,14 +12,16 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/tickets") ||
     pathname.startsWith("/dashboards") ||
     pathname.startsWith("/inventory") ||
-    pathname.startsWith("/mapa");
+    pathname.startsWith("/mapa") ||
+    pathname.startsWith("/feedback");
   const isAdminPage = pathname.startsWith("/admin");
   const isProtectedApi =
     pathname.startsWith("/api/tickets") ||
     pathname.startsWith("/api/map") ||
     pathname.startsWith("/api/audit") ||
     pathname.startsWith("/api/users/manage") ||
-    pathname.startsWith("/api/maintenance");
+    pathname.startsWith("/api/maintenance") ||
+    pathname.startsWith("/api/feedback");
 
   if ((isProtectedPage || isAdminPage || isProtectedApi) && !sessionCookie) {
     if (isProtectedApi) {
@@ -45,6 +47,8 @@ export const config = {
     "/inventory/:path*",
     "/mapa",
     "/mapa/:path*",
+    "/feedback/:path*",
+    "/feedback",
     "/admin/:path*",
     "/api/tickets/:path*",
     "/api/map",
@@ -52,5 +56,7 @@ export const config = {
     "/api/audit/:path*",
     "/api/users/manage/:path*",
     "/api/maintenance/:path*",
+    "/api/feedback/:path*",
+    "/api/feedback",
   ],
 };

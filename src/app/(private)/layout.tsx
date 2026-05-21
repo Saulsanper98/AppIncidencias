@@ -6,8 +6,10 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
 
 import { AppSidebar } from "@/components/app-sidebar";
+import { FeedbackModal } from "@/components/feedback/FeedbackModal";
 import { NotificationBell } from "@/components/notification-bell";
 import type { SessionUser } from "@/lib/domain";
+import type { FeedbackPrefillTarget } from "@/components/feedback/FeedbackForm";
 
 function MapaMuroUrlSync({ setMapaMuro }: { setMapaMuro: (value: boolean) => void }) {
   const pathname = usePathname();
@@ -29,6 +31,7 @@ export default function PrivateLayout({
   const [ticketCrumbTitle, setTicketCrumbTitle] = useState<string | null>(null);
   const [inventoryControlRoom, setInventoryControlRoom] = useState(false);
   const [mapaMuro, setMapaMuro] = useState(false);
+  const [feedbackTarget, setFeedbackTarget] = useState<FeedbackPrefillTarget | null>(null);
   useEffect(() => {
     const loadSession = async () => {
       try {
@@ -52,6 +55,17 @@ export default function PrivateLayout({
     };
     window.addEventListener("ccmgc-inventory-control-room", onInvSurface as EventListener);
     return () => window.removeEventListener("ccmgc-inventory-control-room", onInvSurface as EventListener);
+  }, []);
+
+  useEffect(() => {
+    const onOpenFeedback = (e: Event) => {
+      const ce = e as CustomEvent<FeedbackPrefillTarget>;
+      if (ce.detail?.id && ce.detail?.label) {
+        setFeedbackTarget({ id: ce.detail.id, label: ce.detail.label });
+      }
+    };
+    window.addEventListener("ccmgc-open-feedback", onOpenFeedback as EventListener);
+    return () => window.removeEventListener("ccmgc-open-feedback", onOpenFeedback as EventListener);
   }, []);
 
   useEffect(() => {
@@ -93,8 +107,14 @@ export default function PrivateLayout({
     if (pathname.startsWith("/admin/catalog")) {
       return [root, { label: "Administracion", href: "/admin" }, { label: "Catálogo" }];
     }
+    if (pathname.startsWith("/admin/feedback")) {
+      return [root, { label: "Administracion", href: "/admin" }, { label: "Feedback" }];
+    }
     if (pathname === "/admin") {
       return [root, { label: "Administracion", href: "/admin" }];
+    }
+    if (pathname.startsWith("/feedback")) {
+      return [root, { label: "Feedback" }];
     }
     if (pathname.startsWith("/dashboards")) {
       return [root, { label: "Dashboards", href: "/dashboards" }];
@@ -202,6 +222,10 @@ export default function PrivateLayout({
           {children}
         </main>
       </div>
+      <FeedbackModal
+        target={feedbackTarget}
+        onClose={() => setFeedbackTarget(null)}
+      />
     </div>
   );
 }

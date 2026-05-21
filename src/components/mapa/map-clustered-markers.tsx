@@ -8,6 +8,7 @@ import Supercluster from "supercluster";
 
 import type { TicketStatus } from "@/lib/domain";
 import { statusMapMarkerColorHex, type MapTicketFeature } from "@/lib/gran-canaria-map-geo";
+import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
   abierto: "Abierto",
@@ -28,6 +29,10 @@ type Props = {
   onHoverTicket?: (id: string | null) => void;
   onSelectTicket: (id: string) => void;
   onMapBackgroundClick: () => void;
+  /** Modo muro / videowall: el detalle va en panel lateral; no abrir popup de Leaflet. */
+  suppressMarkerPopup?: boolean;
+  /** Videowall: marcadores y tooltip más grandes para verlos a distancia. */
+  wallMode?: boolean;
 };
 
 export function MapClusteredMarkers({
@@ -37,6 +42,8 @@ export function MapClusteredMarkers({
   onHoverTicket,
   onSelectTicket,
   onMapBackgroundClick,
+  suppressMarkerPopup = false,
+  wallMode = false,
 }: Props) {
   const map = useMap();
   const indexRef = useRef<Supercluster | null>(null);
@@ -122,14 +129,16 @@ export function MapClusteredMarkers({
         const t = props;
         const selected = selectedId === t.id;
         const hovered = hoveredId === t.id;
+        const r = wallMode ? (selected ? 22 : hovered ? 18 : 15) : selected ? 12 : hovered ? 10 : 8;
+        const w = wallMode ? (selected ? 4 : hovered ? 3.5 : 3) : selected ? 3 : hovered ? 2.5 : 2;
         return (
           <CircleMarker
             key={t.id}
             center={[lat, lng]}
-            radius={selected ? 12 : hovered ? 10 : 8}
+            radius={r}
             pathOptions={{
               color: selected ? "#38bdf8" : hovered ? "#7dd3fc" : "#0f172a",
-              weight: selected ? 3 : hovered ? 2.5 : 2,
+              weight: w,
               fillColor: statusMapMarkerColorHex(t.status),
               fillOpacity: hovered && !selected ? 1 : 0.92,
             }}
@@ -142,29 +151,36 @@ export function MapClusteredMarkers({
               mouseout: () => onHoverTicket?.(null),
             }}
           >
-            <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-              <span className="text-[11px] font-medium">
+            <Tooltip direction="top" offset={[0, wallMode ? -14 : -8]} opacity={0.95}>
+              <span
+                className={cn(
+                  "font-semibold leading-tight",
+                  wallMode ? "text-base min-[1800px]:text-xl min-[3200px]:text-2xl" : "text-[11px] font-medium",
+                )}
+              >
                 {t.id.slice(-8).toUpperCase()} · {STATUS_LABEL[t.status]}
               </span>
             </Tooltip>
-            <Popup>
-              <div className="min-w-[200px] space-y-1 text-[13px] text-[var(--color-text-1)]">
-                <p className="font-mono text-[11px] text-[var(--color-text-3)]">{t.id.slice(-8).toUpperCase()}</p>
-                <p className="font-medium leading-snug">{t.title}</p>
-                <p className="text-caption">
-                  {STATUS_LABEL[t.status]} · {PRIORITY_LABEL[t.priority]}
-                </p>
-                <p className="text-caption">
-                  {t.municipio} · {t.operator} · {t.busId}
-                </p>
-                <p className="text-[11px] text-[var(--color-text-3)]">
-                  Posición: {t.positionFromGps ? "GPS del ticket" : "Aprox. por municipio"}
-                </p>
-                <Link href={`/tickets/${t.id}`} className="inline-block pt-1 text-[var(--color-accent)] underline-offset-2 hover:underline">
-                  Abrir ficha
-                </Link>
-              </div>
-            </Popup>
+            {suppressMarkerPopup ? null : (
+              <Popup>
+                <div className="min-w-[200px] space-y-1 text-[13px] text-[var(--color-text-1)]">
+                  <p className="font-mono text-[11px] text-[var(--color-text-3)]">{t.id.slice(-8).toUpperCase()}</p>
+                  <p className="font-medium leading-snug">{t.title}</p>
+                  <p className="text-caption">
+                    {STATUS_LABEL[t.status]} · {PRIORITY_LABEL[t.priority]}
+                  </p>
+                  <p className="text-caption">
+                    {t.municipio} · {t.operator} · {t.busId}
+                  </p>
+                  <p className="text-[11px] text-[var(--color-text-3)]">
+                    Posición: {t.positionFromGps ? "GPS del ticket" : "Aprox. por municipio"}
+                  </p>
+                  <Link href={`/tickets/${t.id}`} className="inline-block pt-1 text-[var(--color-accent)] underline-offset-2 hover:underline">
+                    Abrir ficha
+                  </Link>
+                </div>
+              </Popup>
+            )}
           </CircleMarker>
         );
       })}

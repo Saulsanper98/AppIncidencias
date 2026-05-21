@@ -1,4 +1,4 @@
-import type { AssetType, SessionUser, Ticket, TicketPriority, TicketStatus, UserRole } from "@/lib/domain";
+import type { AssetType, Ticket, TicketStatus, UserRole } from "@/lib/domain";
 import type { NivelImpacto, TipologiaItem } from "@/lib/tipologia";
 
 export type TicketAttachmentView = {

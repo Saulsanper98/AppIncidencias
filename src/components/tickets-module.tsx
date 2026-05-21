@@ -19,6 +19,7 @@ import {
 import { createPortal } from "react-dom";
 import { useState } from "react";
 
+import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { StatusChangeModal } from "@/components/status-change-modal";
 import { TicketActionMenu } from "@/components/tickets/TicketActionMenu";
 import { TicketCreateForm } from "@/components/tickets/TicketCreateForm";
@@ -382,6 +383,11 @@ export function TicketsModule() {
               </button>
             </div>
           ) : null}
+
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-label text-[var(--color-text-3)]">Bandeja de tickets</p>
+            <FeedbackTargetButton id="tickets/bandeja" label="Bandeja de tickets" />
+          </div>
 
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 lg:flex-row lg:flex-wrap lg:items-center">
             {t.filtersInUrl ? (

@@ -11,9 +11,11 @@ import {
   ImageDown,
   MapPinned,
   Maximize2,
+  Monitor,
   PanelLeftClose,
   RefreshCw,
   SlidersHorizontal,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -32,12 +34,14 @@ import { LayersControl, MapContainer, Pane, ScaleControl, TileLayer, useMap } fr
 import { MapDateField } from "@/components/mapa/map-date-field";
 import { MapClusteredMarkers } from "@/components/mapa/map-clustered-markers";
 import { MapPreventiveMarkers, MapWarehouseMarkers } from "@/components/mapa/map-context-markers";
+import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select";
 import type { TicketPriority, TicketStatus, UserRole } from "@/lib/domain";
+import { formatSlaOverdueLabel } from "@/lib/ticketing";
 import { GRAN_CANARIA_BOUNDS, GRAN_CANARIA_CENTER, type MapTicketFeature } from "@/lib/gran-canaria-map-geo";
 import {
   priorityBadgeProps,
@@ -280,10 +284,13 @@ function MapToolbarControls({
   features,
   mapShellRef,
   selectedId,
+  wallMode = false,
 }: {
   features: MapTicketFeature[];
   mapShellRef: RefObject<HTMLElement | null>;
   selectedId: string | null;
+  /** Videowall: controles un poco más grandes para lectura a distancia. */
+  wallMode?: boolean;
 }) {
   const map = useMap();
   const toggleFs = () => {
@@ -299,7 +306,12 @@ function MapToolbarControls({
           type="button"
           variant="secondary"
           size="sm"
-          className={cn(MAP_TOOL_BTN, "gap-1.5")}
+          className={cn(
+            MAP_TOOL_BTN,
+            "gap-1.5",
+            wallMode &&
+              "lg:!min-h-16 lg:!max-w-[34rem] lg:!px-5 lg:!py-3 lg:!text-xl min-[2200px]:!min-h-[4.25rem] min-[2200px]:!text-2xl min-[2200px]:!max-w-[40rem]",
+          )}
           disabled={!features.length}
           onClick={() => {
             const latlngs = features.map((f) => L.latLng(f.lat, f.lng));
@@ -317,7 +329,12 @@ function MapToolbarControls({
           type="button"
           variant="secondary"
           size="sm"
-          className={cn(MAP_TOOL_BTN, "gap-1.5")}
+          className={cn(
+            MAP_TOOL_BTN,
+            "gap-1.5",
+            wallMode &&
+              "lg:!min-h-16 lg:!max-w-[34rem] lg:!px-5 lg:!py-3 lg:!text-xl min-[2200px]:!min-h-[4.25rem] min-[2200px]:!text-2xl min-[2200px]:!max-w-[40rem]",
+          )}
           disabled={!selectedId}
           onClick={() => {
             const f = features.find((x) => x.id === selectedId);
@@ -336,7 +353,12 @@ function MapToolbarControls({
           type="button"
           variant="secondary"
           size="sm"
-          className={cn(MAP_TOOL_BTN, "gap-1.5")}
+          className={cn(
+            MAP_TOOL_BTN,
+            "gap-1.5",
+            wallMode &&
+              "lg:!min-h-16 lg:!max-w-[34rem] lg:!px-5 lg:!py-3 lg:!text-xl min-[2200px]:!min-h-[4.25rem] min-[2200px]:!text-2xl min-[2200px]:!max-w-[40rem]",
+          )}
           onClick={() => map.flyTo(GRAN_CANARIA_CENTER, 11, { duration: 0.45 })}
           title="Vista general de la isla"
         >
@@ -350,27 +372,43 @@ function MapToolbarControls({
           type="button"
           variant="secondary"
           size="sm"
-          className={cn(MAP_TOOL_BTN, "gap-1.5")}
+          className={cn(
+            MAP_TOOL_BTN,
+            "gap-1.5",
+            wallMode &&
+              "lg:!min-h-16 lg:!max-w-[34rem] lg:!px-5 lg:!py-3 lg:!text-xl min-[2200px]:!min-h-[4.25rem] min-[2200px]:!text-2xl min-[2200px]:!max-w-[40rem]",
+          )}
           onClick={toggleFs}
           title="Pantalla completa del mapa"
         >
           <Maximize2 size={14} aria-hidden />
           <span className="hidden min-[420px]:inline">Pantalla completa</span>
         </Button>
-        <MapExportPngButton mapShellRef={mapShellRef} />
+        <MapExportPngButton mapShellRef={mapShellRef} wallMode={wallMode} />
       </div>
     </div>
   );
 }
 
-function MapExportPngButton({ mapShellRef }: { mapShellRef: RefObject<HTMLElement | null> }) {
+function MapExportPngButton({
+  mapShellRef,
+  wallMode = false,
+}: {
+  mapShellRef: RefObject<HTMLElement | null>;
+  wallMode?: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   return (
     <Button
       type="button"
       variant="secondary"
       size="sm"
-      className={cn(MAP_TOOL_BTN, "gap-1.5")}
+      className={cn(
+        MAP_TOOL_BTN,
+        "gap-1.5",
+        wallMode &&
+          "lg:!min-h-16 lg:!max-w-[34rem] lg:!px-5 lg:!py-3 lg:!text-xl min-[2200px]:!min-h-[4.25rem] min-[2200px]:!text-2xl min-[2200px]:!max-w-[40rem]",
+      )}
       disabled={busy}
       title="Descargar captura del mapa (PNG)"
       onClick={async () => {
@@ -417,6 +455,313 @@ function buildTicketsHref(qs: URLSearchParams): string {
   return s ? `/tickets?${s}` : "/tickets";
 }
 
+type MapMuroTicketPayload = {
+  id: string;
+  busId: string;
+  assetId: string;
+  assetType: string;
+  tipo: string | null;
+  subtipo: string | null;
+  subsubtipo: string | null;
+  dominio: string | null;
+  nivelImpacto: string | null;
+  origenTecnico: string | null;
+  observaciones: string | null;
+  operator: string;
+  municipio: string;
+  title: string;
+  description: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  slaDeadline: string;
+  assignedToUserName: string | null;
+  createdAt: string;
+  updatedAt: string;
+  comments: { id: string; author: string; body: string; createdAt: string }[];
+  attachments: {
+    id: string;
+    fileName: string;
+    mimeType: string | null;
+    sizeBytes: number | null;
+    downloadUrl: string | null;
+  }[];
+};
+
+type MapMuroDetailLoadState =
+  | { phase: "empty" }
+  | { phase: "loading" }
+  | { phase: "error"; message: string }
+  | { phase: "ok"; ticket: MapMuroTicketPayload };
+
+function formatTicketShortId(id: string) {
+  return id.slice(-8).toUpperCase();
+}
+
+function MapaMuroTicketDetailPanel({
+  loadState,
+  selectedId,
+  onClose,
+}: {
+  loadState: MapMuroDetailLoadState;
+  selectedId: string | null;
+  onClose: () => void;
+}) {
+  const inner = (() => {
+    if (!selectedId) {
+      return (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 p-6 text-center lg:gap-8 lg:p-12">
+          <p className="text-2xl font-extrabold leading-snug text-[var(--color-text-1)] lg:text-4xl min-[2200px]:lg:text-5xl">
+            Detalle de incidencia
+          </p>
+          <p className="max-w-lg text-pretty text-xl font-semibold leading-relaxed text-[var(--color-text-2)] lg:max-w-2xl lg:text-3xl lg:leading-relaxed min-[2200px]:lg:text-4xl">
+            Pulsa un marcador en el mapa o una fila en la bandeja de la izquierda. El detalle se muestra aquí sin salir
+            del modo muro.
+          </p>
+        </div>
+      );
+    }
+    if (loadState.phase === "loading" || (loadState.phase === "empty" && selectedId)) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
+          <div
+            className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent lg:h-12 lg:w-12"
+            aria-hidden
+          />
+          <p className="text-xl font-semibold text-[var(--color-text-2)] lg:text-3xl min-[2200px]:lg:text-4xl">
+            Cargando ticket…
+          </p>
+        </div>
+      );
+    }
+    if (loadState.phase === "error") {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+          <p className="text-xl font-bold text-[var(--color-error)] lg:text-3xl min-[2200px]:lg:text-4xl">{loadState.message}</p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="lg:!min-h-16 lg:!px-8 lg:!text-xl lg:!font-bold min-[2200px]:lg:!text-2xl"
+            onClick={onClose}
+          >
+            Cerrar panel
+          </Button>
+        </div>
+      );
+    }
+    if (loadState.phase !== "ok") {
+      return null;
+    }
+    const ticket = loadState.ticket;
+    const slaMinsRemaining = Math.round((new Date(ticket.slaDeadline).getTime() - Date.now()) / 60000);
+    const slaLabel =
+      slaMinsRemaining < 0
+        ? `Vencido · hace ${formatSlaOverdueLabel(slaMinsRemaining)}`
+        : `Quedan ${formatSlaOverdueLabel(-slaMinsRemaining)}`;
+
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-2 lg:gap-5 lg:p-3">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--color-border)] pb-4 lg:pb-5">
+          <div className="min-w-0 flex-1 space-y-3">
+            <p className="font-mono text-base font-bold text-[var(--color-text-2)] lg:text-xl min-[2200px]:lg:text-2xl">
+              {formatTicketShortId(ticket.id)}
+            </p>
+            <h3 className="text-3xl font-extrabold leading-tight tracking-tight text-[var(--color-text-1)] lg:text-5xl lg:leading-snug min-[2200px]:lg:text-6xl">
+              {ticket.title}
+            </h3>
+            <div className="flex flex-wrap gap-2 lg:gap-4">
+              <Badge
+                variant={ticketStatusBadgeVariant(ticket.status)}
+                className={cn(
+                  "!px-4 !py-1.5 text-base font-bold lg:!px-5 lg:!py-2 lg:text-lg min-[2200px]:lg:!text-xl",
+                  ticketStatusBadgeClassName(ticket.status),
+                )}
+              >
+                {STATUS_LABEL[ticket.status]}
+              </Badge>
+              <Badge
+                variant={priorityBadgeProps(ticket.priority).variant}
+                className={cn(
+                  "!px-4 !py-1.5 text-base font-bold lg:!px-5 lg:!py-2 lg:text-lg min-[2200px]:lg:!text-xl",
+                  priorityBadgeProps(ticket.priority).className,
+                )}
+              >
+                {PRIORITY_LABEL[ticket.priority]}
+              </Badge>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="shrink-0 lg:!min-h-16 lg:!w-16 lg:!p-0"
+            onClick={onClose}
+            title="Cerrar detalle"
+            aria-label="Cerrar detalle"
+          >
+            <X size={28} aria-hidden />
+          </Button>
+        </div>
+
+        <dl className="grid gap-4 text-lg text-[var(--color-text-2)] lg:grid-cols-2 lg:gap-x-6 lg:gap-y-4 lg:text-xl min-[2200px]:lg:gap-y-5 min-[2200px]:lg:text-2xl">
+          <div className="lg:col-span-2">
+            <dt className="text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+              SLA
+            </dt>
+            <dd
+              className={cn(
+                "mt-2 text-xl font-extrabold lg:text-2xl min-[2200px]:lg:text-3xl",
+                slaMinsRemaining < 0 ? "text-[var(--color-error)]" : "text-[var(--color-text-1)]",
+              )}
+            >
+              {slaLabel}
+            </dd>
+            <dd className="mt-2 text-base font-medium text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+              Límite: {new Date(ticket.slaDeadline).toLocaleString("es-ES")}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+              Bus
+            </dt>
+            <dd className="mt-2 font-extrabold text-[var(--color-text-1)]">{ticket.busId}</dd>
+          </div>
+          <div>
+            <dt className="text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+              Operadora
+            </dt>
+            <dd className="mt-2 font-extrabold text-[var(--color-text-1)]">{ticket.operator}</dd>
+          </div>
+          <div className="lg:col-span-2">
+            <dt className="text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+              Municipio / lugar
+            </dt>
+            <dd className="mt-2 font-extrabold text-[var(--color-text-1)]">{ticket.municipio}</dd>
+          </div>
+          <div>
+            <dt className="text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+              Activo
+            </dt>
+            <dd className="mt-2 font-extrabold text-[var(--color-text-1)]">
+              {ticket.assetType} ·{" "}
+              <span className="font-mono text-base font-bold text-[var(--color-text-2)] lg:text-lg min-[2200px]:lg:text-xl">
+                {ticket.assetId}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt className="text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+              Asignado
+            </dt>
+            <dd className="mt-2 font-extrabold text-[var(--color-text-1)]">{ticket.assignedToUserName ?? "Sin asignar"}</dd>
+          </div>
+          <div className="lg:col-span-2">
+            <dt className="text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+              Clasificación
+            </dt>
+            <dd className="mt-2 font-semibold text-[var(--color-text-1)]">
+              {[ticket.tipo, ticket.subtipo, ticket.subsubtipo].filter(Boolean).join(" · ") || "—"}
+            </dd>
+          </div>
+          {ticket.observaciones?.trim() ? (
+            <div className="lg:col-span-2">
+              <dt className="text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+                Observaciones
+              </dt>
+              <dd className="mt-2 whitespace-pre-wrap rounded-lg border-2 border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-4 font-medium text-[var(--color-text-1)] lg:p-5 lg:text-xl lg:leading-relaxed min-[2200px]:lg:text-2xl">
+                {ticket.observaciones}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+
+        <div>
+          <p className="mb-3 text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:mb-4 lg:text-lg min-[2200px]:lg:text-xl">
+            Descripción
+          </p>
+          <div className="max-h-[min(40vh,28rem)] overflow-y-auto whitespace-pre-wrap rounded-lg border-2 border-[var(--color-border)] bg-[var(--color-surface-2)]/30 p-4 text-lg font-medium leading-relaxed text-[var(--color-text-1)] lg:max-h-[min(45vh,40rem)] lg:p-6 lg:text-xl lg:leading-relaxed min-[2200px]:lg:p-7 min-[2200px]:lg:text-2xl min-[2200px]:lg:leading-relaxed">
+            {ticket.description}
+          </div>
+        </div>
+
+        {ticket.comments.length ? (
+          <div>
+            <p className="mb-4 text-base font-extrabold uppercase tracking-wide text-[var(--color-text-2)] lg:mb-5 lg:text-xl min-[2200px]:lg:text-2xl">
+              Comentarios recientes ({ticket.comments.length})
+            </p>
+            <ul className="space-y-4">
+              {ticket.comments.slice(0, 10).map((c: MapMuroTicketPayload["comments"][number]) => (
+                <li
+                  key={c.id}
+                  className="rounded-lg border-2 border-[var(--color-border)] bg-[var(--color-surface-2)]/25 p-4 lg:p-5"
+                >
+                  <p className="text-base font-bold text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+                    {c.author} · {new Date(c.createdAt).toLocaleString("es-ES")}
+                  </p>
+                  <p className="mt-3 line-clamp-6 text-lg font-medium text-[var(--color-text-1)] lg:text-xl min-[2200px]:lg:text-2xl">
+                    {c.body}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {ticket.attachments.length ? (
+          <div>
+            <p className="mb-3 text-base font-bold uppercase tracking-wide text-[var(--color-text-3)] lg:text-lg min-[2200px]:lg:text-xl">
+              Adjuntos
+            </p>
+            <ul className="space-y-3 text-lg font-semibold lg:text-xl min-[2200px]:lg:text-2xl">
+              {ticket.attachments.map((a: MapMuroTicketPayload["attachments"][number]) => (
+                <li key={a.id}>
+                  {a.downloadUrl ? (
+                    <a
+                      href={a.downloadUrl}
+                      className="text-[var(--color-accent)] underline-offset-2 hover:underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {a.fileName}
+                    </a>
+                  ) : (
+                    <span className="text-[var(--color-text-2)]">{a.fileName}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <div className="mt-auto flex flex-wrap gap-3 border-t border-[var(--color-border)] pt-4 lg:pt-5">
+          <Link
+            href={`/tickets/${ticket.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-14 items-center justify-center gap-2 rounded-lg border-2 border-[var(--color-border)] bg-[var(--color-accent-light)] px-6 py-3 text-lg font-bold text-[var(--color-text-1)] transition-colors hover:bg-[var(--color-surface-2)] lg:min-h-16 lg:gap-3 lg:px-9 lg:text-xl min-[2200px]:lg:min-h-[4.5rem] min-[2200px]:lg:text-2xl"
+          >
+            <ExternalLink size={20} className="lg:size-6 min-[2200px]:lg:size-7" aria-hidden />
+            Ficha completa (nueva pestaña)
+          </Link>
+        </div>
+      </div>
+    );
+  })();
+
+  return (
+    <aside
+      className={cn(
+        "flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] lg:p-6",
+        "lg:max-h-[min(calc(100dvh-2rem),2160px)] lg:min-w-[440px] lg:w-[min(38vw,1580px)] lg:max-w-[min(38vw,1580px)] lg:shrink-0",
+        "font-medium text-[clamp(1.2rem,min(0.28vw+0.85rem),2.35rem)] leading-relaxed antialiased lg:leading-relaxed min-[2200px]:lg:text-[clamp(1.35rem,min(0.26vw+1rem),2.65rem)]",
+      )}
+      aria-label="Detalle del ticket (modo muro)"
+    >
+      {inner}
+    </aside>
+  );
+}
+
 export function MapaView() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -443,6 +788,7 @@ export function MapaView() {
   const [hydratedUrl, setHydratedUrl] = useState(false);
   const [actorUserId, setActorUserId] = useState("");
   const [actorRole, setActorRole] = useState<UserRole>("conductor");
+  const [muroTicketDetail, setMuroTicketDetail] = useState<MapMuroDetailLoadState>({ phase: "empty" });
 
   const [catalog, setCatalog] = useState<CatalogBus[]>([]);
   const [context, setContext] = useState<MapContextResponse | null>(null);
@@ -501,6 +847,65 @@ export function MapaView() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (!mapaMuro) {
+      setMuroTicketDetail({ phase: "empty" });
+      return;
+    }
+    if (!selectedId) {
+      setMuroTicketDetail({ phase: "empty" });
+      return;
+    }
+    const ac = new AbortController();
+    setMuroTicketDetail({ phase: "loading" });
+    void (async () => {
+      try {
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (authFetchHeaders) {
+          headers["x-user-id"] = authFetchHeaders["x-user-id"];
+          headers["x-user-role"] = authFetchHeaders["x-user-role"];
+        }
+        const res = await fetch(`/api/tickets/${encodeURIComponent(selectedId)}`, {
+          credentials: "include",
+          signal: ac.signal,
+          headers,
+        });
+        const j = (await res.json().catch(() => ({}))) as {
+          message?: string;
+          ticket?: MapMuroTicketPayload;
+        };
+        if (ac.signal.aborted) return;
+        if (!res.ok) {
+          if (!ac.signal.aborted) {
+            setMuroTicketDetail({
+              phase: "error",
+              message: typeof j.message === "string" ? j.message : "No se pudo cargar el ticket",
+            });
+          }
+          return;
+        }
+        if (!j.ticket) {
+          if (!ac.signal.aborted) {
+            setMuroTicketDetail({ phase: "error", message: "Respuesta invalida del servidor" });
+          }
+          return;
+        }
+        if (!ac.signal.aborted) {
+          setMuroTicketDetail({ phase: "ok", ticket: j.ticket });
+        }
+      } catch (e) {
+        if (ac.signal.aborted) return;
+        const msg = e instanceof Error ? e.message : "Error de red";
+        if (msg === "The user aborted a request." || /aborted/i.test(msg)) return;
+        setMuroTicketDetail({
+          phase: "error",
+          message: msg,
+        });
+      }
+    })();
+    return () => ac.abort();
+  }, [mapaMuro, selectedId, authFetchHeaders]);
+
+  useEffect(() => {
     void (async () => {
       try {
         const res = await fetch("/api/auth/session", { cache: "no-store", credentials: "include" });
@@ -522,6 +927,26 @@ export function MapaView() {
   useEffect(() => {
     if (!mapaMuro) return;
     setPresentationMode(false);
+  }, [mapaMuro]);
+
+  /**
+   * Videowall / lectura a distancia: sube el `rem` raíz **solo** con `?muro=1`.
+   * Al salir del muro o desmontar el mapa se restaura el tamaño anterior (modo mapa normal intacto).
+   */
+  useEffect(() => {
+    if (!mapaMuro) return undefined;
+    const root = document.documentElement;
+    const prevFontSize = root.style.fontSize;
+    root.style.fontSize = "clamp(18px, 0.52vw + 7px, 36px)";
+    root.setAttribute("data-ccmgc-muro-wall", "1");
+    return () => {
+      if (prevFontSize) {
+        root.style.fontSize = prevFontSize;
+      } else {
+        root.style.removeProperty("font-size");
+      }
+      root.removeAttribute("data-ccmgc-muro-wall");
+    };
   }, [mapaMuro]);
 
   useEffect(() => {
@@ -601,6 +1026,31 @@ export function MapaView() {
     if (createdBefore.trim()) p.set("createdBefore", new Date(createdBefore).toISOString());
     return p.toString();
   }, [status, priority, operator, busId, partCodeDebounced, urgentOnly, createdAfter, createdBefore]);
+
+  /** Query de página `/mapa` (filtros + ticket + opcional `muro`), alineado con el efecto que sincroniza la URL. */
+  const buildMapPageSearchParams = useCallback(
+    (opts: { includeMuro: boolean }) => {
+      const p = new URLSearchParams();
+      if (status !== "todos") p.set("status", status);
+      if (priority !== "todos") p.set("priority", priority);
+      if (operator !== "todas") p.set("operator", operator);
+      if (busId !== "todas") p.set("busId", busId);
+      if (partCodeDebounced) p.set("partCode", partCodeDebounced);
+      if (urgentOnly) p.set("urgent", "1");
+      if (createdAfter.trim()) p.set("createdAfter", new Date(createdAfter).toISOString());
+      if (createdBefore.trim()) p.set("createdBefore", new Date(createdBefore).toISOString());
+      if (selectedId) p.set("ticket", selectedId);
+      if (opts.includeMuro) p.set("muro", "1");
+      return p;
+    },
+    [status, priority, operator, busId, partCodeDebounced, urgentOnly, createdAfter, createdBefore, selectedId],
+  );
+
+  const enterMuroHref = useMemo(() => {
+    const p = buildMapPageSearchParams({ includeMuro: true });
+    const qs = p.toString();
+    return qs ? `/mapa?${qs}` : "/mapa?muro=1";
+  }, [buildMapPageSearchParams]);
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
@@ -753,37 +1203,14 @@ export function MapaView() {
     if (!hydratedUrl) return;
     if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
     urlTimerRef.current = setTimeout(() => {
-      const p = new URLSearchParams();
-      if (status !== "todos") p.set("status", status);
-      if (priority !== "todos") p.set("priority", priority);
-      if (operator !== "todas") p.set("operator", operator);
-      if (busId !== "todas") p.set("busId", busId);
-      if (partCodeDebounced) p.set("partCode", partCodeDebounced);
-      if (urgentOnly) p.set("urgent", "1");
-      if (createdAfter.trim()) p.set("createdAfter", new Date(createdAfter).toISOString());
-      if (createdBefore.trim()) p.set("createdBefore", new Date(createdBefore).toISOString());
-      if (selectedId) p.set("ticket", selectedId);
-      if (mapaMuro) p.set("muro", "1");
+      const p = buildMapPageSearchParams({ includeMuro: mapaMuro });
       const qs = p.toString();
       router.replace(qs ? `/mapa?${qs}` : mapaMuro ? "/mapa?muro=1" : "/mapa", { scroll: false });
     }, URL_DEBOUNCE_MS);
     return () => {
       if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
     };
-  }, [
-    status,
-    priority,
-    operator,
-    busId,
-    partCodeDebounced,
-    urgentOnly,
-    createdAfter,
-    createdBefore,
-    selectedId,
-    router,
-    hydratedUrl,
-    mapaMuro,
-  ]);
+  }, [router, hydratedUrl, mapaMuro, buildMapPageSearchParams]);
 
   const flyTargetId = selectedId ?? ticketFromUrl ?? null;
 
@@ -901,11 +1328,12 @@ export function MapaView() {
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/15">
                 <MapPinned size={18} className="text-[var(--color-accent)]" aria-hidden />
               </div>
-              <h1 className="text-heading">
+              <h1 className="flex items-center gap-2 text-heading">
                 Mapa operativo
                 {data ? (
-                  <span className="ml-2 text-base font-normal text-[var(--color-text-3)]">· {nVisible} en vista</span>
+                  <span className="text-base font-normal text-[var(--color-text-3)]">· {nVisible} en vista</span>
                 ) : null}
+                <FeedbackTargetButton id="mapa/vista-operativa" label="Mapa operativo de incidencias" />
               </h1>
             </div>
             <p className="hidden max-w-2xl text-pretty text-body text-[var(--color-text-2)] sm:block sm:pl-11">
@@ -1062,10 +1490,18 @@ export function MapaView() {
         </button>
       </div>
 
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-4">
+      <div
+        className={cn(
+          "flex min-h-0 w-full min-w-0 flex-1 flex-col lg:flex-row lg:items-stretch",
+          mapaMuro ? "gap-3 lg:gap-3" : "gap-4 lg:gap-4",
+        )}
+      >
         <aside
           className={cn(
-            "flex min-h-0 w-full min-w-0 flex-1 flex-col gap-2 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] lg:max-h-[min(calc(100dvh-10.5rem),900px)] lg:w-[min(20rem,28vw)] lg:max-w-[min(20rem,28vw)] lg:shrink-0",
+            "flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+            mapaMuro
+              ? "gap-4 p-4 lg:max-h-[min(calc(100dvh-2rem),2160px)] lg:min-w-[480px] lg:w-[min(40vw,1680px)] lg:max-w-[min(40vw,1680px)] lg:shrink-0 lg:font-medium lg:text-[clamp(1.35rem,min(0.32vw+0.75rem),2.5rem)] lg:leading-relaxed lg:antialiased min-[2200px]:lg:text-[clamp(1.5rem,min(0.28vw+1rem),2.75rem)]"
+              : "flex-1 gap-2 p-3 lg:max-h-[min(calc(100dvh-10.5rem),900px)] lg:w-[min(20rem,28vw)] lg:max-w-[min(20rem,28vw)] lg:shrink-0",
             "max-h-[min(52vh,520px)] max-lg:min-h-0",
             presentationMode && "hidden",
             mobileTab === "map" && !mapaMuro && "max-lg:hidden",
@@ -1073,35 +1509,77 @@ export function MapaView() {
         >
           <div className="flex shrink-0 flex-wrap items-start justify-between gap-x-2 gap-y-2 border-b border-[var(--color-border)] pb-2.5">
             <div className="min-w-0 flex-1 pr-2">
-              <h2 className="text-sm font-semibold leading-tight text-[var(--color-text-1)]">Tickets</h2>
-              <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-[var(--color-text-3)]">{filterSummary}</p>
+              <h2
+                className={cn(
+                  "font-semibold leading-tight text-[var(--color-text-1)]",
+                  mapaMuro
+                    ? "text-3xl font-extrabold tracking-tight text-[var(--color-text-1)] lg:text-5xl min-[2200px]:lg:text-6xl"
+                    : "text-sm",
+                )}
+              >
+                Tickets
+              </h2>
+              <p
+                className={cn(
+                  "mt-1 line-clamp-2 leading-snug text-[var(--color-text-3)]",
+                  mapaMuro
+                    ? "text-lg font-semibold text-[var(--color-text-2)] lg:mt-3 lg:line-clamp-4 lg:text-2xl lg:leading-snug min-[2200px]:lg:text-3xl"
+                    : "text-[11px]",
+                )}
+              >
+                {filterSummary}
+              </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
               {mapaMuro ? (
                 <Link
                   href={exitMuroHref}
-                  className="inline-flex min-h-9 items-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--color-text-1)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface-3)]"
+                  className="inline-flex min-h-14 items-center rounded-lg border-2 border-[var(--color-border)] bg-[var(--color-surface-2)] px-5 py-3 text-lg font-bold text-[var(--color-text-1)] transition-colors hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-3)] lg:min-h-16 lg:px-8 lg:text-xl min-[2200px]:lg:min-h-[4.5rem] min-[2200px]:lg:text-2xl"
                 >
                   Salir muro
                 </Link>
-              ) : null}
+              ) : (
+                <Link
+                  href={enterMuroHref}
+                  title="Pantalla completa para muro o videowall (sin menú lateral de la app)"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--color-text-1)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface-3)]"
+                >
+                  <Monitor size={14} aria-hidden />
+                  Modo muro
+                </Link>
+              )}
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="shrink-0 gap-1.5"
+                className={cn(
+                  "shrink-0 gap-1.5",
+                  mapaMuro &&
+                    "border-2 lg:!min-h-16 lg:!gap-2.5 lg:!px-8 lg:!py-3 lg:!text-xl lg:!font-bold [&_svg]:lg:!size-6 min-[2200px]:lg:!min-h-[4.5rem] min-[2200px]:lg:!text-2xl",
+                )}
                 onClick={() => setFiltersMenuOpen(true)}
                 aria-expanded={filtersMenuOpen}
                 aria-controls="mapa-opciones-panel"
               >
-                <SlidersHorizontal size={14} aria-hidden />
+                <SlidersHorizontal size={14} className={cn(mapaMuro && "lg:size-6")} aria-hidden />
                 Opciones
               </Button>
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/18 p-3 lg:min-h-[12rem]">
-            <p className="mb-2 shrink-0 text-label text-[var(--color-text-3)]">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/18 lg:min-h-[12rem]",
+              mapaMuro ? "p-3 lg:p-5" : "p-3",
+            )}
+          >
+            <p
+              className={cn(
+                "mb-2 shrink-0 text-label text-[var(--color-text-3)]",
+                mapaMuro &&
+                  "mb-3 text-lg font-bold text-[var(--color-text-2)] lg:mb-4 lg:text-2xl min-[2200px]:lg:text-3xl",
+              )}
+            >
               Tickets en lista ({sortedFilteredList.length})
             </p>
             <div
@@ -1142,36 +1620,85 @@ export function MapaView() {
                           onMouseEnter={() => setHighlightTicketId(t.id)}
                           onClick={() => setSelectedId(t.id)}
                           className={cn(
-                            "flex w-full flex-col gap-1 px-3 py-2.5 text-left text-sm transition-colors hover:bg-[var(--color-surface-2)]",
+                            "flex w-full flex-col gap-1 text-left transition-colors hover:bg-[var(--color-surface-2)]",
+                            mapaMuro
+                              ? "gap-2.5 px-5 py-6 text-xl lg:gap-3 lg:px-6 lg:py-8 lg:text-2xl min-[2200px]:lg:px-8 min-[2200px]:lg:py-10 min-[2200px]:lg:text-3xl"
+                              : "gap-1 px-3 py-2.5 text-sm",
                             selectedId === t.id
-                              ? "border-l-2 border-l-[var(--color-accent)] bg-[var(--color-accent-light)]/45"
+                              ? cn(
+                                  "border-l-[var(--color-accent)] bg-[var(--color-accent-light)]/45",
+                                  mapaMuro ? "border-l-4" : "border-l-2",
+                                )
                               : highlightTicketId === t.id
-                                ? "border-l-2 border-l-sky-400/60 bg-sky-500/10"
-                                : "border-l-2 border-l-transparent",
+                                ? cn(
+                                    "border-l-sky-400/60 bg-sky-500/10",
+                                    mapaMuro ? "border-l-4" : "border-l-2",
+                                  )
+                                : cn("border-l-transparent", mapaMuro ? "border-l-4" : "border-l-2"),
                           )}
                         >
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-mono text-[11px] text-[var(--color-text-3)]">
+                          <div className={cn("flex flex-wrap items-center", mapaMuro ? "gap-2 lg:gap-2.5" : "gap-1.5 lg:gap-2")}>
+                            <span
+                              className={cn(
+                                "font-mono text-[var(--color-text-3)]",
+                                mapaMuro
+                                  ? "text-base font-bold tracking-wider text-[var(--color-text-2)] lg:text-xl min-[2200px]:lg:text-2xl"
+                                  : "text-[11px]",
+                              )}
+                            >
                               {t.id.slice(-8).toUpperCase()}
                             </span>
                             <Badge
                               variant={ticketStatusBadgeVariant(t.status)}
-                              className={cn("!py-0 text-[10px]", ticketStatusBadgeClassName(t.status))}
+                              className={cn(
+                                mapaMuro
+                                  ? "!px-4 !py-1.5 text-base font-bold lg:!px-5 lg:!py-2 lg:text-lg min-[2200px]:lg:!text-xl"
+                                  : "!py-0 text-[10px]",
+                                ticketStatusBadgeClassName(t.status),
+                              )}
                             >
                               {STATUS_LABEL[t.status]}
                             </Badge>
                             <Badge
                               variant={priorityBadgeProps(t.priority).variant}
-                              className={cn("!py-0 text-[10px]", priorityBadgeProps(t.priority).className)}
+                              className={cn(
+                                mapaMuro
+                                  ? "!px-4 !py-1.5 text-base font-bold lg:!px-5 lg:!py-2 lg:text-lg min-[2200px]:lg:!text-xl"
+                                  : "!py-0 text-[10px]",
+                                priorityBadgeProps(t.priority).className,
+                              )}
                             >
                               {PRIORITY_LABEL[t.priority]}
                             </Badge>
                             {slaOver ? (
-                              <span className="text-[10px] font-medium text-[var(--color-error)]">SLA vencido</span>
+                              <span
+                                className={cn(
+                                  "font-bold text-[var(--color-error)]",
+                                  mapaMuro ? "text-base lg:text-lg min-[2200px]:lg:text-xl" : "text-[10px]",
+                                )}
+                              >
+                                SLA vencido
+                              </span>
                             ) : null}
                           </div>
-                          <span className="line-clamp-2 font-medium text-[var(--color-text-1)]">{t.title}</span>
-                          <span className="text-caption">
+                          <span
+                            className={cn(
+                              "line-clamp-2 text-[var(--color-text-1)]",
+                              mapaMuro
+                                ? "font-extrabold text-2xl leading-snug tracking-tight text-[var(--color-text-1)] lg:line-clamp-5 lg:text-3xl lg:leading-snug min-[2200px]:lg:text-4xl min-[2200px]:lg:leading-snug"
+                                : "text-sm font-medium",
+                            )}
+                          >
+                            {t.title}
+                          </span>
+                          <span
+                            className={cn(
+                              "text-[var(--color-text-2)]",
+                              mapaMuro
+                                ? "text-lg font-semibold text-[var(--color-text-2)] lg:text-2xl min-[2200px]:lg:text-3xl"
+                                : "text-caption",
+                            )}
+                          >
                             {t.municipio} · {t.busId}
                           </span>
                         </button>
@@ -1647,7 +2174,12 @@ export function MapaView() {
               <MapIslandMaxBoundsWhenFitting />
               <MapLeafletScale />
               <MapFlyTo targetId={flyTargetId} lat={flyLatLng.lat} lng={flyLatLng.lng} />
-              <MapToolbarControls features={data.features} mapShellRef={mapShellRef} selectedId={selectedId} />
+              <MapToolbarControls
+                features={data.features}
+                mapShellRef={mapShellRef}
+                selectedId={selectedId}
+                wallMode={mapaMuro}
+              />
               <MapClusteredMarkers
                 features={data.features}
                 selectedId={selectedId}
@@ -1655,6 +2187,8 @@ export function MapaView() {
                 onHoverTicket={setHighlightTicketId}
                 onSelectTicket={setSelectedId}
                 onMapBackgroundClick={() => setSelectedId(null)}
+                suppressMarkerPopup={mapaMuro}
+                wallMode={mapaMuro}
               />
               {showWarehouses && context?.warehouses?.length ? (
                 <MapWarehouseMarkers items={context.warehouses} />
@@ -1671,6 +2205,14 @@ export function MapaView() {
             </p>
           </div>
         </section>
+
+        {mapaMuro ? (
+          <MapaMuroTicketDetailPanel
+            loadState={muroTicketDetail}
+            selectedId={selectedId}
+            onClose={() => setSelectedId(null)}
+          />
+        ) : null}
       </div>
     </div>
   );

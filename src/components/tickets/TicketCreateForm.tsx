@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -397,16 +398,19 @@ export function TicketCreateForm({
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {formSectionLiveMessage}
       </p>
-      <div className="mb-5 flex items-center gap-2">
-        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)]">
-          <Plus size={16} className="text-[var(--color-accent)]" />
+      <div className="mb-5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)]">
+            <Plus size={16} className="text-[var(--color-accent)]" />
+          </div>
+          <div>
+            <h3 id="tickets-new-form-title" className="text-subheading">
+              Nuevo ticket
+            </h3>
+            <p className="text-sm leading-snug text-[var(--color-text-3)]">Ancla la incidencia a un bus y activo concreto</p>
+          </div>
         </div>
-        <div>
-          <h3 id="tickets-new-form-title" className="text-subheading">
-            Nuevo ticket
-          </h3>
-          <p className="text-sm leading-snug text-[var(--color-text-3)]">Ancla la incidencia a un bus y activo concreto</p>
-        </div>
+        <FeedbackTargetButton id="tickets/formulario-nuevo" label="Formulario de nuevo ticket" />
       </div>
 
       <div className="mb-4 rounded-lg border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/60 px-3 py-2.5 text-[12px] leading-snug text-[var(--color-text-2)]">

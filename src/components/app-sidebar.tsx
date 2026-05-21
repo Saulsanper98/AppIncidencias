@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   MapPinned,
   Menu,
+  MessageSquarePlus,
   Package,
   UserCircle2,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const menu = [
   { label: "Inventario", icon: Package, href: "/inventory" },
   { label: "Mapa", icon: MapPinned, href: "/mapa" },
   { label: "Base de Conocimiento", icon: BookOpenCheck, href: "#" },
+  { label: "Feedback", icon: MessageSquarePlus, href: "/feedback" },
   { label: "Administración", icon: UserCircle2, href: "/admin" },
 ];
 

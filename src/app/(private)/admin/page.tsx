@@ -1,10 +1,10 @@
-import { Boxes, UserCircle2 } from "lucide-react";
+import { Boxes, MessageSquareHeart, UserCircle2 } from "lucide-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
-import { canManageCatalog, canManageUsers } from "@/lib/rbac";
+import { canManageCatalog, canManageUsers, canReviewFeedback } from "@/lib/rbac";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 
 export default async function AdminHomePage() {
@@ -24,8 +24,9 @@ export default async function AdminHomePage() {
 
   const showUsers = canManageUsers(user.role);
   const showCatalog = canManageCatalog(user.role);
+  const showFeedback = canReviewFeedback(user.role);
 
-  if (!showUsers && !showCatalog) {
+  if (!showUsers && !showCatalog && !showFeedback) {
     redirect("/dashboard");
   }
 
@@ -61,6 +62,20 @@ export default async function AdminHomePage() {
             <div>
               <p className="font-medium text-[var(--color-text-1)]">Catálogo</p>
               <p className="text-caption text-[var(--color-text-3)]">Buses y activos del catálogo operativo</p>
+            </div>
+          </Link>
+        ) : null}
+        {showFeedback ? (
+          <Link
+            href="/admin/feedback"
+            className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 transition-colors hover:border-[var(--color-border-hover)]"
+          >
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--color-accent-light)] text-[var(--color-accent)]">
+              <MessageSquareHeart size={22} />
+            </div>
+            <div>
+              <p className="font-medium text-[var(--color-text-1)]">Feedback</p>
+              <p className="text-caption text-[var(--color-text-3)]">Ideas, errores y mejoras de usuarios</p>
             </div>
           </Link>
         ) : null}

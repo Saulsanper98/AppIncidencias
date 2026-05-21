@@ -193,6 +193,38 @@ model User {
   assignedTickets Ticket[] @relation("TicketAssignee")
   createdDashboards CustomDashboard[] @relation("DashboardCreator")
   preferredDashboard CustomDashboard? @relation("UserPreferredDashboard", fields: [preferredDashboardId], references: [id], onDelete: SetNull)
+  feedbackItems UserFeedback[]
+}
+
+model UserFeedback {
+  id          String   @id @default(cuid())
+  /// "idea" | "error" | "mejora"
+  type        String
+  /// "interfaz" | "funcionalidad" | "rendimiento" | "documentacion" | "otro"
+  category    String
+  title       String
+  description String
+  /// Puntuación de satisfacción general 1-5
+  rating      Int?
+  /// "baja" | "media" | "alta"
+  urgency     String   @default("media")
+  /// Nombre de la sección/URL de donde envió el feedback
+  currentPage String?
+  appVersion  String?
+  userId      String?
+  /// Nombre del usuario en el momento del envío (desnormalizado)
+  userName    String?
+  userRole    String?
+  /// "pendiente" | "en_revision" | "planificado" | "implementado" | "descartado"
+  status      String   @default("pendiente")
+  adminNotes  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([type, status])
+  @@index([userId, createdAt])
 }
 
 model AuditEvent {

@@ -122,6 +122,30 @@ export type AuditEvent = {
 
 export type PreventiveTaskStatus = "pendiente" | "programada" | "completada" | "cancelada";
 
+export type FeedbackType = "idea" | "error" | "mejora";
+export type FeedbackCategory = "interfaz" | "funcionalidad" | "rendimiento" | "documentacion" | "otro";
+export type FeedbackUrgency = "baja" | "media" | "alta";
+export type FeedbackStatus = "pendiente" | "en_revision" | "planificado" | "implementado" | "descartado";
+
+export type UserFeedback = {
+  id: string;
+  type: FeedbackType;
+  category: FeedbackCategory;
+  title: string;
+  description: string;
+  rating: number | null;
+  urgency: FeedbackUrgency;
+  currentPage: string | null;
+  appVersion: string | null;
+  userId: string | null;
+  userName: string | null;
+  userRole: string | null;
+  status: FeedbackStatus;
+  adminNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type PreventiveTask = {
   id: string;
   busId: string;

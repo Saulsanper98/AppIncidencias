@@ -44,6 +44,10 @@ export function canManageCatalog(role: UserRole) {
   return role === "gestor_centro_control";
 }
 
+export function canReviewFeedback(role: UserRole) {
+  return role === "gestor_centro_control";
+}
+
 export function getAllowedTransitions(role: UserRole, current: TicketStatus): TicketStatus[] {
   if (role === "conductor") {
     return [];

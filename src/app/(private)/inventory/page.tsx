@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AssetType } from "@/lib/domain";
@@ -577,6 +578,7 @@ export default function InventoryPage() {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-heading">{inv.header.title}</h1>
+                <FeedbackTargetButton id="inventario/lista" label="Listado de inventario de repuestos" />
                 {itemsCriticos > 0 ? (
                   <span className="inline-flex items-center rounded-full border border-[var(--color-error)]/45 bg-[var(--color-error-light)]/35 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-[var(--color-error)] print:hidden">
                     {itemsCriticos} alerta{itemsCriticos === 1 ? "" : "s"}

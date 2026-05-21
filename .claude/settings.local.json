@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Saul Web\\\\APP incidencias\\\\AppIncidencias\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(npx prisma *)",
+      "Bash(npx tsc *)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(Start-Sleep -Seconds 2)",
+      "Bash(node -e \"const p = require\\('./node_modules/lucide-react/package.json'\\); console.log\\(p.version\\)\")",
+      "Bash(node -e \"const lr = require\\('./node_modules/lucide-react'\\); console.log\\(['LayoutDashboard','Bus','RefreshCw','ArrowRight','BookOpen','Monitor','Cpu','Wifi','BarChart3','Radio','Layers','Grid3X3'].filter\\(k => lr[k] !== undefined\\).join\\(', '\\)\\)\")"
+    ]
+  }
+}
