@@ -3,7 +3,17 @@ import { cookies } from "next/headers";
 import type { UserRole } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
 import { parseUserRole } from "@/lib/rbac";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
+
+/**
+ * `x-user-id` / `x-user-role` solo se aceptan en desarrollo (o tests) porque
+ * permiten a cualquier cliente suplantar a un usuario. En producción se
+ * ignoran siempre, incluso si llegan desde la propia red interna.
+ */
+function allowDevHeaderSpoofing(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return true;
+}
 
 function readSessionUserIdFromCookieHeader(cookieHeader: string | null): string | null {
   if (!cookieHeader) return null;
@@ -17,6 +27,7 @@ function readSessionUserIdFromCookieHeader(cookieHeader: string | null): string 
     return value;
   }
 }
+
 export type RequestActor = {
   userId: string | null;
   role: UserRole;
@@ -24,21 +35,26 @@ export type RequestActor = {
 };
 
 export async function resolveRequestActor(request: Request): Promise<RequestActor> {
-  const headerUserId = request.headers.get("x-user-id")?.trim() || null;
-
-  let cookieUserId: string | null = null;
+  // Cookie firmada con HMAC. Es la única vía válida en producción.
+  let cookieToken: string | null = null;
   try {
     const store = await cookies();
-    const fromStore = store.get(SESSION_COOKIE_NAME)?.value;
-    if (fromStore) cookieUserId = fromStore;
+    cookieToken = store.get(SESSION_COOKIE_NAME)?.value ?? null;
   } catch {
-    /* cookies() solo en App Router / Route Handlers */
+    /* cookies() solo está disponible en App Router / Route Handlers */
   }
-  if (!cookieUserId) {
-    cookieUserId = readSessionUserIdFromCookieHeader(request.headers.get("cookie"));
+  if (!cookieToken) {
+    cookieToken = readSessionUserIdFromCookieHeader(request.headers.get("cookie"));
   }
+  const cookieUserId = verifySessionToken(cookieToken);
 
-  const userId = headerUserId || cookieUserId;
+  // Header `x-user-id`: solo en desarrollo, para que el flujo legacy del
+  // selector dev y los tests de Playwright sigan funcionando.
+  const headerUserId = allowDevHeaderSpoofing()
+    ? request.headers.get("x-user-id")?.trim() || null
+    : null;
+
+  const userId = cookieUserId || headerUserId;
   if (userId) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -53,7 +69,9 @@ export async function resolveRequestActor(request: Request): Promise<RequestActo
     }
   }
 
-  const fallbackRole = parseUserRole(request.headers.get("x-user-role"));
+  const fallbackRole = allowDevHeaderSpoofing()
+    ? parseUserRole(request.headers.get("x-user-role"))
+    : ("conductor" as UserRole);
   return {
     userId: null,
     role: fallbackRole,

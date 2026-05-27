@@ -22,8 +22,10 @@ import {
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
+import { AnomalousBusesBanner } from "@/components/inventory/AnomalousBusesBanner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SectionTabs } from "@/components/ui/section-tabs";
 import type { AssetType } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -563,6 +565,12 @@ export default function InventoryPage() {
         {itemsCriticos > 0 ? inv.live.critical(itemsCriticos, itemsBajos, itemsAgotados) : inv.live.ok}
       </div>
 
+      <div className="print:hidden">
+        <SectionTabs preset="inventory" />
+      </div>
+
+      <AnomalousBusesBanner />
+
       {toastQueue[0] ? (
         <div
           role="status"
@@ -715,16 +723,20 @@ export default function InventoryPage() {
         </div>
 
         {itemsCriticos > 0 ? (
+          // Banner crítico premium: solo trazo izquierdo color error + fondo
+          // discreto. No invade la atención del usuario, pero es claramente
+          // accionable con el CTA "Ver alertas".
           <div
             role="status"
-            className="flex flex-col gap-1.5 rounded-xl border border-[var(--color-error)]/35 bg-[var(--color-error-light)]/50 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3"
+            className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3"
+            style={{ borderLeft: "3px solid var(--color-error)" }}
           >
-            <AlertTriangle size={20} className="shrink-0 text-[var(--color-error)]" aria-hidden />
+            <AlertTriangle size={18} strokeWidth={1.5} className="shrink-0 text-[var(--color-error)]" aria-hidden />
             <div className="min-w-0 flex-1 text-left">
-              <p className="text-sm font-semibold text-[var(--color-error)]">
+              <p className="text-[13px] font-semibold text-[var(--color-text-1)]">
                 {itemsCriticos === 1 ? inv.banner.titleSingle : inv.banner.titlePlural(itemsCriticos)}
               </p>
-              <p className="mt-0.5 text-[12px] text-[var(--color-text-2)]">{inv.banner.body(itemsBajos, itemsAgotados, itemsOk)}</p>
+              <p className="mt-0.5 text-[11.5px] text-[var(--color-text-3)]">{inv.banner.body(itemsBajos, itemsAgotados, itemsOk)}</p>
             </div>
             <Button
               type="button"
@@ -893,56 +905,62 @@ export default function InventoryPage() {
         <h2 id="inventory-kpi-heading" className="sr-only">
           {inv.a11y.kpiHeading}
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {/* KPIs compactos: una sola fila horizontal con dividers internos.
+         *  Cada KPI es clicable y filtra la tabla. Ahorra ~120px verticales
+         *  respecto a las cards XL anteriores. */}
+        <div className="ccmgc-card grid grid-cols-3 divide-x divide-[var(--color-border)] overflow-hidden">
           <button
             type="button"
-            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left shadow-sm outline-none transition-[box-shadow,border-color] duration-200 hover:border-[var(--color-border-hover)] hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] motion-reduce:transition-none"
+            className="group flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-surface-2)]/40 focus-visible:bg-[var(--color-surface-2)]/40"
             onClick={() => {
               setStatusFilter("todos");
               setSortKey("riesgo");
             }}
+            title={inv.kpi.totalHint}
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-label text-[var(--color-text-2)]">Total referencias</span>
-              <Package size={16} className="text-[var(--color-text-3)]" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-eyebrow">Total referencias</p>
+              <p className="metric-medium mt-0.5 text-[var(--color-text-1)]">{totalItems}</p>
             </div>
-            <p className="text-3xl font-semibold tabular-nums text-[var(--color-text-1)]">{totalItems}</p>
-            <p className="mt-1 text-[11px] text-[var(--color-text-2)]">{inv.kpi.totalHint}</p>
+            <Package size={18} strokeWidth={1.5} className="shrink-0 text-[var(--color-text-3)] transition-colors group-hover:text-[var(--color-text-1)]" aria-hidden />
           </button>
           <button
             type="button"
-            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left shadow-sm outline-none transition-[box-shadow,border-color] duration-200 hover:border-[var(--color-warning)]/50 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] motion-reduce:transition-none"
+            className="group flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-warning-light)]/30"
             onClick={() => setStatusFilter("bajo")}
+            title={inv.kpi.bajoHint}
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-label text-[var(--color-text-2)]">Stock bajo</span>
-              <AlertTriangle size={16} className="text-[var(--color-warning)]" aria-hidden />
+            <div className="min-w-0">
+              <p className="text-eyebrow">Stock bajo</p>
+              <p className={cn("metric-medium mt-0.5", itemsBajos > 0 ? "text-[var(--color-warning)]" : "text-[var(--color-text-2)]")}>
+                {itemsBajos}
+              </p>
             </div>
-            <p className="text-3xl font-semibold tabular-nums text-[var(--color-warning)]">{itemsBajos}</p>
-            <p className="mt-1 text-[11px] text-[var(--color-text-2)]">{inv.kpi.bajoHint}</p>
+            <AlertTriangle size={18} strokeWidth={1.5} className="shrink-0 text-[var(--color-warning)]" aria-hidden />
           </button>
           <button
             type="button"
-            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left shadow-sm outline-none transition-[box-shadow,border-color] duration-200 hover:border-[var(--color-error)]/40 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] motion-reduce:transition-none"
+            className="group flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--color-error-light)]/30"
             onClick={() => setStatusFilter("agotado")}
+            title={inv.kpi.agotadoHint}
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-label text-[var(--color-text-2)]">Agotados</span>
-              <PackageX
-                size={16}
-                className={cn(itemsAgotados > 0 ? "text-[var(--color-error)]" : "text-[var(--color-text-3)]")}
-                aria-hidden
-              />
+            <div className="min-w-0">
+              <p className="text-eyebrow">Agotados</p>
+              <p
+                className={cn(
+                  "metric-medium mt-0.5",
+                  itemsAgotados > 0 ? "text-[var(--color-error)]" : "text-[var(--color-text-2)]",
+                )}
+              >
+                {itemsAgotados}
+              </p>
             </div>
-            <p
-              className={cn(
-                "text-3xl font-semibold tabular-nums",
-                itemsAgotados > 0 ? "text-[var(--color-error)]" : "text-[var(--color-text-2)]",
-              )}
-            >
-              {itemsAgotados}
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--color-text-2)]">{inv.kpi.agotadoHint}</p>
+            <PackageX
+              size={18}
+              strokeWidth={1.5}
+              className={cn("shrink-0", itemsAgotados > 0 ? "text-[var(--color-error)]" : "text-[var(--color-text-3)]")}
+              aria-hidden
+            />
           </button>
         </div>
       </section>

@@ -46,6 +46,31 @@ export function priorityBadgeProps(priority: TicketPriority): {
   return { variant: "success" };
 }
 
+/**
+ * Color del "dot" que precede el texto del estado del ticket. Permite chips
+ * más limpios sin depender únicamente del color de fondo del badge, mejora la
+ * legibilidad en filas con poca diferencia entre estados.
+ */
+export function statusDotClass(status: TicketStatus): string {
+  switch (status) {
+    case "abierto":
+      return "bg-indigo-300";
+    case "en_proceso":
+      return "bg-[var(--color-warning)]";
+    case "esperando_repuesto":
+      return "bg-violet-300";
+    case "resuelto":
+      return "bg-[var(--color-success)]";
+  }
+}
+
+/** Color del dot para el badge de prioridad (chip unificado, sin icono externo). */
+export function priorityDotClass(priority: TicketPriority): string {
+  if (priority === "alta") return "bg-[var(--color-error)]";
+  if (priority === "media") return "bg-[var(--color-warning)]";
+  return "bg-[var(--color-success)]";
+}
+
 /** Clases de texto para SLA en tabla/lista: rojo intenso solo vencido o <10 min; ámbar 10–30 min. */
 export function slaMinsRemainingTextClass(mins: number): string {
   if (mins <= 0) return "text-[var(--color-error)]";

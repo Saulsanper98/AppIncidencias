@@ -4,9 +4,11 @@ import { z } from "zod";
 import type { TicketStatus } from "@/lib/domain";
 import { consumeReservedPartsForTicket } from "@/lib/inventory";
 import { notifyTicketExternally } from "@/lib/external-notifications";
+import { renderTicketEmail, sendUserEmail } from "@/lib/email-notifications";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { canUpdateTicketStatus, getAllowedTransitions } from "@/lib/rbac";
+import { publishTicketEvent } from "@/lib/tickets-events";
 
 const statusUpdateSchema = z.object({
   nextStatus: z.enum(["abierto", "en_proceso", "esperando_repuesto", "resuelto"]),
@@ -35,7 +37,14 @@ export async function PATCH(
 
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { id: true, status: true, busId: true, title: true },
+      select: {
+        id: true,
+        status: true,
+        busId: true,
+        title: true,
+        priority: true,
+        assignedToUserId: true,
+      },
     });
     if (!ticket) {
       return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 });
@@ -81,6 +90,42 @@ export async function PATCH(
         ticketId: ticket.id,
         title: ticket.title,
         busId: ticket.busId,
+      });
+    }
+
+    publishTicketEvent("ticket_status_changed", {
+      id: ticket.id,
+      busId: ticket.busId,
+      status: parsed.data.nextStatus,
+      previousStatus: ticket.status,
+      priority: ticket.priority,
+      title: ticket.title,
+      assignedToUserId: ticket.assignedToUserId,
+      by: actor.displayName,
+    });
+
+    // Aviso por email al asignado cuando alguien distinto cambia el estado.
+    // Si el ticket no está asignado o lo cambia el propio asignado, no
+    // mandamos nada para no hacer spam.
+    if (
+      ticket.assignedToUserId &&
+      ticket.assignedToUserId !== actor.userId
+    ) {
+      const { subject, html } = renderTicketEmail({
+        headline: `Estado actualizado a "${parsed.data.nextStatus}"`,
+        body: `${actor.displayName} ha cambiado el estado del ticket de <strong>${ticket.status}</strong> a <strong>${parsed.data.nextStatus}</strong>.<br/><br/>Comentario:<br/><em>${parsed.data.comment.replace(/[<>]/g, "")}</em>`,
+        ticketId: ticket.id,
+        ticketTitle: ticket.title,
+        busId: ticket.busId,
+        status: parsed.data.nextStatus,
+        priority: ticket.priority,
+        actor: actor.displayName,
+      });
+      void sendUserEmail({
+        userIds: [ticket.assignedToUserId],
+        subject,
+        html,
+        dedupeKey: `status:${ticket.id}:${parsed.data.nextStatus}:${actor.userId}`,
       });
     }
 

@@ -30,19 +30,33 @@ export function calculatePriority(input: PriorityRuleInput): TicketPriority {
   return "baja";
 }
 
-// Valores acordados con operaciones en reunión de arranque.
-// Alta=30min porque corte de servicio; media/baja son estimaciones conservadoras.
-// TODO: mover a config cuando haya más rodaje con los tiempos reales.
-export function calculateSlaMinutes(priority: TicketPriority): number {
-  if (priority === "alta") {
-    return 30;
-  }
+/**
+ * Valores históricos hardcoded del SLA por prioridad. Sirven como FALLBACK si
+ * la configuración persistida en BD no se ha cargado todavía (preview en el
+ * cliente antes del fetch a `/api/sla-config`).
+ *
+ * Para el cálculo "de verdad" en el servidor, usa `getSlaMinutesForPriority()`
+ * de `src/lib/sla-config.ts`.
+ */
+export const DEFAULT_SLA_MINUTES: Record<TicketPriority, number> = {
+  alta: 30,
+  media: 120,
+  baja: 240,
+};
 
-  if (priority === "media") {
-    return 120;
+/**
+ * Versión sync (fallback) de los minutos por prioridad. Si recibe un snapshot
+ * `override`, lo usa; si no, devuelve el default histórico. Útil para preview
+ * de UI cuando todavía no se ha hecho el fetch de la configuración real.
+ */
+export function calculateSlaMinutes(
+  priority: TicketPriority,
+  override?: Partial<Record<TicketPriority, number>> | null,
+): number {
+  if (override && typeof override[priority] === "number") {
+    return override[priority] as number;
   }
-
-  return 240;
+  return DEFAULT_SLA_MINUTES[priority];
 }
 
 export function addMinutesIso(baseDate: Date, minutes: number): string {

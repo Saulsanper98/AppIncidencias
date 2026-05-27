@@ -6,10 +6,15 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   FilterX,
+  KeyRound,
+  Pencil,
   Search,
   Shield,
+  Trash2,
+  Upload,
   UserCheck,
   UserMinus,
   UserPlus,
@@ -54,6 +59,27 @@ type ManagedUser = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  hasPassword?: boolean;
+  mustChangePassword?: boolean;
+  lastLoginAt?: string | null;
+};
+
+type EditState = {
+  user: ManagedUser;
+  name: string;
+  email: string;
+};
+
+type ImportRowResult = {
+  index: number;
+  email: string;
+  status: "created" | "updated" | "skipped" | "error";
+  message?: string;
+  generatedPassword?: string | null;
+};
+type ImportResponse = {
+  results: ImportRowResult[];
+  stats: { total: number; created: number; skipped: number; errors: number };
 };
 
 type Stats = { total: number; active: number; inactive: number; gestorsActive: number };
@@ -162,7 +188,31 @@ export function AdminUsersManager() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole>("conductor");
+  const [initialPasswordInput, setInitialPasswordInput] = useState("");
+  const [forceChangeOnCreate, setForceChangeOnCreate] = useState(true);
   const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
+
+  // Modales avanzados
+  const [editState, setEditState] = useState<EditState | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ManagedUser | null>(null);
+  const [confirmReset, setConfirmReset] = useState<ManagedUser | null>(null);
+  const [generatedPasswordDialog, setGeneratedPasswordDialog] = useState<
+    | { userName: string; userEmail: string; password: string; intro: string }
+    | null
+  >(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<
+    | { user: ManagedUser; nextRole: UserRole; previousRole: UserRole }
+    | null
+  >(null);
+
+  // Importación CSV
+  const [importOpen, setImportOpen] = useState(false);
+  const [importRows, setImportRows] = useState<Array<Record<string, string>>>([]);
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<ImportResponse | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const [qInput, setQInput] = useState("");
   const [qFilter, setQFilter] = useState("");
@@ -436,30 +486,273 @@ export function AdminUsersManager() {
 
   const handleCreateUser = async () => {
     if (!canCreate) return;
+    // Aviso al asignar rol gestor desde el form de alta.
+    if (role === "gestor_centro_control") {
+      const ok = window.confirm(t.confirmRoleGestorBody(name.trim()));
+      if (!ok) return;
+    }
     setError(null);
     setCreateFieldErrors({});
     setPendingId("__create__", true);
     try {
+      const body: Record<string, unknown> = {
+        name: name.trim(),
+        email: email.trim(),
+        role,
+        mustChangePassword: forceChangeOnCreate,
+      };
+      if (initialPasswordInput.trim()) body.password = initialPasswordInput;
       const response = await fetch("/api/users/manage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), role }),
+        body: JSON.stringify(body),
       });
-      const { message, issues } = await readJsonBody(response);
+      const text = await response.text();
+      let data: {
+        user?: { id: string; name: string; email: string };
+        initialPassword?: string | null;
+        passwordWasGenerated?: boolean;
+        message?: string;
+        issues?: unknown;
+      } = {};
+      try { data = JSON.parse(text); } catch { /* ignore */ }
       if (!response.ok) {
-        setCreateFieldErrors(flattenZodIssues(issues));
-        setError(message || t.errorGeneric);
-        pushToast(message || t.errorGeneric, "err");
+        setCreateFieldErrors(flattenZodIssues(data.issues));
+        setError(data.message || t.errorGeneric);
+        pushToast(data.message || t.errorGeneric, "err");
         return;
       }
       pushToast(t.toastCreated, "ok");
+      if (data.passwordWasGenerated && data.initialPassword && data.user) {
+        setGeneratedPasswordDialog({
+          userName: data.user.name,
+          userEmail: data.user.email,
+          password: data.initialPassword,
+          intro: t.initialPasswordBody(data.user.name),
+        });
+      }
       setName("");
       setEmail("");
       setRole("conductor");
+      setInitialPasswordInput("");
+      setForceChangeOnCreate(true);
       await loadUsers();
     } finally {
       setPendingId("__create__", false);
     }
+  };
+
+  const runEditSubmit = async () => {
+    if (!editState) return;
+    const { user, name: nameNext, email: emailNext } = editState;
+    const trimmedName = nameNext.trim();
+    const trimmedEmail = emailNext.trim();
+    if (trimmedName.length < 3) {
+      pushToast(t.nameMin, "err");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      pushToast(t.errorGeneric, "err");
+      return;
+    }
+    const body: Record<string, unknown> = { userId: user.id };
+    if (trimmedName !== user.name) body.name = trimmedName;
+    if (trimmedEmail.toLowerCase() !== user.email) body.email = trimmedEmail;
+    if (Object.keys(body).length === 1) { // solo userId
+      setEditState(null);
+      return;
+    }
+    setPendingId(user.id, true);
+    try {
+      const response = await fetch("/api/users/manage", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const { message } = await readJsonBody(response);
+      if (!response.ok) {
+        pushToast(message || t.errorGeneric, "err");
+        return;
+      }
+      pushToast(t.toastSaved, "ok");
+      setEditState(null);
+      await loadUsers();
+    } finally {
+      setPendingId(user.id, false);
+    }
+  };
+
+  const runDelete = async () => {
+    if (!confirmDelete) return;
+    const u = confirmDelete;
+    setConfirmDelete(null);
+    setPendingId(u.id, true);
+    try {
+      const response = await fetch("/api/users/manage", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: u.id }),
+      });
+      const { message } = await readJsonBody(response);
+      if (!response.ok) {
+        pushToast(message || t.errorGeneric, "err");
+        return;
+      }
+      pushToast(t.toastSaved, "ok");
+      await loadUsers();
+    } finally {
+      setPendingId(u.id, false);
+    }
+  };
+
+  const runReset = async () => {
+    if (!confirmReset) return;
+    const u = confirmReset;
+    setConfirmReset(null);
+    setPendingId(u.id, true);
+    try {
+      const response = await fetch("/api/users/manage/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: u.id }),
+      });
+      const text = await response.text();
+      let data: { newPassword?: string | null; message?: string; user?: { name: string; email: string } } = {};
+      try { data = JSON.parse(text); } catch { /* ignore */ }
+      if (!response.ok) {
+        pushToast(data.message || t.errorGeneric, "err");
+        return;
+      }
+      if (data.newPassword && data.user) {
+        setGeneratedPasswordDialog({
+          userName: data.user.name,
+          userEmail: data.user.email,
+          password: data.newPassword,
+          intro: t.initialPasswordBody(data.user.name),
+        });
+      }
+      pushToast(t.toastSaved, "ok");
+      await loadUsers();
+    } finally {
+      setPendingId(u.id, false);
+    }
+  };
+
+  const onRoleChangeRequested = async (user: ManagedUser, nextRole: UserRole) => {
+    if (nextRole === user.role) return;
+    // Avisar al promover a gestor.
+    if (nextRole === "gestor_centro_control" && user.role !== "gestor_centro_control") {
+      setPendingRoleChange({ user, nextRole, previousRole: user.role });
+      return;
+    }
+    await commitRoleChange(user, nextRole, user.role);
+  };
+
+  const commitRoleChange = async (user: ManagedUser, nextRole: UserRole, previousRole: UserRole) => {
+    const ok = await runPatch(user.id, { role: nextRole });
+    if (!ok) return;
+    pushToast(t.toastSaved, "ok", {
+      label: t.toastRoleUndo,
+      onClick: async () => {
+        const rev = await runPatch(user.id, { role: previousRole });
+        if (rev) pushToast(t.toastRoleUndone, "ok", undefined, 3200);
+      },
+    }, 8800);
+  };
+
+  const copyToClipboard = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      pushToast(t.passwordCopied, "ok");
+    } catch {
+      pushToast(t.errorGeneric, "err");
+    }
+  };
+
+  // ----- CSV import helpers (parser muy simple, comma o ;) -----
+  const parseCsvText = (text: string): Array<Record<string, string>> => {
+    const lines = text.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return [];
+    const sep = lines[0].includes(";") && !lines[0].includes(",") ? ";" : ",";
+    const splitLine = (line: string): string[] => {
+      const out: string[] = [];
+      let cur = "";
+      let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQ) {
+          if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+          else if (ch === '"') { inQ = false; }
+          else { cur += ch; }
+        } else {
+          if (ch === '"') inQ = true;
+          else if (ch === sep) { out.push(cur); cur = ""; }
+          else { cur += ch; }
+        }
+      }
+      out.push(cur);
+      return out;
+    };
+    const headerCells = splitLine(lines[0]).map((c) => c.trim().toLowerCase());
+    return lines.slice(1).map((line) => {
+      const cells = splitLine(line);
+      const row: Record<string, string> = {};
+      headerCells.forEach((h, i) => { row[h] = (cells[i] ?? "").trim(); });
+      return row;
+    });
+  };
+
+  const onPickImportFile = async (file: File | null) => {
+    setImportError(null);
+    setImportResult(null);
+    if (!file) { setImportRows([]); setImportFileName(null); return; }
+    setImportFileName(file.name);
+    try {
+      const text = await file.text();
+      const rows = parseCsvText(text);
+      setImportRows(rows);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "No se pudo leer el fichero.");
+      setImportRows([]);
+    }
+  };
+
+  const runImport = async () => {
+    if (importRows.length === 0) return;
+    setImporting(true);
+    setImportError(null);
+    try {
+      const response = await fetch("/api/users/manage/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: importRows }),
+      });
+      const text = await response.text();
+      let data: ImportResponse | { message?: string } = { message: "" };
+      try { data = JSON.parse(text); } catch { /* ignore */ }
+      if (!response.ok) {
+        setImportError((data as { message?: string }).message ?? "Error en la importación.");
+        return;
+      }
+      setImportResult(data as ImportResponse);
+      await loadUsers();
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const downloadImportPasswordsCsv = () => {
+    if (!importResult) return;
+    const created = importResult.results.filter((r) => r.status === "created" && r.generatedPassword);
+    if (created.length === 0) return;
+    const lines = ["email,password", ...created.map((r) => `${csvEscape(r.email)},${csvEscape(r.generatedPassword ?? "")}`)];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `import-passwords-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const toggleSort = (key: SortKey) => {
@@ -624,6 +917,16 @@ export function AdminUsersManager() {
             >
               {t.csvExport(processed.length)}
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="!min-h-10"
+              startIcon={<Upload size={14} />}
+              onClick={() => { setImportOpen(true); setImportResult(null); setImportError(null); setImportRows([]); setImportFileName(null); }}
+            >
+              {t.importCsvCta}
+            </Button>
             {filtersDirty ? (
               <Button
                 type="button"
@@ -755,7 +1058,34 @@ export function AdminUsersManager() {
                 <option value="tecnico_campo">{userRoleLabel("tecnico_campo", locale)}</option>
                 <option value="gestor_centro_control">{userRoleLabel("gestor_centro_control", locale)}</option>
               </Select>
+              {role === "gestor_centro_control" ? (
+                <p className="mt-1 text-caption text-[var(--color-warning)]">
+                  {t.confirmRoleGestorBody(name.trim() || (locale === "en" ? "this user" : "este usuario"))}
+                </p>
+              ) : null}
             </div>
+            <div>
+              <label htmlFor="admin-new-password" className="mb-1.5 block text-label">
+                {t.optionalPasswordLabel}
+              </label>
+              <Input
+                id="admin-new-password"
+                type="text"
+                value={initialPasswordInput}
+                onChange={(e) => setInitialPasswordInput(e.target.value)}
+                placeholder="••••••••••"
+                autoComplete="off"
+              />
+              <p className="mt-1 text-caption text-[var(--color-text-3)]">{t.optionalPasswordHint}</p>
+              <p className="text-caption text-[var(--color-text-3)]">{t.minPasswordHint}</p>
+            </div>
+            <label className="flex items-start gap-2 text-caption text-[var(--color-text-2)]">
+              <Checkbox
+                checked={forceChangeOnCreate}
+                onChange={(e) => setForceChangeOnCreate(e.target.checked)}
+              />
+              <span>{t.forceChangeLabel}</span>
+            </label>
             {createFieldErrors._form ? (
               <p className="text-caption text-[var(--color-error)]">{createFieldErrors._form}</p>
             ) : null}
@@ -942,19 +1272,7 @@ export function AdminUsersManager() {
                             locale={locale}
                             value={user.role}
                             disabled={pending.has(user.id)}
-                            onCommit={async (r) => {
-                              if (r === user.role) return;
-                              const prev = user.role;
-                              const ok = await runPatch(user.id, { role: r });
-                              if (!ok) return;
-                              pushToast(t.toastSaved, "ok", {
-                                label: t.toastRoleUndo,
-                                onClick: async () => {
-                                  const rev = await runPatch(user.id, { role: prev });
-                                  if (rev) pushToast(t.toastRoleUndone, "ok", undefined, 3200);
-                                },
-                              }, 8800);
-                            }}
+                            onCommit={(r) => onRoleChangeRequested(user, r)}
                           />
                         </td>
                         <td className="py-3 align-middle">
@@ -983,33 +1301,68 @@ export function AdminUsersManager() {
                           ) : null}
                         </td>
                         <td className="py-3 align-middle">
-                          {user.isActive ? (
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="!min-h-9 border border-[var(--color-error)]/35 !px-3 !py-1.5 !text-xs text-[var(--color-error)] hover:bg-[var(--color-error-light)]"
-                              disabled={pending.has(user.id) || user.id === actorId}
-                              title={user.id === actorId ? t.deactivateSelfTitle : undefined}
-                              onClick={() => setConfirmDeactivate(user)}
-                            >
-                              {t.deactivate}
-                            </Button>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="!min-h-9 border border-[var(--color-success)]/35 !px-3 !py-1.5 !text-xs text-[var(--color-success)] hover:bg-[var(--color-success-light)]"
+                              className="!min-h-9 !px-2.5 !py-1.5 !text-xs text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]"
                               disabled={pending.has(user.id)}
-                              onClick={async () => {
-                                const ok = await runPatch(user.id, { isActive: true });
-                                if (ok) pushToast(t.toastReactivated, "ok");
-                              }}
+                              onClick={() => setEditState({ user, name: user.name, email: user.email })}
+                              title={t.editAction}
                             >
-                              {t.activate}
+                              <Pencil size={13} className="mr-1" /> {t.editAction}
                             </Button>
-                          )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="!min-h-9 !px-2.5 !py-1.5 !text-xs text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]"
+                              disabled={pending.has(user.id)}
+                              onClick={() => setConfirmReset(user)}
+                              title={t.resetPasswordAction}
+                            >
+                              <KeyRound size={13} className="mr-1" /> {t.resetPasswordAction}
+                            </Button>
+                            {user.isActive ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="!min-h-9 border border-[var(--color-error)]/35 !px-3 !py-1.5 !text-xs text-[var(--color-error)] hover:bg-[var(--color-error-light)]"
+                                disabled={pending.has(user.id) || user.id === actorId}
+                                title={user.id === actorId ? t.deactivateSelfTitle : undefined}
+                                onClick={() => setConfirmDeactivate(user)}
+                              >
+                                {t.deactivate}
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="!min-h-9 border border-[var(--color-success)]/35 !px-3 !py-1.5 !text-xs text-[var(--color-success)] hover:bg-[var(--color-success-light)]"
+                                disabled={pending.has(user.id)}
+                                onClick={async () => {
+                                  const ok = await runPatch(user.id, { isActive: true });
+                                  if (ok) pushToast(t.toastReactivated, "ok");
+                                }}
+                              >
+                                {t.activate}
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="!min-h-9 !px-2.5 !py-1.5 !text-xs text-[var(--color-error)] hover:bg-[var(--color-error-light)]"
+                              disabled={pending.has(user.id) || user.id === actorId}
+                              title={t.deleteAction}
+                              onClick={() => setConfirmDelete(user)}
+                            >
+                              <Trash2 size={13} className="mr-1" /> {t.deleteAction}
+                            </Button>
+                          </div>
                         </td>
                       </motion.tr>
                     ))}
@@ -1058,19 +1411,7 @@ export function AdminUsersManager() {
                         locale={locale}
                         value={user.role}
                         disabled={pending.has(user.id)}
-                        onCommit={async (r) => {
-                          if (r === user.role) return;
-                          const prev = user.role;
-                          const ok = await runPatch(user.id, { role: r });
-                          if (!ok) return;
-                          pushToast(t.toastSaved, "ok", {
-                            label: t.toastRoleUndo,
-                            onClick: async () => {
-                              const rev = await runPatch(user.id, { role: prev });
-                              if (rev) pushToast(t.toastRoleUndone, "ok", undefined, 3200);
-                            },
-                          }, 8800);
-                        }}
+                        onCommit={(r) => onRoleChangeRequested(user, r)}
                       />
                     </div>
                     <p className="mb-2 text-caption text-[var(--color-text-3)]">
@@ -1081,7 +1422,27 @@ export function AdminUsersManager() {
                       {t.colUpdated} {formatDate(user.updatedAt)}
                       {relativeDayLabel(user.updatedAt) ? ` · ${relativeDayLabel(user.updatedAt)}` : ""}
                     </p>
-                    <div className="flex justify-end">
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="!min-h-9 !text-xs text-[var(--color-text-2)]"
+                        disabled={pending.has(user.id)}
+                        onClick={() => setEditState({ user, name: user.name, email: user.email })}
+                      >
+                        <Pencil size={13} className="mr-1" /> {t.editAction}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="!min-h-9 !text-xs text-[var(--color-text-2)]"
+                        disabled={pending.has(user.id)}
+                        onClick={() => setConfirmReset(user)}
+                      >
+                        <KeyRound size={13} className="mr-1" /> {t.resetPasswordAction}
+                      </Button>
                       {user.isActive ? (
                         <Button
                           type="button"
@@ -1108,6 +1469,16 @@ export function AdminUsersManager() {
                           {t.activate}
                         </Button>
                       )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="!min-h-9 !text-xs text-[var(--color-error)]"
+                        disabled={pending.has(user.id) || user.id === actorId}
+                        onClick={() => setConfirmDelete(user)}
+                      >
+                        <Trash2 size={13} className="mr-1" /> {t.deleteAction}
+                      </Button>
                     </div>
                   </motion.div>
                 ))}
@@ -1220,6 +1591,187 @@ export function AdminUsersManager() {
               </Button>
               <Button type="button" variant="danger" onClick={() => void runBulkDeactivate()}>
                 {t.confirmBulk}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* --- Modal: editar nombre / email --- */}
+      {editState ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
+          role="presentation"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setEditState(null); }}
+        >
+          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
+            <h3 className="text-subheading text-[var(--color-text-1)]">{t.editDialogTitle}</h3>
+            <p className="mt-1 text-caption text-[var(--color-text-3)]">{editState.user.email}</p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label htmlFor="edit-name" className="mb-1.5 block text-label">{t.fieldName}</label>
+                <Input id="edit-name" value={editState.name} onChange={(e) => setEditState((s) => s ? { ...s, name: e.target.value } : s)} />
+              </div>
+              <div>
+                <label htmlFor="edit-email" className="mb-1.5 block text-label">{t.fieldEmail}</label>
+                <Input id="edit-email" type="email" value={editState.email} onChange={(e) => setEditState((s) => s ? { ...s, email: e.target.value } : s)} />
+              </div>
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setEditState(null)}>{t.cancel}</Button>
+              <Button type="button" onClick={() => void runEditSubmit()}>{t.editDialogSave}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* --- Modal: confirmar eliminar --- */}
+      {confirmDelete ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
+          role="presentation"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}
+        >
+          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
+            <h3 className="text-subheading text-[var(--color-text-1)]">{t.deleteDialogTitle}</h3>
+            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.deleteDialogBody(confirmDelete.name)}</p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>{t.cancel}</Button>
+              <Button type="button" variant="danger" onClick={() => void runDelete()}>{t.confirmDelete}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* --- Modal: confirmar reset password --- */}
+      {confirmReset ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
+          role="presentation"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmReset(null); }}
+        >
+          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
+            <h3 className="text-subheading text-[var(--color-text-1)]">{t.resetDialogTitle}</h3>
+            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.resetDialogBody(confirmReset.name)}</p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setConfirmReset(null)}>{t.cancel}</Button>
+              <Button type="button" onClick={() => void runReset()}>{t.confirmReset}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* --- Modal: confirmar promoción a gestor --- */}
+      {pendingRoleChange ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
+          role="presentation"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setPendingRoleChange(null); }}
+        >
+          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
+            <h3 className="text-subheading text-[var(--color-text-1)]">{t.confirmRoleGestorTitle}</h3>
+            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.confirmRoleGestorBody(pendingRoleChange.user.name)}</p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setPendingRoleChange(null)}>{t.cancel}</Button>
+              <Button type="button" onClick={async () => {
+                const change = pendingRoleChange;
+                setPendingRoleChange(null);
+                if (change) await commitRoleChange(change.user, change.nextRole, change.previousRole);
+              }}>{t.confirmRoleGestorAccept}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* --- Modal: contraseña generada (alta + reset) --- */}
+      {generatedPasswordDialog ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/55 p-4"
+          role="presentation"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setGeneratedPasswordDialog(null); }}
+        >
+          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
+            <div className="flex items-start gap-2">
+              <KeyRound size={20} className="mt-0.5 text-[var(--color-accent)]" aria-hidden />
+              <div>
+                <h3 className="text-subheading text-[var(--color-text-1)]">{t.initialPasswordTitle}</h3>
+                <p className="mt-1 text-body text-[var(--color-text-2)]">{generatedPasswordDialog.intro}</p>
+                <p className="text-caption text-[var(--color-text-3)]">{generatedPasswordDialog.userEmail}</p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 font-mono text-lg tracking-wider text-[var(--color-text-1)] break-all">
+              {generatedPasswordDialog.password}
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="secondary" startIcon={<Copy size={14} />} onClick={() => copyToClipboard(generatedPasswordDialog.password)}>{t.copyPassword}</Button>
+              <Button type="button" onClick={() => setGeneratedPasswordDialog(null)}>{t.close}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* --- Modal: importar CSV --- */}
+      {importOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
+          role="presentation"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setImportOpen(false); }}
+        >
+          <div role="dialog" aria-modal="true" className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
+            <h3 className="text-subheading text-[var(--color-text-1)]">{t.importDialogTitle}</h3>
+            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.importDialogHint}</p>
+            <div className="mt-4 space-y-3">
+              <input
+                ref={importFileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="block w-full cursor-pointer rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text-2)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--color-accent)] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
+                onChange={(e) => void onPickImportFile(e.target.files?.[0] ?? null)}
+              />
+              {importFileName ? (
+                <p className="text-caption text-[var(--color-text-3)]">
+                  {importFileName} — {t.importRowsDetected(importRows.length)}
+                </p>
+              ) : null}
+              {importError ? (
+                <p className="text-caption text-[var(--color-error)]">{importError}</p>
+              ) : null}
+
+              {importResult ? (
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
+                  <p className="mb-2 text-label">{t.importResultsTitle}</p>
+                  <ul className="grid grid-cols-2 gap-1 text-caption text-[var(--color-text-2)] sm:grid-cols-4">
+                    <li>{t.importStat("Total", importResult.stats.total)}</li>
+                    <li className="text-[var(--color-success)]">{t.importStat("OK", importResult.stats.created)}</li>
+                    <li className="text-[var(--color-warning)]">{t.importStat("Skipped", importResult.stats.skipped)}</li>
+                    <li className="text-[var(--color-error)]">{t.importStat("Errors", importResult.stats.errors)}</li>
+                  </ul>
+                  {importResult.results.length > 0 ? (
+                    <div className="mt-3 max-h-56 overflow-y-auto rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-caption">
+                      {importResult.results.map((r) => (
+                        <p key={r.index} className={cn(
+                          "py-0.5",
+                          r.status === "created" ? "text-[var(--color-success)]" :
+                          r.status === "skipped" ? "text-[var(--color-warning)]" :
+                          r.status === "error" ? "text-[var(--color-error)]" : "",
+                        )}>
+                          #{r.index} {r.email} — {r.status}{r.message ? ` (${r.message})` : ""}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {importResult.results.some((r) => r.generatedPassword) ? (
+                    <Button type="button" variant="secondary" size="sm" className="mt-3" startIcon={<Download size={14} />} onClick={downloadImportPasswordsCsv}>
+                      {t.importDownloadCsv}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setImportOpen(false)}>{t.close}</Button>
+              <Button type="button" disabled={importRows.length === 0 || importing} onClick={() => void runImport()}>
+                {importing ? "..." : t.importRunCta}
               </Button>
             </div>
           </div>

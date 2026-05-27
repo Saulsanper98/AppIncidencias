@@ -86,6 +86,34 @@ export function loginCopy(locale: LoginLocale) {
     ssoSupport: isEn
       ? "If you need access, contact your IT administrator or operations center."
       : "Si necesitas acceso, contacta con administración TI o el centro de operaciones.",
+    fieldEmailLabel: isEn ? "Email address" : "Correo electrónico",
+    fieldEmailPlaceholder: isEn ? "you@movilidadgc.org" : "tu@movilidadgc.org",
+    fieldPasswordLabel: isEn ? "Password" : "Contraseña",
+    fieldPasswordPlaceholder: isEn ? "Your password" : "Tu contraseña",
+    showPassword: isEn ? "Show" : "Mostrar",
+    hidePassword: isEn ? "Hide" : "Ocultar",
+    forgotPassword: isEn ? "Forgot your password? Ask an administrator to reset it." : "¿Olvidaste tu contraseña? Pide a un administrador que la restablezca.",
+    accessFootnote: isEn
+      ? "If you don't have an account, ask the control center manager to create one for you."
+      : "Si no tienes cuenta, pide al gestor del centro de control que te dé de alta.",
+    selectorHint: isEn
+      ? "Select your name in the list and type your password."
+      : "Selecciona tu nombre de la lista y escribe tu contraseña.",
+    errorInvalidCredentials: isEn ? "Incorrect user or password." : "Usuario o contraseña incorrectos.",
+    errorPasswordRequired: isEn ? "Type your password." : "Escribe tu contraseña.",
+    mustChangePasswordTitle: isEn ? "Set a new password" : "Establece una nueva contraseña",
+    mustChangePasswordBody: isEn
+      ? "Your account uses a temporary password. Please choose a permanent one to continue."
+      : "Tu cuenta tiene una contraseña temporal. Establece una definitiva para continuar.",
+    fieldCurrentPasswordLabel: isEn ? "Current password" : "Contraseña actual",
+    fieldNewPasswordLabel: isEn ? "New password" : "Nueva contraseña",
+    fieldNewPasswordConfirmLabel: isEn ? "Confirm new password" : "Confirmar nueva contraseña",
+    passwordsDontMatch: isEn ? "The passwords don't match." : "Las contraseñas no coinciden.",
+    passwordRulesHint: isEn
+      ? "At least 10 characters, including letters and digits."
+      : "Mínimo 10 caracteres, incluyendo letras y dígitos.",
+    saveAndContinue: isEn ? "Save and continue" : "Guardar y continuar",
+    passwordChanged: isEn ? "Password updated." : "Contraseña actualizada.",
     bootstrapFailed: isEn ? "We could not prepare sign-in." : "No se pudo preparar el acceso.",
     versionLabel: isEn ? "Version" : "Versión",
     envLabel: isEn ? "Environment" : "Entorno",

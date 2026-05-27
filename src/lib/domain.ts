@@ -31,6 +31,12 @@ export type Ticket = {
   nivelImpacto?: string | null;
   origenTecnico?: string | null;
   observaciones?: string | null;
+  /** Línea/ruta operativa (opcional). Autocompletable desde catálogo, acepta texto libre. */
+  lineaLabel?: string | null;
+  /** Etiqueta libre de servicio/turno/recorrido (opcional, texto libre puro). */
+  servicioLabel?: string | null;
+  /** Nombre del conductor en el momento de la incidencia (opcional). */
+  conductorLabel?: string | null;
   title: string;
   description: string;
   status: TicketStatus;
@@ -109,6 +115,12 @@ export type SessionUser = {
   email: string;
   role: UserRole;
   preferredDashboardId?: string | null;
+  /** URL pública o externa del avatar del usuario (admite GIF animado). */
+  avatarUrl?: string | null;
+  /** URL pública o externa del banner de cabecera del perfil (admite GIF). */
+  bannerUrl?: string | null;
+  /** Puesto/departamento mostrado bajo el nombre (ej. "Centro de control"). */
+  position?: string | null;
 };
 
 export type AuditEvent = {
@@ -157,4 +169,62 @@ export type PreventiveTask = {
   assignedToUserId: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type KbArticleStatus = "borrador" | "publicado" | "archivado";
+
+// ─── Novedades / Avisos en vivo ─────────────────────────────────────────────
+export type AnnouncementKind = "novedad" | "aviso";
+export type AnnouncementSeverity = "info" | "warning" | "critical";
+export type AnnouncementStatus = "borrador" | "publicado" | "archivado";
+
+export type Announcement = {
+  id: string;
+  kind: AnnouncementKind;
+  severity: AnnouncementSeverity;
+  title: string;
+  bodyMd: string;
+  status: AnnouncementStatus;
+  pinned: boolean;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  authorId: string | null;
+  authorName: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** True si el usuario actual ya lo marcó leído (presente solo en lecturas). */
+  isRead?: boolean;
+};
+
+export type KbCategory = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  order: number;
+  articleCount?: number;
+};
+
+export type KbArticleSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string | null;
+  status: KbArticleStatus;
+  tags: string[];
+  views: number;
+  categoryId: string | null;
+  categoryName?: string | null;
+  categorySlug?: string | null;
+  authorName?: string | null;
+  publishedAt: string | null;
+  updatedAt: string;
+};
+
+export type KbArticleDetail = KbArticleSummary & {
+  contentMd: string;
+  linkedTicketIds: string[];
+  createdAt: string;
 };

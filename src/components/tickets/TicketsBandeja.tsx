@@ -1,17 +1,17 @@
 "use client";
 
 import {
+  Bus as BusIcon,
   Camera,
   CheckCircle2,
   ClipboardList,
   Clock3,
+  Inbox,
   MapPinned,
   MoreHorizontal,
-  SignalHigh,
-  SignalLow,
-  SignalMedium,
 } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import type { TicketView } from "@/components/tickets/tickets-module-types";
@@ -21,11 +21,90 @@ import { getAllowedTransitions } from "@/lib/rbac";
 import { formatSlaOverdueLabel, toUiPriority } from "@/lib/ticketing";
 import {
   priorityBadgeProps,
+  priorityDotClass,
   slaMinsRemainingTextClass,
+  statusDotClass,
   ticketStatusBadgeClassName,
   ticketStatusBadgeVariant,
 } from "@/lib/ticket-ui";
 import { cn } from "@/lib/utils";
+
+// Persistimos el "último ticket visto" en la bandeja para resaltar la fila tras
+// volver desde el detalle. Sólo cliente; no afecta accesibilidad.
+const LAST_VIEWED_TICKET_KEY = "ccmgc_bandeja_last_viewed_ticket_v1";
+
+/**
+ * Celda SLA con donut visual + duración. El donut se rellena en sentido
+ * inverso (de 100 % al inicio del ticket a 0 % al vencer) y cambia de color
+ * según urgencia. Si está vencido, muestra etiqueta "Vencido" + hace tiempo.
+ */
+function SlaCell({ deadline }: { deadline: string }) {
+  const mins = Math.round((new Date(deadline).getTime() - Date.now()) / 60000);
+  if (mins <= 0) {
+    return (
+      <div
+        className="flex min-w-0 max-w-[8rem] items-center gap-1.5"
+        title={`${formatSlaOverdueLabel(mins)} · ${new Date(deadline).toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`}
+      >
+        <SlaDonut percent={0} color="var(--color-error)" />
+        <div className="min-w-0">
+          <p className="text-[10.5px] font-semibold leading-tight text-[var(--color-error)]">Vencido</p>
+          <p className="num-tabular truncate text-[10px] leading-tight text-[var(--color-text-3)]">
+            {formatSlaOverdueLabel(mins)}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  // Asumimos un "tramo medio" de SLA de 240m para normalizar visualmente el
+  // donut: si quedan >240m está casi lleno; <30m casi vacío.
+  const pct = Math.max(0, Math.min(100, Math.round((mins / 240) * 100)));
+  const urgent = mins < 30;
+  const nearby = !urgent && mins < 120;
+  const color = urgent ? "var(--color-error)" : nearby ? "var(--color-warning)" : "var(--color-text-3)";
+  const text = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  return (
+    <div className="flex min-w-0 items-center gap-1.5" title={`Quedan ${text} hasta SLA`}>
+      <SlaDonut percent={pct} color={color} />
+      <span
+        className={cn(
+          "num-tabular text-[11.5px]",
+          urgent ? "font-semibold text-[var(--color-error)]" :
+          nearby ? "text-[var(--color-warning)]" :
+          "text-[var(--color-text-3)]",
+        )}
+      >
+        {text}
+      </span>
+    </div>
+  );
+}
+
+function SlaDonut({ percent, color }: { percent: number; color: string }) {
+  const r = 8;
+  const c = 2 * Math.PI * r;
+  const offset = c - (c * percent) / 100;
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden className="shrink-0">
+      {/* Aro de fondo: pista muy tenue para que el progreso destaque sin
+          competir con el fondo del row. */}
+      <circle cx="11" cy="11" r={r} fill="none" stroke="var(--color-border)" strokeWidth="2.2" opacity="0.55" />
+      <circle
+        cx="11"
+        cy="11"
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth="2.6"
+        strokeDasharray={c}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        transform="rotate(-90 11 11)"
+        style={{ transition: "stroke-dashoffset 0.4s var(--ease-out)" }}
+      />
+    </svg>
+  );
+}
 
 type EmptyIcon = typeof ClipboardList;
 
@@ -35,7 +114,7 @@ function EmptyStateBlock({
   hint,
   actionLabel,
   onAction,
-  iconSize = 40,
+  iconSize = 28,
   compact = false,
 }: {
   icon: EmptyIcon;
@@ -48,14 +127,16 @@ function EmptyStateBlock({
 }) {
   return (
     <div className={cn(TICKETS_EMPTY_SHELL, compact && "!py-6")}>
-      <Icon size={iconSize} className="mb-3 text-[var(--color-text-3)]" />
+      <span className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[var(--color-text-3)] ring-1 ring-[var(--color-border)]">
+        <Icon size={iconSize} strokeWidth={1.5} aria-hidden />
+      </span>
       <p className="text-subheading text-[var(--color-text-2)]">{title}</p>
       <p className="mx-auto mt-1 max-w-[280px] text-caption text-[var(--color-text-3)]">{hint}</p>
       {actionLabel && onAction ? (
         <button
           type="button"
           onClick={onAction}
-          className="mt-4 rounded-lg border border-[var(--color-accent)]/30 px-3 py-1.5 text-xs font-medium text-[var(--color-accent)] transition-all duration-150 hover:bg-[var(--color-accent-light)]"
+          className="mt-4 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/40 px-3 py-1.5 text-xs font-medium text-[var(--color-accent)] transition-all duration-150 hover:bg-[var(--color-accent-light)]"
         >
           {actionLabel}
         </button>
@@ -89,16 +170,46 @@ export function TicketsBandeja({
   onClearPartCodeFilter,
   onClearFilters,
 }: TicketsBandejaProps) {
-  const bandejaTdPad = bandejaCompacta ? "px-1.5 py-1.5 align-top leading-snug" : "px-2 py-3 align-top";
-  const bandejaThPad = bandejaCompacta ? "px-1.5 pb-2 pt-1.5" : "px-2 pb-3 pt-2";
+  // Resaltamos la última fila visitada al volver desde el detalle. No es una
+  // "selección" persistente, sino una pista visual para no perder el contexto.
+  const [lastViewedTicketId, setLastViewedTicketId] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(LAST_VIEWED_TICKET_KEY);
+      if (raw) setLastViewedTicketId(raw);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const markTicketVisited = (ticketId: string) => {
+    try {
+      sessionStorage.setItem(LAST_VIEWED_TICKET_KEY, ticketId);
+    } catch {
+      /* ignore */
+    }
+    setLastViewedTicketId(ticketId);
+  };
 
   return (
-    <div className="mb-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-[var(--color-border)] pb-3">
-        <ClipboardList size={15} className="text-[var(--color-text-3)]" />
-        <h3 className="text-subheading text-[var(--color-text-1)]">Bandeja de tickets</h3>
-        <span className="text-caption text-[var(--color-text-3)]">({ticketsCount})</span>
-        <span className="ml-auto hidden text-xs text-[var(--color-text-3)] xl:inline">Bandeja prioritaria; debajo, contexto operativo.</span>
+    <div className="ccmgc-card mb-4 p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-[var(--color-border)] pb-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
+          <Inbox size={16} strokeWidth={1.7} aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h3 className="flex items-baseline gap-2 text-subheading text-[var(--color-text-1)]">
+            Bandeja de tickets
+            <span
+              className="inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full bg-[var(--color-surface-2)] px-1.5 text-[11px] font-semibold text-[var(--color-text-2)]"
+              title={`${ticketsCount} ticket${ticketsCount === 1 ? "" : "s"} en la vista actual`}
+            >
+              {ticketsCount}
+            </span>
+          </h3>
+          <p className="mt-0.5 text-[11px] leading-snug text-[var(--color-text-3)]">
+            Bandeja prioritaria; debajo, contexto operativo del centro.
+          </p>
+        </div>
       </div>
 
       {partCodeFromQuery ? (
@@ -139,27 +250,16 @@ export function TicketsBandeja({
         <>
           <div className="hidden overflow-hidden rounded-lg border border-[var(--color-border)] md:block">
             <div className="max-h-[min(420px,52vh)] overflow-auto">
-              <table className={cn("w-full", bandejaCompacta ? "text-[11px]" : "text-sm")}>
-                <thead className="sticky top-0 z-[1] border-b border-[var(--color-border)] bg-[var(--color-surface)] shadow-[0_1px_0_var(--color-border)]">
+              <table className={cn("ccmgc-table", bandejaCompacta && "ccmgc-table--compact")}>
+                <thead>
                   <tr>
-                    <th className={cn("bg-[var(--color-surface)] text-left text-label font-medium", bandejaThPad)}>ID</th>
-                    <th className={cn("bg-[var(--color-surface)] text-left text-label font-medium", bandejaThPad)}>
-                      Título
-                    </th>
-                    <th className={cn("bg-[var(--color-surface)] text-left text-label font-medium", bandejaThPad)}>
-                      Bus · Activo
-                    </th>
-                    <th className={cn("bg-[var(--color-surface)] text-left text-label font-medium", bandejaThPad)}>
-                      Estado
-                    </th>
-                    <th className={cn("bg-[var(--color-surface)] text-left text-label font-medium", bandejaThPad)}>
-                      Prioridad
-                    </th>
-                    <th className={cn("bg-[var(--color-surface)] text-left text-label font-medium", bandejaThPad)}>SLA</th>
-                    <th
-                      className={cn("w-12 bg-[var(--color-surface)] text-center text-label font-medium", bandejaThPad)}
-                      title="Acciones por fila"
-                    >
+                    <th>ID</th>
+                    <th>Título</th>
+                    <th>Bus · Activo</th>
+                    <th>Estado</th>
+                    <th>Prioridad</th>
+                    <th>SLA</th>
+                    <th className="w-12 text-center" title="Acciones por fila">
                       <span className="sr-only">Acciones</span>
                       <span className="text-xs text-[var(--color-text-3)]" aria-hidden>
                         ⋮
@@ -167,17 +267,22 @@ export function TicketsBandeja({
                     </th>
                   </tr>
                 </thead>
-                <tbody className="[&>tr:nth-child(even)]:bg-[var(--color-surface-2)]/40">
-                  {filteredTickets.map((ticket) => (
-                    <tr
-                      key={ticket.id}
-                      className="align-top border-b border-[var(--color-border)] transition-[background-color,box-shadow] duration-200 ease-out hover:bg-[var(--color-surface-2)]/55 hover:shadow-[inset_0_0_0_9999px_rgba(0,0,0,0.015)] last:border-0"
-                    >
-                      <td className={bandejaTdPad}>
+                <tbody>
+                  {filteredTickets.map((ticket) => {
+                    const isLastViewed = ticket.id === lastViewedTicketId;
+                    return (
+                    <tr key={ticket.id} aria-current={isLastViewed ? "true" : undefined}>
+                      <td>
                         <div className="flex flex-wrap items-center gap-1">
                           <Link
                             href={`/tickets/${ticket.id}`}
-                            className="font-mono text-caption text-[var(--color-accent)] hover:underline"
+                            onClick={() => markTicketVisited(ticket.id)}
+                            title={`Abrir ticket ${ticket.id.slice(-8).toUpperCase()}`}
+                            className={cn(
+                              "inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-semibold tracking-tight transition-colors",
+                              "border-[var(--color-border)] bg-[var(--color-surface-2)]/55 text-[var(--color-accent)] hover:border-[var(--color-accent)]/35 hover:bg-[var(--color-accent-light)]",
+                              isLastViewed && "border-[var(--color-accent)]/45 bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/25",
+                            )}
                           >
                             {ticket.id.slice(-8).toUpperCase()}
                           </Link>
@@ -191,83 +296,89 @@ export function TicketsBandeja({
                           </Link>
                         </div>
                       </td>
-                      <td className={cn("min-w-0 max-w-[min(380px,36vw)] xl:max-w-md", bandejaTdPad)}>
-                        <p className="truncate font-medium text-[var(--color-text-1)]">{ticket.title}</p>
-                        <p className="truncate text-caption">{ticket.operator}</p>
+                      <td className="min-w-0 max-w-[min(380px,36vw)] xl:max-w-md">
+                        <p className="truncate text-[13px] font-semibold tracking-tight text-[var(--color-text-1)]">
+                          {ticket.title}
+                        </p>
+                        <p className="truncate text-[11px] text-[var(--color-text-2)]">{ticket.operator}</p>
+                        {ticket.lineaLabel || ticket.servicioLabel || ticket.conductorLabel ? (
+                          <p className="mt-0.5 truncate text-[10px] text-[var(--color-text-3)]">
+                            {ticket.lineaLabel ? (
+                              <span title="Línea">{ticket.lineaLabel}</span>
+                            ) : null}
+                            {ticket.lineaLabel && (ticket.servicioLabel || ticket.conductorLabel) ? (
+                              <span className="text-[var(--color-border)]"> · </span>
+                            ) : null}
+                            {ticket.servicioLabel ? (
+                              <span title="Servicio">{ticket.servicioLabel}</span>
+                            ) : null}
+                            {ticket.servicioLabel && ticket.conductorLabel ? (
+                              <span className="text-[var(--color-border)]"> · </span>
+                            ) : null}
+                            {ticket.conductorLabel ? (
+                              <span title="Conductor">{ticket.conductorLabel}</span>
+                            ) : null}
+                          </p>
+                        ) : null}
                         {ticket.assignedToUserName && (
                           <p className="truncate text-[10px] text-[var(--color-accent)]">→ {ticket.assignedToUserName}</p>
                         )}
                       </td>
-                      <td className={bandejaTdPad}>
-                        <p className="text-[var(--color-text-1)]">{ticket.busId}</p>
-                        <p className="text-caption">{ticket.subsubtipo ?? ticket.assetType}</p>
+                      <td>
+                        <div className="flex items-center gap-1.5">
+                          <BusIcon
+                            size={12}
+                            strokeWidth={1.8}
+                            className="shrink-0 text-[var(--color-text-3)]/80"
+                            aria-hidden
+                          />
+                          <p className="font-mono text-[12px] font-medium text-[var(--color-text-1)]">{ticket.busId}</p>
+                        </div>
+                        <p className="mt-0.5 truncate pl-[1.125rem] text-[11px] text-[var(--color-text-3)]">
+                          {ticket.subsubtipo ?? ticket.assetType}
+                        </p>
                       </td>
-                      <td className={bandejaTdPad}>
+                      <td>
+                        {/* Chip con dot leading: lectura más limpia y consistente. */}
                         <Badge
-                          className={cn("whitespace-nowrap font-semibold", ticketStatusBadgeClassName(ticket.status))}
+                          className={cn(
+                            "gap-1.5 whitespace-nowrap font-semibold tracking-tight",
+                            ticketStatusBadgeClassName(ticket.status),
+                          )}
                           variant={ticketStatusBadgeVariant(ticket.status)}
                         >
+                          <span
+                            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", statusDotClass(ticket.status))}
+                            aria-hidden
+                          />
                           {statusMap[ticket.status]}
                         </Badge>
                       </td>
-                      <td className={bandejaTdPad}>
-                        <span className="inline-flex items-start gap-1 pt-0.5">
-                          {ticket.priority === "alta" ? (
-                            <SignalHigh size={14} className="mt-0.5 shrink-0 text-[var(--color-error)]/90" aria-hidden />
-                          ) : ticket.priority === "media" ? (
-                            <SignalMedium size={14} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden />
-                          ) : (
-                            <SignalLow size={14} className="mt-0.5 shrink-0 text-[var(--color-success)]" aria-hidden />
-                          )}
-                          {(() => {
-                            const pr = priorityBadgeProps(ticket.priority);
-                            return (
-                              <Badge
-                                variant={pr.variant}
-                                className={cn(
-                                  "whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-semibold",
-                                  pr.className,
-                                )}
-                              >
-                                {toUiPriority(ticket.priority)}
-                              </Badge>
-                            );
-                          })()}
-                        </span>
-                      </td>
-                      <td className={bandejaTdPad}>
+                      <td>
+                        {/* Chip de prioridad unificado con dot, sin icono externo. */}
                         {(() => {
-                          const mins = Math.round((new Date(ticket.slaDeadline).getTime() - Date.now()) / 60000);
-                          if (mins <= 0) {
-                            const full = `${formatSlaOverdueLabel(mins)} · ${new Date(ticket.slaDeadline).toLocaleString("es-ES", {
-                              day: "2-digit",
-                              month: "short",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}`;
-                            return (
-                              <div
-                                className="flex min-w-0 max-w-[7rem] items-start gap-1.5 border-l-2 border-[var(--color-error)]/35 pl-2"
-                                title={full}
-                              >
-                                <Clock3 size={12} className="mt-0.5 shrink-0 text-[var(--color-text-3)]" aria-hidden />
-                                <div className="min-w-0">
-                                  <p className="text-[10px] font-medium leading-tight text-[var(--color-error)]">Vencido</p>
-                                  <p className="truncate text-[10px] leading-tight text-[var(--color-text-3)]">
-                                    {formatSlaOverdueLabel(mins)}
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          }
-                          if (mins < 120)
-                            return (
-                              <span className={cn("text-xs tabular-nums", slaMinsRemainingTextClass(mins))}>{mins}m</span>
-                            );
-                          return <span className="text-xs tabular-nums text-[var(--color-text-3)]">{mins}m</span>;
+                          const pr = priorityBadgeProps(ticket.priority);
+                          return (
+                            <Badge
+                              variant={pr.variant}
+                              className={cn(
+                                "gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-tight",
+                                pr.className,
+                              )}
+                            >
+                              <span
+                                className={cn("h-1.5 w-1.5 shrink-0 rounded-full", priorityDotClass(ticket.priority))}
+                                aria-hidden
+                              />
+                              {toUiPriority(ticket.priority)}
+                            </Badge>
+                          );
                         })()}
                       </td>
-                      <td className={cn("relative w-12 text-center", bandejaTdPad)}>
+                      <td>
+                        <SlaCell deadline={ticket.slaDeadline} />
+                      </td>
+                      <td className="relative w-12 text-center">
                         {getAllowedTransitions(role, ticket.status).length === 0 ? (
                           <span className="text-caption text-[var(--color-text-3)]">—</span>
                         ) : (
@@ -291,19 +402,26 @@ export function TicketsBandeja({
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
           <div className="space-y-3 md:hidden">
-            {filteredTickets.map((ticket) => (
+            {filteredTickets.map((ticket) => {
+              const isLastViewedMobile = ticket.id === lastViewedTicketId;
+              return (
               <div
                 key={ticket.id}
+                aria-current={isLastViewedMobile ? "true" : undefined}
                 className={cn(
-                  "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] even:bg-[var(--color-surface-2)]/35",
+                  "rounded-xl border bg-[var(--color-surface)] transition-colors duration-200 ease-out even:bg-[var(--color-surface-2)]/35",
                   bandejaCompacta ? "p-3" : "p-4",
+                  isLastViewedMobile
+                    ? "border-[var(--color-accent)]/50 ring-1 ring-[var(--color-accent)]/25"
+                    : "border-[var(--color-border)]",
                 )}
               >
                 <div className="mb-2 flex items-start justify-between gap-2">
@@ -319,8 +437,8 @@ export function TicketsBandeja({
                         <MapPinned size={14} aria-hidden />
                       </Link>
                     </div>
-                    <Link href={`/tickets/${ticket.id}`}>
-                      <h4 className="mt-0.5 truncate text-sm font-medium text-[var(--color-text-1)] transition-colors hover:text-[var(--color-accent)]">
+                    <Link href={`/tickets/${ticket.id}`} onClick={() => markTicketVisited(ticket.id)}>
+                      <h4 className="mt-0.5 truncate text-sm font-semibold tracking-tight text-[var(--color-text-1)] transition-colors hover:text-[var(--color-accent)]">
                         {ticket.title}
                       </h4>
                     </Link>
@@ -330,34 +448,36 @@ export function TicketsBandeja({
                   </div>
                   <div className="flex flex-shrink-0 flex-col items-end justify-center gap-1.5">
                     <Badge
-                      className={cn("whitespace-nowrap font-semibold", ticketStatusBadgeClassName(ticket.status))}
+                      className={cn(
+                        "gap-1.5 whitespace-nowrap font-semibold tracking-tight",
+                        ticketStatusBadgeClassName(ticket.status),
+                      )}
                       variant={ticketStatusBadgeVariant(ticket.status)}
                     >
+                      <span
+                        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", statusDotClass(ticket.status))}
+                        aria-hidden
+                      />
                       {statusMap[ticket.status]}
                     </Badge>
-                    <span className="inline-flex items-center justify-end gap-1">
-                      {ticket.priority === "alta" ? (
-                        <SignalHigh size={14} className="shrink-0 text-[var(--color-error)]/90" aria-hidden />
-                      ) : ticket.priority === "media" ? (
-                        <SignalMedium size={14} className="shrink-0 text-[var(--color-warning)]" aria-hidden />
-                      ) : (
-                        <SignalLow size={14} className="shrink-0 text-[var(--color-success)]" aria-hidden />
-                      )}
-                      {(() => {
-                        const pr = priorityBadgeProps(ticket.priority);
-                        return (
-                          <Badge
-                            variant={pr.variant}
-                            className={cn(
-                              "whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-semibold",
-                              pr.className,
-                            )}
-                          >
-                            {toUiPriority(ticket.priority)}
-                          </Badge>
-                        );
-                      })()}
-                    </span>
+                    {(() => {
+                      const pr = priorityBadgeProps(ticket.priority);
+                      return (
+                        <Badge
+                          variant={pr.variant}
+                          className={cn(
+                            "gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-tight",
+                            pr.className,
+                          )}
+                        >
+                          <span
+                            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", priorityDotClass(ticket.priority))}
+                            aria-hidden
+                          />
+                          {toUiPriority(ticket.priority)}
+                        </Badge>
+                      );
+                    })()}
                   </div>
                 </div>
                 <p className="mb-3 line-clamp-2 text-sm text-[var(--color-text-2)]">{ticket.description}</p>
@@ -415,7 +535,8 @@ export function TicketsBandeja({
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

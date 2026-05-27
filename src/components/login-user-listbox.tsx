@@ -13,9 +13,17 @@ import {
   type Ref,
 } from "react";
 
+import { resolveAccountImageUrl } from "@/lib/account-media";
 import { cn } from "@/lib/utils";
 
-export type LoginUserListboxOption = { value: string; label: string };
+export type LoginUserListboxOption = {
+  value: string;
+  label: string;
+  /** Línea secundaria opcional (puesto o rol). */
+  secondary?: string | null;
+  /** URL del avatar opcional (acepta GIF animado). */
+  avatarUrl?: string | null;
+};
 
 type LoginUserListboxProps = {
   id: string;
@@ -25,6 +33,42 @@ type LoginUserListboxProps = {
   className?: string;
   "aria-describedby"?: string;
 };
+
+function initialsFromLabel(label: string): string {
+  return label
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+function OptionAvatar({ avatarUrl, label, size = 28 }: { avatarUrl?: string | null; label: string; size?: number }) {
+  // Normaliza URLs heredadas `/uploads/avatars/...` para servirlas por el
+  // route handler dinamico y evitar 404 con archivos subidos en runtime.
+  const src = resolveAccountImageUrl(avatarUrl);
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        aria-hidden
+        className="shrink-0 rounded-full object-cover ring-1 ring-[color-mix(in_oklab,var(--color-border)_70%,transparent)]"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      className="flex shrink-0 items-center justify-center rounded-full bg-[color-mix(in_oklab,var(--color-accent-light)_70%,var(--color-surface-3))] text-[10px] font-semibold text-[var(--color-accent)] ring-1 ring-[color-mix(in_oklab,var(--color-border)_70%,transparent)]"
+      style={{ width: size, height: size }}
+    >
+      {initialsFromLabel(label) || "?"}
+    </span>
+  );
+}
 
 const triggerBase =
   "login-focusable flex w-full min-h-[44px] items-center justify-between gap-2 rounded-xl border border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[var(--color-surface-2)] px-3 py-2.5 text-left text-[13px] leading-5 text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,background-color,box-shadow] duration-150 hover:border-[color-mix(in_oklab,var(--color-border-hover)_70%,var(--color-border))] hover:bg-[color-mix(in_oklab,var(--color-surface-2)_92%,var(--color-surface-3))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--color-accent)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)] data-[open=true]:border-[color-mix(in_oklab,var(--color-accent)_32%,var(--color-border))]";
@@ -53,7 +97,9 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
 
     openRef.current = open;
 
-    const selectedLabel = options.find((o) => o.value === value)?.label ?? "";
+    const selectedOption = options.find((o) => o.value === value);
+    const selectedLabel = selectedOption?.label ?? "";
+    const hasRichOptions = options.some((opt) => opt.avatarUrl || opt.secondary);
 
     const focusOption = useCallback((index: number) => {
       const n = options.length;
@@ -121,7 +167,17 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
             }
           }}
         >
-          <span className="min-w-0 flex-1 truncate">{selectedLabel}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-2.5">
+            {hasRichOptions ? (
+              <OptionAvatar avatarUrl={selectedOption?.avatarUrl ?? null} label={selectedLabel} size={32} />
+            ) : null}
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-[13px] font-medium text-[var(--color-text-1)]">{selectedLabel}</span>
+              {selectedOption?.secondary ? (
+                <span className="truncate text-[11px] text-[var(--color-text-3)]">{selectedOption.secondary}</span>
+              ) : null}
+            </span>
+          </span>
           <ChevronDown
             size={18}
             strokeWidth={2}
@@ -144,7 +200,7 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
                       optionRefs.current[idx] = el;
                     }}
                     className={cn(
-                      "flex w-full rounded-lg px-3 py-2.5 text-left text-[13px] leading-snug transition-colors duration-150",
+                      "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] leading-snug transition-colors duration-150",
                       active
                         ? "bg-[color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface-3))] font-medium text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_35%,transparent)]"
                         : "text-[color-mix(in_oklab,var(--color-text-2)_92%,white)] hover:bg-[color-mix(in_oklab,var(--color-surface-3)_70%,transparent)] hover:text-[var(--color-text-1)]",
@@ -179,7 +235,17 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
                       }
                     }}
                   >
-                    {opt.label}
+                    {hasRichOptions ? (
+                      <OptionAvatar avatarUrl={opt.avatarUrl ?? null} label={opt.label} size={28} />
+                    ) : null}
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate">{opt.label}</span>
+                      {opt.secondary ? (
+                        <span className="truncate text-[11px] text-[color-mix(in_oklab,var(--color-text-3)_75%,white)]">
+                          {opt.secondary}
+                        </span>
+                      ) : null}
+                    </span>
                   </button>
                 </li>
               );

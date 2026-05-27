@@ -27,6 +27,10 @@
 /.next/
 /out/
 
+# logs locales del servicio NSSM y caché de Tesseract OCR para desvíos
+/logs/
+/.tess-cache/
+
 # production
 /build
 

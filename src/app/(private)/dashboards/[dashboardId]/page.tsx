@@ -19,6 +19,7 @@ import { AddWidgetModal } from "@/components/dashboard-builder/add-widget-modal"
 import { SortableWidget } from "@/components/dashboard-builder/sortable-widget";
 import { WidgetRenderer } from "@/components/dashboard-builder/widget-renderer";
 import { Badge } from "@/components/ui/badge";
+import { SectionTabs } from "@/components/ui/section-tabs";
 import { CHART_TYPES, type ChartType } from "@/lib/dashboard/chart-types";
 import { mergeLayoutIntoConfig, parseWidgetLayout } from "@/lib/dashboard/widget-layout";
 import { cn } from "@/lib/utils";
@@ -70,10 +71,10 @@ const emptyData: DashboardData = {
 };
 
 /**
- * Redimensionado manual del grid (columnas + asa de altura). Desactivado porque el flujo aún no es fiable en producción.
- * Para reactivarlo: poner en `true`, entrar como `gestor_centro_control`, modo edición, y validar guardado vía PATCH en `/api/dashboards/[id]/widgets`.
+ * Redimensionado manual del grid (columnas + asa de altura libre + presets).
+ * Cada cambio persiste vía PATCH /api/dashboards/[id]/widgets con `config.layout = { colSpan, minHeightPx }`.
  */
-const WIDGET_MANUAL_LAYOUT_EDIT_ENABLED = false;
+const WIDGET_MANUAL_LAYOUT_EDIT_ENABLED = true;
 
 export default function DashboardBuilderPage() {
   const params = useParams<{ dashboardId: string }>();
@@ -92,6 +93,13 @@ export default function DashboardBuilderPage() {
   const [presetName, setPresetName] = useState("");
   const [savedPresets, setSavedPresets] = useState<VisualPreset[]>([]);
   const [focusedWidgetId, setFocusedWidgetId] = useState<string | null>(null);
+  // Preview en vivo del redimensionado de cada widget. Lo emite `SortableWidget`
+  // en cada `mousemove` mientras se arrastra un asa y se limpia al soltar. Lo
+  // usamos para recalcular `chartHeight` frame a frame y que Recharts redibuje
+  // la gráfica al instante (de lo contrario solo cambiaría el wrapper).
+  const [livePreviewById, setLivePreviewById] = useState<
+    Record<string, { colSpan?: number; minHeightPx?: number }>
+  >({});
   const skipNamePatchRef = useRef(false);
   const dashboardRef = useRef<DashboardItem | null>(null);
   const undoStackRef = useRef<DashboardWidget[][]>([]);
@@ -294,6 +302,29 @@ export default function DashboardBuilderPage() {
     }
     if (undoStackRef.current.length > 20) undoStackRef.current.shift();
   }, []);
+
+  const handleWidgetLivePreview = useCallback(
+    (widgetId: string, preview: { colSpan?: number; minHeightPx?: number } | null) => {
+      setLivePreviewById((prev) => {
+        if (preview === null) {
+          if (!(widgetId in prev)) return prev;
+          const next = { ...prev };
+          delete next[widgetId];
+          return next;
+        }
+        const current = prev[widgetId];
+        if (
+          current &&
+          current.colSpan === preview.colSpan &&
+          current.minHeightPx === preview.minHeightPx
+        ) {
+          return prev;
+        }
+        return { ...prev, [widgetId]: preview };
+      });
+    },
+    [],
+  );
 
   const handleWidgetLayoutPatch = useCallback(
     async (widgetId: string, patch: { colSpan?: number; minHeightPx?: number }) => {
@@ -620,9 +651,9 @@ export default function DashboardBuilderPage() {
     return (
       <div className="space-y-4">
         <div className="h-8 w-72 animate-pulse rounded-lg bg-[var(--color-surface-2)]" />
-        <div className="grid grid-cols-4 gap-4">
-          <div className="col-span-2 h-64 animate-pulse rounded-xl bg-[var(--color-surface-2)]" />
-          <div className="col-span-2 h-64 animate-pulse rounded-xl bg-[var(--color-surface-2)]" />
+        <div className="grid grid-cols-[repeat(100,minmax(0,1fr))] gap-0">
+          <div className="h-64 animate-pulse rounded-xl bg-[var(--color-surface-2)]" style={{ gridColumn: "span 50 / span 50" }} />
+          <div className="h-64 animate-pulse rounded-xl bg-[var(--color-surface-2)]" style={{ gridColumn: "span 50 / span 50" }} />
         </div>
       </div>
     );
@@ -639,6 +670,7 @@ export default function DashboardBuilderPage() {
 
   return (
     <div className={cn("space-y-4", presentationMode && "space-y-3")}>
+      {!presentationMode ? <SectionTabs preset="dashboard" /> : null}
       {error ? (
         <div className="rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error-light)] px-4 py-3 text-sm text-[var(--color-error)]">
           {error}
@@ -748,8 +780,12 @@ export default function DashboardBuilderPage() {
         ) : null}
       </div>
       {role === "gestor_centro_control" && isEditing ? (
-        <p className="text-[11px] text-[var(--color-text-3)] -mt-2 mb-2">
-          Atajos: Ctrl+Z deshacer · Ctrl+Shift+Z o Ctrl+Y rehacer · P presentación · L leyenda (widget en foco) · flechas mover foco · icono descarga PNG en la barra de cada widget (solo en edición).
+        <p className="-mt-2 mb-2 text-[11px] text-[var(--color-text-3)]">
+          <span className="font-medium text-[var(--color-text-2)]">Redimensionar libre:</span> arrastra el asa de la
+          esquina inferior derecha para cambiar ancho (1-100%) y alto (180-900 px) a la vez, en vivo. Para un solo eje,
+          usa los presets de arriba: ¼ ⅓ ½ ⅔ ¾ 1/1 (ancho) · S/M/L/XL (alto).{" "}
+          <span className="font-medium text-[var(--color-text-2)]">Atajos:</span> Ctrl+Z deshacer · Ctrl+Shift+Z o Ctrl+Y
+          rehacer · P presentación · L leyenda (widget en foco) · flechas mover foco.
         </p>
       ) : null}
       {role === "gestor_centro_control" && isEditing && !presentationMode ? (
@@ -825,12 +861,27 @@ export default function DashboardBuilderPage() {
           <SortableContext items={sortedWidgets.map((widget) => widget.id)} strategy={rectSortingStrategy}>
             <div
               className={cn(
-                "grid grid-cols-4 gap-4 [grid-auto-rows:minmax(min-content,auto)]",
-                presentationMode && "gap-3",
+                // Grid de 100 columnas con `gap-0` para que las 99 separaciones
+                // no devoren el ancho útil. El espacio visual entre widgets se
+                // resuelve con padding interno en cada `SortableWidget`.
+                "grid grid-cols-[repeat(100,minmax(0,1fr))] gap-0 [grid-auto-rows:minmax(min-content,auto)] -m-2",
               )}
             >
               {sortedWidgets.map((widget, index) => {
                 const layout = parseWidgetLayout(widget.config, widget.size);
+                const preview = livePreviewById[widget.id];
+                // Mientras se arrastra usamos el preview en vivo (si lo hay),
+                // así Recharts recibe un `chartHeight` nuevo en cada frame y la
+                // gráfica se redibuja a la par del wrapper.
+                const effectiveMinHeightPx = preview?.minHeightPx ?? layout.minHeightPx;
+                // Altura efectiva del chart = altura del widget menos cabecera/toolbar internos.
+                // Cabecera (~92 px) + toolbar de edición (~40 px) + paddings.
+                // Floor a 20 px (no a 160 como antes) para que el chart pueda
+                // seguir encogiendo cuando el operador arrastra a alturas
+                // pequeñas; antes se quedaba atascado en cuanto el widget
+                // bajaba de los 310 px.
+                const headerReserve = isEditing && !presentationMode ? 150 : 110;
+                const chartHeight = Math.max(20, effectiveMinHeightPx - headerReserve);
                 return (
                 <SortableWidget
                   key={widget.id}
@@ -841,6 +892,11 @@ export default function DashboardBuilderPage() {
                   onLayoutPatch={
                     WIDGET_MANUAL_LAYOUT_EDIT_ENABLED && role === "gestor_centro_control" && isEditing
                       ? (patch) => void handleWidgetLayoutPatch(widget.id, patch)
+                      : undefined
+                  }
+                  onLivePreview={
+                    WIDGET_MANUAL_LAYOUT_EDIT_ENABLED && role === "gestor_centro_control" && isEditing
+                      ? (p) => handleWidgetLivePreview(widget.id, p)
                       : undefined
                   }
                 >
@@ -868,6 +924,7 @@ export default function DashboardBuilderPage() {
                         ? () => void handleExportPng(widget.id)
                         : undefined
                     }
+                    chartHeight={chartHeight}
                   />
                   </div>
                 </SortableWidget>

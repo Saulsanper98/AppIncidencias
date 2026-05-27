@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CalendarClock, CheckCircle2, Clock } from "lucide-react";
+import { ArrowRight, CalendarClock, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -73,7 +73,7 @@ export function DashboardPreventiveAgenda() {
   }, []);
 
   return (
-    <article className="flex min-h-[220px] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+    <article className="ccmgc-card flex min-h-[220px] flex-col p-5">
       <div className="mb-4 flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-accent-light)]">
           <CalendarClock size={14} className="text-[var(--color-accent)]" />
@@ -90,12 +90,33 @@ export function DashboardPreventiveAgenda() {
       ) : message ? (
         <p className="text-sm text-[var(--color-text-3)]">{message}</p>
       ) : tasks.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center py-6 text-center">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-success-light)]">
-            <CheckCircle2 size={20} className="text-[var(--color-success)]" />
-          </div>
-          <p className="text-sm font-medium text-[var(--color-text-2)]">Agenda libre</p>
-          <p className="mt-0.5 text-xs text-[var(--color-text-3)]">Sin mantenimientos hoy</p>
+        <div className="flex flex-1 flex-col items-center justify-center py-2 text-center">
+          {/* Ilustración minimal: tres trazos curvos representando "día libre",
+            * más sobrio que el icono de check anterior. */}
+          <svg
+            aria-hidden
+            viewBox="0 0 80 56"
+            className="mb-3 h-12 w-20 text-[var(--color-text-3)]/30"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.25"
+            strokeLinecap="round"
+          >
+            <path d="M6 12h68" />
+            <path d="M6 28h44" opacity="0.6" />
+            <path d="M6 44h24" opacity="0.35" />
+            <circle cx="64" cy="40" r="10" stroke="currentColor" strokeWidth="1.5" opacity="0.4" />
+            <path d="M60 40l3 3 6-7" stroke="var(--color-success)" strokeWidth="1.75" opacity="0.85" />
+          </svg>
+          <p className="text-sm font-medium text-[var(--color-text-1)]">Agenda libre</p>
+          <p className="mt-0.5 text-xs text-[var(--color-text-3)]">No hay mantenimientos programados</p>
+          <button
+            type="button"
+            onClick={() => router.push("/inventory")}
+            className="mt-3 inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]"
+          >
+            Ver inventario <ArrowRight size={11} strokeWidth={1.5} />
+          </button>
         </div>
       ) : (
         <div className="space-y-2">

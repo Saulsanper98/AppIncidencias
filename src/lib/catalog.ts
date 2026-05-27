@@ -1,39 +1,8 @@
-import type { AssetType } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
 
-const initialFleet = [
-  {
-    id: "GC-117",
-    operator: "Global",
-    municipio: "Las Palmas de Gran Canaria",
-    lineas: ["1", "12", "26"],
-    assets: [
-      { id: "VAL-117-A", type: "validadora" as AssetType, serialNumber: "VLD-99112" },
-      { id: "SAE-117-A", type: "sae" as AssetType, serialNumber: "SAE-45001" },
-    ],
-  },
-  {
-    id: "GUA-032",
-    operator: "Guaguas Municipales",
-    municipio: "Telde",
-    lineas: ["11", "20"],
-    assets: [{ id: "RTR-032-B", type: "router" as AssetType, serialNumber: "RTK-21089" }],
-  },
-  {
-    id: "SBT-088",
-    operator: "Salcai-Utinsa",
-    municipio: "Maspalomas",
-    lineas: ["30", "36", "90"],
-    assets: [{ id: "PAN-088-A", type: "pantalla" as AssetType, serialNumber: "DSP-19002" }],
-  },
-  {
-    id: "SBT-091",
-    operator: "Salcai-Utinsa",
-    municipio: "Arucas",
-    lineas: ["103"],
-    assets: [{ id: "VAL-091-A", type: "validadora" as AssetType, serialNumber: "VLD-88710" }],
-  },
-];
+// Flota inicial vacia: el catalogo real se siembra desde `scripts/seed-catalog.mjs`
+// con los datos oficiales de Global (118 buses GL-XXXX).
+const initialFleet: Array<never> = [];
 
 const initialWarehouses = [
   { name: "Almacen Central CCMGC", municipio: "Las Palmas de Gran Canaria", type: "almacen_central" },
@@ -48,33 +17,13 @@ const initialSpareParts = [
   { code: "REP-PAN-01", name: "Pantalla TFT 10 pulgadas", compatibleAssetType: "pantalla", minimumLevel: 2 },
 ] as const;
 
-const initialUsers = [
-  { name: "Juan Morales", email: "conductor@ccmgc.local", role: "conductor" as const },
-  { name: "Lucia Herrera", email: "tecnico@ccmgc.local", role: "tecnico_campo" as const },
-  { name: "Alejandro Vega", email: "gestor@ccmgc.local", role: "gestor_centro_control" as const },
-] as const;
+// Usuarios iniciales vacios: los usuarios reales (Saul, Pedro, etc.) se crean
+// con `scripts/create-admin.mjs` o desde Admin > Usuarios.
+const initialUsers: Array<never> = [];
 
 export async function ensureCatalogSeeded() {
-  const busCount = await prisma.bus.count();
-  if (busCount === 0) {
-    for (const bus of initialFleet) {
-      await prisma.bus.create({
-        data: {
-          id: bus.id,
-          operator: bus.operator,
-          municipio: bus.municipio,
-          lineas: bus.lineas.join(","),
-          assets: {
-            create: bus.assets.map((asset) => ({
-              id: asset.id,
-              type: asset.type,
-              serialNumber: asset.serialNumber,
-            })),
-          },
-        },
-      });
-    }
-  }
+  // Buses: ya no se auto-siembran. Cargar via `scripts/seed-catalog.mjs`.
+  void initialFleet;
 
   const warehouseCount = await prisma.warehouse.count();
   if (warehouseCount === 0) {
@@ -115,14 +64,6 @@ export async function ensureCatalogSeeded() {
     }
   }
 
-  const userCount = await prisma.user.count();
-  if (userCount === 0) {
-    await prisma.user.createMany({
-      data: initialUsers.map((user) => ({
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      })),
-    });
-  }
+  // Usuarios: ya no se auto-siembran. Usar `scripts/create-admin.mjs` o Admin > Usuarios.
+  void initialUsers;
 }

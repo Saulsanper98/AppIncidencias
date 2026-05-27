@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { notifyTicketExternally } from "@/lib/external-notifications";
+import { renderTicketEmail, sendUserEmail } from "@/lib/email-notifications";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { canAssignTicket } from "@/lib/rbac";
+import { publishTicketEvent } from "@/lib/tickets-events";
 
 const assignSchema = z.object({
   assignedToUserId: z.string().min(1).nullable(),
@@ -56,6 +58,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ ticke
         id: true,
         busId: true,
         title: true,
+        status: true,
+        priority: true,
         assignedToUserId: true,
         assignedTo: { select: { name: true } },
       },
@@ -77,7 +81,40 @@ export async function PATCH(request: Request, context: { params: Promise<{ ticke
         busId: ticket.busId,
         assigneeName: ticket.assignedTo?.name ?? null,
       });
+
+      // Aviso por email al técnico recién asignado (si tiene email y los avisos
+      // están configurados). No notificamos cuando el técnico se asigna a sí
+      // mismo: ya sabe que se ha cogido el ticket.
+      if (parsed.data.assignedToUserId !== actor.userId) {
+        const { subject, html } = renderTicketEmail({
+          headline: "Te han asignado un ticket",
+          body: `${actor.displayName} te ha asignado un nuevo ticket. Revisa la incidencia y, si necesitas más contexto, abre el detalle.`,
+          ticketId: ticket.id,
+          ticketTitle: ticket.title,
+          busId: ticket.busId,
+          status: ticket.status,
+          priority: ticket.priority,
+          actor: actor.displayName,
+        });
+        void sendUserEmail({
+          userIds: [parsed.data.assignedToUserId],
+          subject,
+          html,
+          dedupeKey: `assign:${ticket.id}:${parsed.data.assignedToUserId}`,
+        });
+      }
     }
+
+    publishTicketEvent("ticket_assigned", {
+      id: ticket.id,
+      busId: ticket.busId,
+      status: ticket.status,
+      priority: ticket.priority,
+      title: ticket.title,
+      assignedToUserId: ticket.assignedToUserId,
+      assignedToUserName: ticket.assignedTo?.name ?? null,
+      by: actor.displayName,
+    });
 
     return NextResponse.json({
       assignedToUserId: ticket.assignedToUserId,

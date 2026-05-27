@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-import { ccmgcNativeSelectClassName, Textarea } from "@/components/ui/input";
+import { Select, Textarea } from "@/components/ui/input";
 import type { MetricFormat } from "@/lib/dashboard/chart-theme";
 import type { ChartType } from "@/lib/dashboard/chart-types";
 import { cn } from "@/lib/utils";
@@ -318,11 +318,7 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
 
           <div>
             <label className="text-label block mb-1.5">Fuente de datos</label>
-            <select
-              value={dataSource}
-              onChange={(e) => setDataSource(e.target.value)}
-              className={cn(ccmgcNativeSelectClassName, "focus:ring-2 focus:ring-[var(--color-accent)]")}
-            >
+            <Select value={dataSource} onChange={(e) => setDataSource(e.target.value)}>
               <option value="tickets_by_status">Tickets por estado</option>
               <option value="tickets_by_operator">Tickets por operadora</option>
               <option value="tickets_by_priority">Tickets por prioridad</option>
@@ -334,7 +330,7 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
                 <option value="embed_inventory">Inventario</option>
                 <option value="embed_preventive">Agenda preventiva</option>
               </optgroup>
-            </select>
+            </Select>
           </div>
 
           {dataSource === "operation_links" || dataSource.startsWith("embed_") ? (
@@ -462,16 +458,15 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
                   <span>Suavizado de línea</span>
                   <span className="font-semibold">{smoothLines ? "ON" : "OFF"}</span>
                 </button>
-                <select
+                <Select
                   value={metricFormat}
                   onChange={(e) => setMetricFormat(e.target.value as MetricFormat)}
-                  className={cn(ccmgcNativeSelectClassName, "py-2 focus:ring-2 focus:ring-[var(--color-accent)]")}
                 >
                   <option value="number">Formato: Número</option>
                   <option value="compact">Formato: Compacto (k, M)</option>
                   <option value="integer">Formato: Entero</option>
                   <option value="percent">Formato: Porcentaje</option>
-                </select>
+                </Select>
               </>
             ) : null}
           </div>
@@ -515,15 +510,14 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
 
           <div>
             <label className="text-label block mb-1.5">Tamaño</label>
-            <select
+            <Select
               value={size}
               onChange={(e) => setSize(e.target.value as "small" | "medium" | "large")}
-              className={cn(ccmgcNativeSelectClassName, "focus:ring-2 focus:ring-[var(--color-accent)]")}
             >
               <option value="small">Pequeño (1/4)</option>
               <option value="medium">Mediano (1/2)</option>
               <option value="large">Grande (completo)</option>
-            </select>
+            </Select>
           </div>
 
           {error ? <p className="text-xs text-[var(--color-error)]">{error}</p> : null}

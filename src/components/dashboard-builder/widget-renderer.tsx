@@ -69,6 +69,8 @@ type WidgetRendererProps = {
   isKeyboardFocused?: boolean;
   onWidgetPaneMouseDown?: () => void;
   onExportWidget?: () => void;
+  /** Altura efectiva (px) que ocupará el área de gráfico. Si no se pasa, cae a 220 px (legado). */
+  chartHeight?: number;
 };
 
 type DashboardData = {
@@ -510,7 +512,11 @@ export function WidgetRenderer({
   isKeyboardFocused = false,
   onWidgetPaneMouseDown,
   onExportWidget,
+  chartHeight,
 }: WidgetRendererProps) {
+  // Altura final para cada ResponsiveContainer de Recharts. Si no se pasa nada
+  // desde el padre (modo embed/legacy) cae al valor histórico de 220 px.
+  const responsiveChartHeight = Math.max(20, Math.round(chartHeight ?? 220));
   const parsedConfig = useMemo<ManualConfig>(() => {
     try {
       return JSON.parse(widget.config ?? "{}") as ManualConfig;
@@ -1066,8 +1072,8 @@ export function WidgetRenderer({
   const chartContent = (() => {
     if (widget.chartType === "area") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <AreaChart data={sourceDataWithMaRef} margin={{ top: 8, right: 0, left: -20, bottom: 0 }}>
               {showGrid ? <CartesianGrid strokeDasharray={CHART_THEME.grid.dash} stroke={CHART_THEME.grid.stroke} vertical={false} /> : null}
               <XAxis
@@ -1114,8 +1120,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "bar") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <BarChart data={sourceData}>
               {showGrid ? <CartesianGrid strokeDasharray={CHART_THEME.grid.dash} stroke={CHART_THEME.grid.stroke} vertical={false} /> : null}
               <XAxis
@@ -1144,8 +1150,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "stacked_bar") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <BarChart data={multiSeriesData}>
               {showGrid ? <CartesianGrid strokeDasharray={CHART_THEME.grid.dash} stroke={CHART_THEME.grid.stroke} vertical={false} /> : null}
               <XAxis dataKey="name" tick={tickBySize} axisLine={false} tickLine={false} />
@@ -1167,8 +1173,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "pie") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <PieChart>
               <Pie data={sourceData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={85}>
                 {sourceData.map((entry, index) => (
@@ -1189,8 +1195,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "rose") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <PieChart>
               <Pie data={sourceData} dataKey="value" nameKey="name" innerRadius={25} outerRadius={88} cx="50%" cy="46%">
                 {sourceData.map((entry, index) => (
@@ -1211,8 +1217,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "line") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <LineChart data={sourceDataWithMaRef}>
               {showGrid ? <CartesianGrid strokeDasharray={CHART_THEME.grid.dash} stroke={CHART_THEME.grid.stroke} vertical={false} /> : null}
               <XAxis
@@ -1257,8 +1263,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "stacked_area") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <AreaChart data={multiSeriesDataWithMaRef} margin={{ top: 6, right: 4, left: -20, bottom: 0 }}>
               {showGrid ? <CartesianGrid strokeDasharray={CHART_THEME.grid.dash} stroke={CHART_THEME.grid.stroke} vertical={false} /> : null}
               <XAxis dataKey="name" tick={tickBySize} axisLine={false} tickLine={false} />
@@ -1318,8 +1324,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "bar_horizontal") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <BarChart
               data={sourceData}
               layout="vertical"
@@ -1360,8 +1366,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "composed") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <ComposedChart data={sourceData} margin={{ top: 4, right: 8, left: -20, bottom: 4 }}>
               {showGrid ? <CartesianGrid strokeDasharray={CHART_THEME.grid.dash} stroke={CHART_THEME.grid.stroke} vertical={false} /> : null}
               <XAxis dataKey="name" tick={tickBySize} axisLine={false} tickLine={false} />
@@ -1386,8 +1392,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "radar") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <RadarChart data={sourceData}>
               <PolarGrid stroke="rgba(148,163,184,0.15)" />
               <PolarAngleAxis dataKey="name" tick={tickBySize} />
@@ -1407,8 +1413,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "radialbar") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <RadialBarChart
               innerRadius="20%"
               outerRadius="90%"
@@ -1441,8 +1447,8 @@ export function WidgetRenderer({
       }));
 
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <ScatterChart margin={{ top: 4, right: 8, left: -20, bottom: 4 }}>
               {showGrid ? <CartesianGrid strokeDasharray={CHART_THEME.grid.dash} stroke={CHART_THEME.grid.stroke} /> : null}
               <XAxis
@@ -1498,8 +1504,8 @@ export function WidgetRenderer({
       });
 
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <ScatterChart margin={{ top: 4, right: 8, left: -20, bottom: 4 }}>
               {showGrid ? <CartesianGrid strokeDasharray={CHART_THEME.grid.dash} stroke={CHART_THEME.grid.stroke} /> : null}
               <XAxis dataKey="x" type="number" tick={tickBySize} axisLine={false} tickLine={false} />
@@ -1531,8 +1537,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "treemap") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <Treemap
               data={sourceData}
               dataKey="value"
@@ -1561,8 +1567,8 @@ export function WidgetRenderer({
       }));
 
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <Sankey
               data={{ nodes: sankeyNodes, links: sankeyLinks }}
               nodePadding={16}
@@ -1591,8 +1597,8 @@ export function WidgetRenderer({
 
     if (widget.chartType === "funnel") {
       return (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer width="100%" height={220}>
+        <div style={{ width: "100%", height: responsiveChartHeight }}>
+          <ResponsiveContainer width="100%" height={responsiveChartHeight}>
             <FunnelChart>
               <Tooltip
                 content={executiveTooltipContent}

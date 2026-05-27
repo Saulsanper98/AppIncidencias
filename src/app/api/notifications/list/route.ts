@@ -41,9 +41,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "Debes iniciar sesion" }, { status: 401 });
     }
 
+    // El usuario puede haber pulsado "Limpiar" → ignoramos eventos previos.
+    const me = await prisma.user.findUnique({
+      where: { id: actor.userId },
+      select: { notificationsClearedAt: true },
+    });
+    const clearedAt = me?.notificationsClearedAt ?? null;
+
     const events = await prisma.auditEvent.findMany({
       where: {
-        OR: [{ ticketId: { not: null } }, { action: { startsWith: "ticket." } }, { action: { startsWith: "maintenance." } }],
+        AND: [
+          {
+            OR: [
+              { ticketId: { not: null } },
+              { action: { startsWith: "ticket." } },
+              { action: { startsWith: "maintenance." } },
+            ],
+          },
+          clearedAt ? { createdAt: { gt: clearedAt } } : {},
+        ],
       },
       orderBy: { createdAt: "desc" },
       take: 25,

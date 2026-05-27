@@ -56,6 +56,64 @@ enum PreventiveTaskStatus {
   cancelada
 }
 
+enum KbArticleStatus {
+  borrador
+  publicado
+  archivado
+}
+
+/// Estado de publicacion de un Announcement (novedad / aviso en vivo).
+/// Mismos tres estados que KbArticle por consistencia mental del operador.
+enum AnnouncementStatus {
+  borrador
+  publicado
+  archivado
+}
+
+/// Tipo de Announcement.
+/// novedad = entrada del changelog publico ("lo nuevo en la app", persistente).
+/// aviso   = mensaje operativo en vivo (p. ej. "Reinicio en 5 min").
+enum AnnouncementKind {
+  novedad
+  aviso
+}
+
+/// Severidad visual de un Announcement. critical = banner sticky en TODO el
+/// sitio hasta que el usuario lo descarta; warning = badge destacado en
+/// /novedades; info = entrada normal.
+enum AnnouncementSeverity {
+  info
+  warning
+  critical
+}
+
+/// Sentido afectado de un desvio (segun nomenclatura del PDF "Circular Informativa").
+enum Sentido {
+  IDA
+  VUELTA
+  AMBOS
+}
+
+/// Estado operativo de un desvio.
+/// PENDIENTE: recien creado por el poller, esperando revision del operador.
+/// ACTIVO: confirmado por un operador, ya en marcha.
+/// RESUELTO: terminado correctamente.
+/// CANCELADO: descartado por el operador (falsa alarma o duplicado).
+enum EstadoDesvio {
+  PENDIENTE
+  ACTIVO
+  RESUELTO
+  CANCELADO
+}
+
+/// Origen del registro de desvio.
+/// EMAIL: creado automaticamente por el poller a partir de la Circular Informativa.
+/// MANUAL: creado a mano por un operador desde el formulario web.
+enum OrigenDesvio {
+  EMAIL
+  MANUAL
+}
+
 model Bus {
   id        String   @id
   operator  String
@@ -64,6 +122,71 @@ model Bus {
   assets    Asset[]
   tickets   Ticket[]
   preventiveTasks PreventiveTask[]
+}
+
+/// Catalogo de lineas/servicios validos (alimenta el autocomplete de `servicioLabel`
+/// en el formulario de tickets). No tiene relacion rigida con Bus: un bus puede
+/// cubrir cualquier linea segun turno.
+model Linea {
+  id        String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+/// Configuracion editable del SLA por prioridad de ticket. Una fila por
+/// prioridad ("alta" | "media" | "baja"). Sustituye los valores hardcoded
+/// 30/120/240 minutos que vivian en `src/lib/ticketing.ts`. Si una prioridad
+/// no tiene fila, se cae al default historico (30/120/240).
+model SlaConfig {
+  /// Prioridad a la que aplica esta configuracion. Se usa como PK porque
+  /// solo hay 3 valores posibles y SQLite no soporta enum como PK.
+  priority      String   @id
+  /// Minutos hasta el vencimiento de un ticket de esta prioridad.
+  minutes       Int
+  /// Quien edito esto por ultima vez (texto libre, no FK, para evitar
+  /// migraciones cuando se borran usuarios).
+  updatedByName String?
+  updatedAt     DateTime @default(now()) @updatedAt
+}
+
+/// Categoría de la base de conocimiento (manuales, FAQs, etc.).
+/// Sin jerarquía (todo plano por simplicidad MVP).
+model KbCategory {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  icon        String?  // nombre de icono Lucide (opcional)
+  color       String?  // hex o token CSS (opcional)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  articles    KbArticle[]
+}
+
+/// Artículo de la base de conocimiento: manual, FAQ o histórico de incidencia.
+model KbArticle {
+  id              String          @id @default(cuid())
+  slug            String          @unique
+  title           String
+  summary         String?         // resumen para listados (1-2 líneas)
+  contentMd       String          // cuerpo en Markdown
+  status          KbArticleStatus @default(borrador)
+  /// Lista de tags separados por coma. Búsqueda por LIKE.
+  tags            String          @default("")
+  /// Ids de tickets ejemplares vinculados (separados por coma).
+  linkedTicketIds String          @default("")
+  views           Int             @default(0)
+  categoryId      String?
+  authorId        String?
+  publishedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  category        KbCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  author          User?           @relation("KbAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([status, updatedAt])
+  @@index([categoryId, status])
 }
 
 model Asset {
@@ -98,6 +221,13 @@ model Ticket {
   longitude    Float?
   /// Municipio / lugar reconocido junto al pin del mapa (p. ej. geocodificación inversa).
   mapPlaceMunicipio String?
+  /// Línea/ruta operativa cubierta por el bus en el momento de la incidencia
+  /// (opcional). Autocompletable desde el catálogo `Linea` pero acepta texto libre.
+  lineaLabel String?
+  /// Etiqueta libre del servicio/turno/recorrido (opcional, texto libre puro).
+  servicioLabel String?
+  /// Nombre del conductor en el momento de la incidencia (opcional, texto libre).
+  conductorLabel String?
   /// Técnico de campo asignado al ticket (opcional).
   assignedToUserId String?
   createdAt    DateTime         @default(now())
@@ -108,6 +238,31 @@ model Ticket {
   comments     TicketComment[]
   attachments  TicketAttachment[]
   reservations TicketPartReservation[]
+  /// Vínculos en los que ESTE ticket es el origen (este → otro).
+  relationsFrom TicketRelation[] @relation("TicketRelationFrom")
+  /// Vínculos en los que ESTE ticket es el destino (otro → este).
+  relationsTo   TicketRelation[] @relation("TicketRelationTo")
+}
+
+/// Relacion N:N entre tickets para "adjuntar" tickets ya resueltos (u otros)
+/// a un ticket nuevo. Se guarda UNA fila por par; la UI muestra el vinculo en
+/// ambas direcciones haciendo OR sobre fromTicketId/toTicketId.
+model TicketRelation {
+  id              String   @id @default(cuid())
+  fromTicketId    String
+  toTicketId      String
+  /// Tipo de relacion (texto libre acotado: "relacionado" por defecto;
+  /// reservado por si en el futuro distinguimos "duplicado", "causa", etc.).
+  kind            String   @default("relacionado")
+  note            String?
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+  fromTicket      Ticket   @relation("TicketRelationFrom", fields: [fromTicketId], references: [id], onDelete: Cascade)
+  toTicket        Ticket   @relation("TicketRelationTo",   fields: [toTicketId],   references: [id], onDelete: Cascade)
+  createdBy       User?    @relation("TicketRelationCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([fromTicketId, toTicketId])
+  @@index([toTicketId])
 }
 
 model TicketComment {
@@ -183,8 +338,29 @@ model User {
   email      String       @unique
   role       UserRole
   isActive   Boolean      @default(true)
+  /// Hash bcrypt de la contraseña local. Nullable: cuentas legacy sin contraseña no pueden iniciar sesión hasta que un gestor les asigne una.
+  passwordHash         String?
+  /// Forzar cambio de contraseña en el próximo login (alta nueva o reset por administrador).
+  mustChangePassword   Boolean      @default(false)
+  /// Fecha de la última modificación de la contraseña (para auditoría / rotación opcional).
+  passwordUpdatedAt    DateTime?
+  /// Fecha del último login exitoso.
+  lastLoginAt          DateTime?
+  /// URL pública o externa del avatar (admite GIF animado).
+  avatarUrl            String?
+  /// URL pública o externa del banner del perfil (admite GIF animado).
+  bannerUrl            String?
+  /// Biografía corta / firma del usuario (máx 280 caracteres en API).
+  bio                  String?
+  /// Puesto o departamento mostrado bajo el nombre (ej. "Sistemas").
+  position             String?
+  /// Teléfono de contacto opcional.
+  phone                String?
   /// Si está definido, `/dashboard` redirige a este panel personalizado.
   preferredDashboardId String?
+  /// Fecha en que el usuario pulsó "Limpiar" en la campana de notificaciones.
+  /// Eventos anteriores a esta marca no se cuentan ni se muestran en su lista.
+  notificationsClearedAt DateTime?
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @default(now()) @updatedAt
   auditEvents AuditEvent[]
@@ -194,6 +370,15 @@ model User {
   createdDashboards CustomDashboard[] @relation("DashboardCreator")
   preferredDashboard CustomDashboard? @relation("UserPreferredDashboard", fields: [preferredDashboardId], references: [id], onDelete: SetNull)
   feedbackItems UserFeedback[]
+  kbArticles    KbArticle[]      @relation("KbAuthor")
+  dailyReports  DailyReport[]    @relation("DailyReportAuthor")
+  createdTicketRelations TicketRelation[] @relation("TicketRelationCreator")
+  authoredAnnouncements Announcement[]  @relation("AnnouncementAuthor")
+  announcementReads     AnnouncementRead[]
+  ticketTemplates       TicketTemplate[] @relation("TicketTemplateOwner")
+  savedTicketViews      SavedTicketView[] @relation("SavedTicketViewOwner")
+  authoredHandovers     ShiftHandover[] @relation("HandoverAuthor")
+  acknowledgedHandovers ShiftHandover[] @relation("HandoverAcknowledged")
 }
 
 model UserFeedback {
@@ -240,6 +425,24 @@ model AuditEvent {
   @@index([userId, createdAt])
 }
 
+/// Registro de cada generación del informe diario "para Jefatura".
+/// Sirve para avisar a usuarios posteriores que el informe ya se generó hoy
+/// (sin bloquear la generación: cada compañero puede sacar el suyo).
+model DailyReport {
+  id            String   @id @default(cuid())
+  /// Fecha del informe en formato YYYY-MM-DD (huso local del sistema).
+  /// Se usa para buscar duplicados del mismo día con un GET por igualdad exacta.
+  reportDate    String
+  /// Nº de tickets que iban incluidos en la generación (para mostrar resumen).
+  ticketCount   Int      @default(0)
+  /// Usuario que generó el informe (nullable si después se borra ese usuario).
+  generatedById String?
+  generatedBy   User?    @relation("DailyReportAuthor", fields: [generatedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  @@index([reportDate, createdAt])
+}
+
 model PreventiveTask {
   id              String               @id @default(cuid())
   busId           String
@@ -282,4 +485,173 @@ model DashboardWidget {
 
   @@index([dashboardId, order])
   @@index([dashboardId, updatedAt])
+}
+
+/// Desvio en carretera detectado a partir de la "Circular Informativa" que envia
+/// jefesala@movilidadgc.org. El poller extrae los datos del PDF y crea el registro
+/// con estado PENDIENTE; el operador lo revisa y lo confirma (ACTIVO), resuelve o
+/// cancela. Tambien se permite la creacion MANUAL desde el formulario web.
+///
+/// IMPORTANTE: SQLite no soporta arrays nativos. `lineas_afectadas`, `paradas_fuera`
+/// y `paradas_alternativas` se almacenan como JSON serializado (string). Los helpers
+/// de `src/lib/desvios/serializers.ts` se encargan de leer/escribir esos campos.
+model Desvio {
+  id                   String       @id @default(cuid())
+  referencia           String
+  entorno              String       @default("PRODUCCION")
+  titulo               String
+  via                  String
+  tramo                String
+  fecha_inicio         DateTime
+  fecha_fin            DateTime
+  hora_fin_estimada    Boolean      @default(false)
+  motivo               String
+  sentido              Sentido
+  /// JSON string con el array de lineas afectadas. Ejemplos: '["303"]' o '["19","36"]'.
+  lineas_afectadas     String
+  url_itinerario       String?
+  /// JSON string con `[{nombre, codigo}]` de las paradas fuera de servicio.
+  paradas_fuera        String       @default("[]")
+  /// JSON string con `[{nombre, codigo}]` de las paradas alternativas.
+  paradas_alternativas String       @default("[]")
+  estado               EstadoDesvio @default(PENDIENTE)
+  origen               OrigenDesvio @default(EMAIL)
+  /// Identificador del correo en el proveedor (Gmail messageId / IMAP UID...). Sirve
+  /// como llave de idempotencia para no volver a procesar el mismo correo.
+  email_origen_id      String?
+  /// Ruta relativa al binario del PDF original dentro de `public/uploads/desvios/`.
+  pdf_path             String?
+  notas                String?
+  creado_en            DateTime     @default(now())
+  actualizado_en       DateTime     @updatedAt
+  confirmado_por       String?
+  confirmado_en        DateTime?
+
+  @@index([estado, fecha_inicio])
+  @@index([referencia])
+  @@index([email_origen_id])
+}
+
+/// Aviso/novedad publicado por un gestor para que TODOS los usuarios lo vean.
+/// - `kind = aviso`: mensaje operativo en vivo (reinicios, mantenimientos,
+///   incidencias). Si `severity = critical`, aparece como banner sticky en
+///   todas las paginas hasta que el usuario lo descarta.
+/// - `kind = novedad`: entrada del changelog publico ("lo nuevo en la app",
+///   persistente). Se ve en /novedades.
+///
+/// El emisor publica `announcement_new/updated/deleted` en `sseBus` para que
+/// los clientes conectados al stream reaccionen en tiempo real.
+model Announcement {
+  id           String               @id @default(cuid())
+  kind         AnnouncementKind
+  severity     AnnouncementSeverity @default(info)
+  title        String
+  /// Cuerpo en Markdown (renderizado con react-markdown + remark-gfm).
+  bodyMd       String               @default("")
+  status       AnnouncementStatus   @default(borrador)
+  /// Si esta marcado, aparece anclado arriba en la pagina de Novedades
+  /// (independiente del banner global que SIEMPRE muestra los critical).
+  pinned       Boolean              @default(false)
+  /// Fecha de publicacion. Se rellena al pasar de borrador a publicado.
+  publishedAt  DateTime?
+  /// Fecha en la que el aviso deja de mostrarse automaticamente (opcional).
+  /// Util para mantenimientos programados: "valido hasta las 14:30".
+  expiresAt    DateTime?
+  authorId     String?
+  /// Nombre del autor desnormalizado por si se borra el usuario.
+  authorName   String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  author       User?                @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  reads        AnnouncementRead[]
+
+  @@index([kind, status, publishedAt])
+  @@index([status, expiresAt])
+}
+
+/// Marca que un usuario ya ha visto / descartado un Announcement concreto.
+/// Sirve para:
+///  1) Ocultar el banner sticky del aviso critico tras pulsar "Entendido".
+///  2) Calcular el badge de "no leidos" en el sidebar.
+model AnnouncementRead {
+  userId         String
+  announcementId String
+  readAt         DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@id([userId, announcementId])
+  @@index([userId, readAt])
+}
+
+/// Plantilla de ticket reutilizable. Pre-rellena título, descripción, tipo,
+/// subtipo, subsubtipo y prioridad al crear un ticket. `scope = personal` =>
+/// solo la ve / edita el dueño; `scope = global` => visible para todos pero
+/// editable solo por gestores. Campo `category` libre para agrupar en el UI.
+model TicketTemplate {
+  id          String          @id @default(cuid())
+  name        String
+  scope       String          @default("personal")
+  ownerId     String?
+  title       String?
+  description String?
+  tipo        String?
+  subtipo     String?
+  subsubtipo  String?
+  priority    TicketPriority?
+  category    String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  owner       User?           @relation("TicketTemplateOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([scope])
+  @@index([ownerId])
+}
+
+/// Pase de turno (handover) entre M/T/N. El turno que cierra describe lo
+/// ocurrido y deja un resumen, alertas y acciones pendientes. El turno
+/// entrante lo "acepta" (acknowledged) cuando ha leído el contenido. Todos
+/// los campos de texto son libres; la app no impone una taxonomía.
+model ShiftHandover {
+  id                String   @id @default(cuid())
+  /// yyyy-mm-dd del turno saliente.
+  shiftDate         String
+  /// "M" | "T" | "N".
+  shift             String
+  authorId          String?
+  authorName        String?
+  summary           String
+  alerts            String?
+  pendingActions    String?
+  /// Snapshot opcional de tickets abiertos relevantes al cierre (JSON
+  /// serializado). El cliente lo pinta como lista clicable; si falta,
+  /// solo se muestran los campos de texto.
+  openTicketsJson   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  acknowledgedById  String?
+  acknowledgedByName String?
+  acknowledgedAt    DateTime?
+  author            User?    @relation("HandoverAuthor",        fields: [authorId],         references: [id], onDelete: SetNull)
+  acknowledgedBy    User?    @relation("HandoverAcknowledged",  fields: [acknowledgedById], references: [id], onDelete: SetNull)
+
+  @@index([shiftDate, shift])
+  @@index([createdAt])
+}
+
+/// Vista guardada del listado de tickets: combina filtros (estado, prioridad,
+/// operadora, "mis tickets", búsqueda, etc.) bajo un nombre. La query se
+/// serializa como string querystring (`?status=abierto&priority=alta`) para
+/// permitir enlaces directos y migraciones triviales si en el futuro cambian
+/// los filtros disponibles.
+model SavedTicketView {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  query     String
+  scope     String   @default("personal")
+  createdAt DateTime @default(now())
+  user      User     @relation("SavedTicketViewOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

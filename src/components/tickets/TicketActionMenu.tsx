@@ -13,10 +13,19 @@ type TicketActionMenuProps = {
   role: UserRole;
   onOpenStatusChange: (ticketId: string, nextStatus: TicketStatus) => void;
   onOpenAssign: (ticketId: string, currentTechnicianId: string | null) => void;
+  onOpenDelete?: (ticketId: string, ticketTitle: string) => void;
 };
 
-export function TicketActionMenu({ ticket, viewport, role, onOpenStatusChange, onOpenAssign }: TicketActionMenuProps) {
+export function TicketActionMenu({
+  ticket,
+  viewport,
+  role,
+  onOpenStatusChange,
+  onOpenAssign,
+  onOpenDelete,
+}: TicketActionMenuProps) {
   if (!ticket || !viewport) return null;
+  const canDelete = role === "tecnico_campo" || role === "gestor_centro_control";
 
   return createPortal(
     <ul
@@ -58,6 +67,23 @@ export function TicketActionMenu({ ticket, viewport, role, onOpenStatusChange, o
               onClick={() => onOpenAssign(ticket.id, ticket.assignedToUserId ?? null)}
             >
               Asignar técnico…
+            </button>
+          </li>
+        </>
+      )}
+      {canDelete && onOpenDelete && (
+        <>
+          <li role="none">
+            <hr className="my-1 border-[var(--color-border)]" />
+          </li>
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-rose-300 transition-colors duration-200 hover:bg-rose-500/10 hover:text-rose-200"
+              onClick={() => onOpenDelete(ticket.id, ticket.title)}
+            >
+              Eliminar ticket…
             </button>
           </li>
         </>

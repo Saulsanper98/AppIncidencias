@@ -20,6 +20,7 @@ import {
   TICKETS_UI_HINT_KEY,
   statusMap,
 } from "@/components/tickets/tickets-module-types";
+import { useSseEvent } from "@/hooks/use-sse-event";
 import type { SessionUser, TicketPriority, TicketStatus, UserRole } from "@/lib/domain";
 import { toUiPriority } from "@/lib/ticketing";
 
@@ -31,12 +32,14 @@ export function useTickets() {
   const statusFromQuery = searchParams.get("status");
   const priorityFromQuery = searchParams.get("priority");
   const partCodeFromQuery = searchParams.get("partCode")?.trim() ?? "";
+  const mineFromQuery = searchParams.get("mine");
 
   const [users, setUsers] = useState<LocalUser[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [role, setRole] = useState<UserRole>("conductor");
   const [catalog, setCatalog] = useState<CatalogBus[]>([]);
+  const [lineas, setLineas] = useState<string[]>([]);
   const [tipologias, setTipologias] = useState<
     import("@/lib/tipologia").TipologiaItem[]
   >([]);
@@ -44,6 +47,9 @@ export function useTickets() {
   const [priorityFilter, setPriorityFilter] = useState<"todos" | TicketPriority>("todos");
   const [operatorFilter, setOperatorFilter] = useState<"todas" | string>("todas");
   const [busFilter, setBusFilter] = useState<"todas" | string>("todas");
+  // Chip "Mis tickets": inicializado desde la URL (`?mine=1`). Para técnicos
+  // se activa por defecto al cargar (efecto más abajo).
+  const [onlyMine, setOnlyMine] = useState<boolean>(mineFromQuery === "1");
   const [tickets, setTickets] = useState<TicketView[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,6 +67,12 @@ export function useTickets() {
   const [searchQuery, setSearchQuery] = useState("");
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [assignTechnicianId, setAssignTechnicianId] = useState("");
+  /**
+   * Ticket que el usuario quiere eliminar. Se gestiona en el módulo a través
+   * de un diálogo (con motivo obligatorio). Guardamos también el título para
+   * mostrarlo en el diálogo de confirmación.
+   */
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [actionMenuTicketId, setActionMenuTicketId] = useState<string | null>(null);
   const [actionMenuViewport, setActionMenuViewport] = useState<{ top: number; left: number } | null>(null);
@@ -70,7 +82,7 @@ export function useTickets() {
   const [statusChangeComment, setStatusChangeComment] = useState("");
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [statusChangeSubmitting, setStatusChangeSubmitting] = useState(false);
-  const statusFilterSelectRef = useRef<HTMLSelectElement>(null);
+  const statusFilterSelectRef = useRef<HTMLButtonElement>(null);
   const [bandejaCompacta, setBandejaCompacta] = useState(false);
   const [showTicketsUiHint, setShowTicketsUiHint] = useState(false);
 
@@ -283,6 +295,18 @@ export function useTickets() {
     setTipologias(data.tipologias ?? []);
   }, []);
 
+  const fetchLineas = useCallback(async () => {
+    try {
+      const response = await fetch("/api/lineas", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = (await response.json()) as { lineas?: string[] };
+      setLineas(data.lineas ?? []);
+    } catch {
+      // Si la API de lineas falla, dejamos el array vacio: el campo "Servicio"
+      // sigue funcionando como input libre sin sugerencias.
+    }
+  }, []);
+
   const fetchUsers = useCallback(async () => {
     const response = await fetch("/api/users", { cache: "no-store" });
     const text = await response.text();
@@ -299,7 +323,7 @@ export function useTickets() {
     }
   }, [currentUserId]);
 
-  const fetchSession = useCallback(async () => {
+  const fetchSession = useCallback(async (): Promise<{ mineDefault: boolean }> => {
     const response = await fetch("/api/auth/session", { cache: "no-store" });
     const text = await response.text();
     if (!response.ok) {
@@ -310,10 +334,15 @@ export function useTickets() {
       setSessionUser(data.user);
       setCurrentUserId(data.user.id);
       setRole(data.user.role);
-    } else {
-      setSessionUser(null);
+      // Default por rol: si es técnico de campo y la URL no especifica el
+      // filtro explícitamente, abrir la bandeja con "Solo míos" activado.
+      const mineDefault = data.user.role === "tecnico_campo" && mineFromQuery === null;
+      if (mineDefault) setOnlyMine(true);
+      return { mineDefault };
     }
-  }, []);
+    setSessionUser(null);
+    return { mineDefault: false };
+  }, [mineFromQuery]);
 
   const fetchTickets = useCallback(
     async (
@@ -322,6 +351,7 @@ export function useTickets() {
       busId: "todas" | string,
       partCode = "",
       priority: "todos" | TicketPriority = "todos",
+      mine = false,
     ) => {
       const query = new URLSearchParams({ status, operator, busId });
       if (priority !== "todos") {
@@ -329,6 +359,9 @@ export function useTickets() {
       }
       if (partCode.trim()) {
         query.set("partCode", partCode.trim());
+      }
+      if (mine) {
+        query.set("mine", "1");
       }
       const response = await fetch(`/api/tickets?${query.toString()}`, {
         cache: "no-store",
@@ -404,9 +437,18 @@ export function useTickets() {
     setError(null);
     try {
       await fetchCatalog();
+      await fetchLineas();
       await fetchUsers();
-      await fetchSession();
-      await fetchTickets("todos", "todas", busIdFromQuery ?? "todas", partCodeFromQuery);
+      const session = await fetchSession();
+      const initialMine = mineFromQuery === "1" || session.mineDefault;
+      await fetchTickets(
+        "todos",
+        "todas",
+        busIdFromQuery ?? "todas",
+        partCodeFromQuery,
+        "todos",
+        initialMine,
+      );
       await fetchInventorySummary();
       await fetchAuditEvents();
       await fetchMaintenanceAlerts();
@@ -418,6 +460,7 @@ export function useTickets() {
     setLoading(false);
   }, [
     fetchCatalog,
+    fetchLineas,
     fetchUsers,
     fetchSession,
     fetchTickets,
@@ -427,6 +470,7 @@ export function useTickets() {
     fetchPreventiveTasks,
     busIdFromQuery,
     partCodeFromQuery,
+    mineFromQuery,
   ]);
 
   useEffect(() => {
@@ -435,15 +479,15 @@ export function useTickets() {
 
   useEffect(() => {
     if (!loading) {
-      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter).catch((filterError) => {
+      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine).catch((filterError) => {
         console.error(filterError);
         setError("No se pudo refrescar la bandeja de tickets.");
       });
     }
-  }, [statusFilter, priorityFilter, operatorFilter, busFilter, partCodeFromQuery, loading, fetchTickets, role]);
+  }, [statusFilter, priorityFilter, operatorFilter, busFilter, partCodeFromQuery, onlyMine, loading, fetchTickets, role]);
 
   const refreshTicketsAndSideData = useCallback(async () => {
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine);
     await fetchInventorySummary();
     await fetchAuditEvents();
     await fetchMaintenanceAlerts();
@@ -454,12 +498,47 @@ export function useTickets() {
     busFilter,
     partCodeFromQuery,
     priorityFilter,
+    onlyMine,
     fetchTickets,
     fetchInventorySummary,
     fetchAuditEvents,
     fetchMaintenanceAlerts,
     fetchPreventiveTasks,
   ]);
+
+  // ── Refresco en vivo desde SSE ─────────────────────────────────────────
+  // Cuando otro usuario crea / cambia estado / asigna / comenta / elimina un
+  // ticket, refrescamos la bandeja para que no haga falta pulsar F5. Usamos
+  // un debounce ligero (300 ms) para colapsar ráfagas de eventos cuando hay
+  // mucho movimiento (p. ej. una migración masiva).
+  const liveRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleLiveRefresh = useCallback(() => {
+    if (loading) return; // todavía no cargó la primera vez
+    if (liveRefreshTimerRef.current) clearTimeout(liveRefreshTimerRef.current);
+    liveRefreshTimerRef.current = setTimeout(() => {
+      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine).catch(
+        (refreshError) => console.warn("live refresh:", refreshError),
+      );
+      fetchAuditEvents().catch(() => {});
+    }, 300);
+  }, [
+    loading,
+    fetchTickets,
+    statusFilter,
+    operatorFilter,
+    busFilter,
+    partCodeFromQuery,
+    priorityFilter,
+    onlyMine,
+    fetchAuditEvents,
+  ]);
+
+  useSseEvent("ticket_created", scheduleLiveRefresh);
+  useSseEvent("ticket_updated", scheduleLiveRefresh);
+  useSseEvent("ticket_status_changed", scheduleLiveRefresh);
+  useSseEvent("ticket_assigned", scheduleLiveRefresh);
+  useSseEvent("ticket_commented", scheduleLiveRefresh);
+  useSseEvent("ticket_deleted", scheduleLiveRefresh);
 
   const handleCreateTicket = useCallback(
     async (payload: CreateTicketPayload) => {
@@ -468,8 +547,12 @@ export function useTickets() {
         setError("Debes iniciar sesión para crear tickets.");
         return;
       }
-      if (!selectedBus || !selectedAsset || !form.title || !form.description || !selectedTipologia) {
-        setError("Debes completar activo, tipología, título y descripción.");
+      // Si Pedro tecleó un bus que no está en el catálogo, `selectedBus` viene
+      // null pero `form.busId` debe contener el id tecleado. El backend creará
+      // el bus + activo SAE-DEFAULT al vuelo.
+      const trimmedBusId = form.busId.trim();
+      if (!trimmedBusId || !form.title || !form.description || !selectedTipologia) {
+        setError("Debes completar bus, tipología, título y descripción.");
         return;
       }
       if (form.title.trim().length < 3) {
@@ -503,8 +586,8 @@ export function useTickets() {
       setNoticePlacement("card");
 
       const ticketJson = {
-        busId: selectedBus.id,
-        assetId: selectedAsset.id,
+        busId: selectedBus ? selectedBus.id : trimmedBusId,
+        assetId: selectedAsset ? selectedAsset.id : "",
         tipo: selectedTipologia.tipo,
         subtipo: selectedTipologia.subtipo,
         subsubtipo: selectedTipologia.subsubtipo,
@@ -518,6 +601,9 @@ export function useTickets() {
         serviceStopped: form.serviceStopped,
         photoNames: [] as string[],
         comment: form.comment,
+        ...(form.lineaLabel.trim() ? { lineaLabel: form.lineaLabel.trim() } : {}),
+        ...(form.servicioLabel.trim() ? { servicioLabel: form.servicioLabel.trim() } : {}),
+        ...(form.conductorLabel.trim() ? { conductorLabel: form.conductorLabel.trim() } : {}),
         ...(latStr && lngStr
           ? {
               latitude: Number(latStr.replace(",", ".")),
@@ -528,6 +614,30 @@ export function useTickets() {
             }
           : {}),
       };
+
+      // Si estamos offline y NO hay adjuntos (no se pueden serializar Files
+      // a localStorage), encolamos el borrador para envío diferido. El
+      // OfflineQueueIndicator del layout privado avisará al usuario y hará
+      // los reintentos al recuperar conexión.
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.onLine === false &&
+        stagedUploadFiles.length === 0
+      ) {
+        const { enqueue } = await import("@/lib/offline-ticket-queue");
+        enqueue(ticketJson);
+        try {
+          sessionStorage.removeItem(TICKET_FORM_DRAFT_KEY);
+        } catch {
+          /* ignore */
+        }
+        setSaving(false);
+        setNoticeTone("warning");
+        setNoticePlacement("center");
+        setNotice("Sin conexión: el ticket se enviará automáticamente cuando recuperes red.");
+        onTicketCreated?.();
+        return;
+      }
 
       let response: Response;
       if (stagedUploadFiles.length > 0) {
@@ -590,10 +700,12 @@ export function useTickets() {
       }
 
       onTicketCreated?.();
-      await refreshTicketsAndSideData();
+      // Refrescar tickets y, si pudimos haber creado un bus al vuelo, también
+      // el catálogo para que aparezca en próximos formularios.
+      await Promise.all([refreshTicketsAndSideData(), fetchCatalog()]);
       setSaving(false);
     },
-    [sessionUser, role, currentUserId, refreshTicketsAndSideData],
+    [sessionUser, role, currentUserId, refreshTicketsAndSideData, fetchCatalog],
   );
 
   const openStatusChangeModal = useCallback(
@@ -638,7 +750,7 @@ export function useTickets() {
       setNoticeTone("success");
       setNoticePlacement("toast");
       setNotice("Estado del ticket actualizado correctamente.");
-      await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter);
+      await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine);
       await fetchAuditEvents();
       await fetchMaintenanceAlerts();
       await fetchPreventiveTasks();
@@ -809,7 +921,7 @@ export function useTickets() {
     setNoticeTone("success");
     setNoticePlacement("toast");
     setNotice("Ticket asignado correctamente.");
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine);
   }, [
     assignTarget,
     sessionUser,
@@ -830,13 +942,71 @@ export function useTickets() {
     await Promise.resolve();
   }, []);
 
+  /**
+   * Tras un borrado exitoso (DELETE /api/tickets/[id]) cerramos el diálogo,
+   * limpiamos cualquier menú abierto y forzamos un refetch con los filtros
+   * actuales para que el ticket desaparezca de la bandeja al instante.
+   */
+  const handleTicketDeleted = useCallback(async () => {
+    setDeleteTarget(null);
+    setActionMenuTicketId(null);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine);
+  }, [fetchTickets, statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter]);
+
   const handleClearFilters = useCallback(() => {
     setStatusFilter("todos");
     setPriorityFilter("todos");
     setOperatorFilter("todas");
     setBusFilter("todas");
+    setOnlyMine(false);
     router.replace("/tickets");
   }, [router]);
+
+  /**
+   * Aplica una vista guardada: parsea el querystring (sin '?'), resetea TODOS
+   * los filtros y aplica los presentes. También sincroniza la URL para que
+   * la vista pueda compartirse por enlace y para que `useTickets` mantenga
+   * coherencia con su lectura inicial de `searchParams`.
+   */
+  const applyView = useCallback(
+    (rawQuery: string) => {
+      const params = new URLSearchParams(rawQuery.replace(/^\?/, ""));
+      const nextStatus = params.get("status");
+      const nextPriority = params.get("priority");
+      const nextOperator = params.get("operator");
+      const nextBus = params.get("busId");
+      const nextMine = params.get("mine");
+
+      const statusAllowed: Array<TicketStatus | "todos"> = [
+        "todos",
+        "abierto",
+        "en_proceso",
+        "esperando_repuesto",
+        "resuelto",
+      ];
+      const priAllowed: Array<TicketPriority | "todos"> = ["todos", "alta", "media", "baja"];
+
+      setStatusFilter(
+        nextStatus && statusAllowed.includes(nextStatus as TicketStatus | "todos")
+          ? (nextStatus as "todos" | TicketStatus)
+          : "todos",
+      );
+      setPriorityFilter(
+        nextPriority && priAllowed.includes(nextPriority as TicketPriority | "todos")
+          ? (nextPriority as "todos" | TicketPriority)
+          : "todos",
+      );
+      setOperatorFilter(nextOperator && nextOperator.length > 0 ? nextOperator : "todas");
+      setBusFilter(nextBus && nextBus.length > 0 ? nextBus : "todas");
+      setOnlyMine(nextMine === "1");
+
+      // Sincroniza la URL (sin scroll) para que reflejar/compartir la vista
+      // funcione igual que aplicar los filtros manualmente.
+      const qs = params.toString();
+      router.replace(qs ? `/tickets?${qs}` : "/tickets", { scroll: false });
+    },
+    [router],
+  );
 
   const clearPartCodeFilter = useCallback(() => {
     const q = new URLSearchParams();
@@ -945,6 +1115,8 @@ export function useTickets() {
     sessionUser,
     role,
     catalog,
+    lineas,
+    fetchLineas,
     tipologias,
     statusFilter,
     setStatusFilter,
@@ -954,6 +1126,8 @@ export function useTickets() {
     setOperatorFilter,
     busFilter,
     setBusFilter,
+    onlyMine,
+    setOnlyMine,
     tickets,
     loading,
     saving,
@@ -981,6 +1155,9 @@ export function useTickets() {
     setAssignTarget,
     assignTechnicianId,
     setAssignTechnicianId,
+    deleteTarget,
+    setDeleteTarget,
+    handleTicketDeleted,
     shortcutsOpen,
     setShortcutsOpen,
     actionMenuTicketId,
@@ -1014,6 +1191,7 @@ export function useTickets() {
     handleConsumeReservation,
     handleCancelReservation,
     handleClearFilters,
+    applyView,
     clearPartCodeFilter,
     handleExportTicketsCsv,
     handleCreatePreventiveTask,

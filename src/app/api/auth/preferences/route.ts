@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 const patchSchema = z.object({
   preferredDashboardId: z.string().min(1).nullable(),
@@ -12,7 +12,8 @@ const patchSchema = z.object({
 export async function PATCH(request: Request) {
   try {
     const cookieStore = await cookies();
-    const userId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
+    const userId = verifySessionToken(token);
     if (!userId) {
       return NextResponse.json({ message: "No hay sesion" }, { status: 401 });
     }

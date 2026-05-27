@@ -50,13 +50,29 @@ export type FormState = {
   mapLongitude: string;
   /** Municipio o lugar inferido al colocar el pin (geocodificación inversa). */
   mapPlaceMunicipio: string;
+  /** Línea/ruta operativa (autocomplete catálogo Linea + texto libre). */
+  lineaLabel: string;
+  /** Etiqueta libre del servicio/turno/recorrido (texto libre puro). */
+  servicioLabel: string;
+  /** Nombre del conductor (texto libre) en el momento de la incidencia. */
+  conductorLabel: string;
 };
 
 export type CreateTicketPayload = {
   form: FormState;
   stagedUploadFiles: File[];
-  selectedBus: CatalogBus;
-  selectedAsset: CatalogBus["assets"][number];
+  /**
+   * Bus seleccionado del catálogo. Si el usuario tecleó un bus nuevo que no
+   * existe (sugerencia de Pedro: combobox con texto libre), llega `null` y el
+   * backend lo creará al vuelo a partir de `form.busId`.
+   */
+  selectedBus: CatalogBus | null;
+  /**
+   * Activo del bus. Si el bus es nuevo o el usuario no seleccionó un activo
+   * concreto, llega `null` y el backend usará el primero del bus (o creará un
+   * `SAE-DEFAULT` si el bus también es nuevo).
+   */
+  selectedAsset: CatalogBus["assets"][number] | null;
   selectedTipologia: TipologiaItem;
   /** Limpia borrador local y secciones tras crear con éxito. */
   onTicketCreated?: () => void;
@@ -133,6 +149,9 @@ export const defaultForm = (busId = ""): FormState => ({
   mapLatitude: "",
   mapLongitude: "",
   mapPlaceMunicipio: "",
+  lineaLabel: "",
+  servicioLabel: "",
+  conductorLabel: "",
 });
 
 export const statusMap: Record<TicketStatus, string> = {
@@ -155,8 +174,40 @@ export const TICKETS_EMPTY_SHELL =
 export const TICKET_FORM_DRAFT_KEY = "ccmgc_ticket_new_form_draft_v1";
 export const TICKETS_BANDEJA_COMPACT_KEY = "ccmgc_tickets_bandeja_compact_v1";
 export const TICKETS_UI_HINT_KEY = "ccmgc_tickets_ui_hint_dismissed_v1";
-export const TICKET_ATTACH_MAX_FILES = 8;
-export const TICKET_ATTACH_MAX_BYTES = 5 * 1024 * 1024;
+/**
+ * Política de adjuntos en cliente. Debe coincidir con `src/lib/ticket-uploads.ts`.
+ * Si cambias un valor, ajusta también el servidor para evitar errores 413.
+ */
+export const TICKET_ATTACH_MAX_FILES = 6;
+/** Por archivo de imagen (5 MB). */
+export const TICKET_ATTACH_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** Por archivo de vídeo (40 MB). */
+export const TICKET_ATTACH_MAX_VIDEO_BYTES = 40 * 1024 * 1024;
+/** Tamaño combinado total por subida (120 MB). */
+export const TICKET_ATTACH_MAX_TOTAL_BYTES = 120 * 1024 * 1024;
+/** Atributo `accept` para inputs de subida (imagen + vídeo). */
+export const TICKET_ATTACH_ACCEPT =
+  "image/*,video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.webm,.mov,.mkv";
+
+export type TicketAttachKind = "image" | "video";
+
+/** Clasifica un `File` del navegador como imagen, vídeo o descarte. */
+export function classifyAttachFile(file: File): TicketAttachKind | null {
+  const mime = (file.type || "").toLowerCase();
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  // Fallback por extensión: Safari móvil envía MIME vacío al adjuntar
+  // grabaciones de cámara.
+  const ext = file.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
+  if ([".mp4", ".webm", ".mov", ".mkv"].includes(ext)) return "video";
+  if ([".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)) return "image";
+  return null;
+}
+
+/** Devuelve el tope por archivo en bytes según el tipo. */
+export function attachByteLimit(kind: TicketAttachKind): number {
+  return kind === "video" ? TICKET_ATTACH_MAX_VIDEO_BYTES : TICKET_ATTACH_MAX_IMAGE_BYTES;
+}
 
 export type TicketFormSectionId = "equipment" | "tipologia" | "detail" | "attachments";
 

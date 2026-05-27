@@ -51,7 +51,7 @@ const STATUS_META: Record<FeedbackStatus, { label: string; color: string; dot: s
   descartado:   { label: "Descartado",  color: "text-[var(--color-text-3)]",  dot: "bg-[var(--color-surface-3)]",ring: "border-[var(--color-border)] bg-[var(--color-surface-3)]" },
 };
 
-const URGENCY_META: Record<FeedbackUrgency, { label: string; color: string; dot: string }> = {
+const _URGENCY_META: Record<FeedbackUrgency, { label: string; color: string; dot: string }> = {
   baja:  { label: "Baja",  color: "text-[var(--color-success)]", dot: "bg-[var(--color-success)]" },
   media: { label: "Media", color: "text-[var(--color-warning)]", dot: "bg-[var(--color-warning)]" },
   alta:  { label: "Alta",  color: "text-[var(--color-error)]",   dot: "bg-[var(--color-error)]" },

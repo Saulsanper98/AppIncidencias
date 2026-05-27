@@ -12,21 +12,26 @@ import {
   Filter,
   Keyboard,
   Link2,
+  Lock,
   PackageSearch,
   Search,
+  Ticket as TicketIcon,
+  Timer,
+  UserCheck,
   X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { StatusChangeModal } from "@/components/status-change-modal";
 import { TicketActionMenu } from "@/components/tickets/TicketActionMenu";
+import { DeleteTicketDialog } from "@/components/tickets/DeleteTicketDialog";
+import { SavedViewsBar } from "@/components/tickets/SavedViewsBar";
 import { TicketCreateForm } from "@/components/tickets/TicketCreateForm";
 import { TicketsBandeja } from "@/components/tickets/TicketsBandeja";
 import type {
   AuditEventView,
-  InventorySummaryItem,
   MaintenanceAlertView,
 } from "@/components/tickets/tickets-module-types";
 import {
@@ -37,7 +42,7 @@ import {
 } from "@/components/tickets/tickets-module-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ccmgcNativeSelectClassName } from "@/components/ui/input";
+import { Select } from "@/components/ui/input";
 import { useTickets } from "@/hooks/use-tickets";
 import type { TicketPriority, TicketStatus } from "@/lib/domain";
 import { canUseFilters } from "@/lib/rbac";
@@ -51,7 +56,7 @@ function EmptyStateBlock({
   hint,
   actionLabel,
   onAction,
-  iconSize = 40,
+  iconSize = 26,
   compact = false,
 }: {
   icon: EmptyIcon;
@@ -64,14 +69,16 @@ function EmptyStateBlock({
 }) {
   return (
     <div className={cn(TICKETS_EMPTY_SHELL, compact && "!py-6")}>
-      <Icon size={iconSize} className="mb-3 text-[var(--color-text-3)]" />
+      <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-surface)] text-[var(--color-text-3)] ring-1 ring-[var(--color-border)]">
+        <Icon size={iconSize} strokeWidth={1.5} aria-hidden />
+      </span>
       <p className="text-subheading text-[var(--color-text-2)]">{title}</p>
       <p className="mx-auto mt-1 max-w-[280px] text-caption text-[var(--color-text-3)]">{hint}</p>
       {actionLabel && onAction ? (
         <button
           type="button"
           onClick={onAction}
-          className="mt-4 rounded-lg border border-[var(--color-accent)]/30 px-3 py-1.5 text-xs font-medium text-[var(--color-accent)] transition-all duration-150 hover:bg-[var(--color-accent-light)]"
+          className="mt-4 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/40 px-3 py-1.5 text-xs font-medium text-[var(--color-accent)] transition-all duration-150 hover:bg-[var(--color-accent-light)]"
         >
           {actionLabel}
         </button>
@@ -80,57 +87,50 @@ function EmptyStateBlock({
   );
 }
 
-function InventoryPanel({ items }: { items: InventorySummaryItem[] }) {
-  if (items.length === 0) {
-    return (
-      <EmptyStateBlock
-        icon={PackageSearch}
-        title="Sin repuestos en inventario"
-        hint="El catálogo de stock está vacío o aún no se ha sincronizado."
-        iconSize={36}
-      />
-    );
+/** Tiempo relativo en español, formato uniforme:
+ *   - <60s: "ahora"
+ *   - <60m: "hace Xm"
+ *   - <24h: "hace Xh"
+ *   - <7d:  "hace Xd"
+ *   - resto: "DD MMM"
+ */
+function relativeTime(iso: string): string {
+  const date = new Date(iso);
+  const ms = Date.now() - date.getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return "ahora";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `hace ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `hace ${d}d`;
+  return date.toLocaleDateString("es-ES", { day: "2-digit", month: "short" });
+}
+
+/**
+ * Colapsa eventos consecutivos del mismo actor con la misma acción dentro de
+ * una ventana de 5 min en un único item con contador "×N". Evita la
+ * sensación de "spam" cuando un usuario realiza la misma operación varias
+ * veces seguidas (p. ej. actualizar perfil varias veces).
+ */
+function dedupeAuditEvents(events: AuditEventView[]): Array<AuditEventView & { repetitions: number }> {
+  const WINDOW_MS = 5 * 60 * 1000;
+  const result: Array<AuditEventView & { repetitions: number }> = [];
+  for (const ev of events) {
+    const last = result[result.length - 1];
+    if (
+      last &&
+      last.actor === ev.actor &&
+      last.action === ev.action &&
+      new Date(last.createdAt).getTime() - new Date(ev.createdAt).getTime() < WINDOW_MS
+    ) {
+      last.repetitions += 1;
+      continue;
+    }
+    result.push({ ...ev, repetitions: 1 });
   }
-  return (
-    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-      {items.map((item) => (
-        <div
-          key={item.partCode}
-          className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] p-3"
-        >
-          <div className="mb-1 grid grid-cols-[1fr_auto] items-start gap-x-2 gap-y-0">
-            <p className="text-sm font-medium leading-tight text-[var(--color-text-1)]">{item.partName}</p>
-            <div className="col-start-2 row-start-1 pt-0.5">
-              <Badge variant={item.status === "ok" ? "success" : item.status === "bajo" ? "warning" : "error"}>
-                {item.status === "ok" ? "OK" : item.status === "bajo" ? "Bajo" : "Agotado"}
-              </Badge>
-            </div>
-          </div>
-          <p className="mb-2 text-caption font-mono">{item.partCode}</p>
-          <div className="mb-1.5 flex items-center justify-between text-xs text-[var(--color-text-3)]">
-            <span>
-              Disp: <span className="font-medium text-[var(--color-text-1)]">{item.totalAvailable}</span>
-            </span>
-            <span>Mín: {item.minimumLevel}</span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
-            <div
-              className="h-full rounded-full transition-all duration-200"
-              style={{
-                width: `${Math.min(100, (item.totalAvailable / Math.max(item.minimumLevel, 1)) * 100)}%`,
-                backgroundColor:
-                  item.status === "ok"
-                    ? "var(--color-success)"
-                    : item.status === "bajo"
-                      ? "var(--color-warning)"
-                      : "var(--color-error)",
-              }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  return result;
 }
 
 function AuditPanel({ events }: { events: AuditEventView[] }) {
@@ -145,31 +145,44 @@ function AuditPanel({ events }: { events: AuditEventView[] }) {
       />
     );
   }
+  const deduped = dedupeAuditEvents(events.slice(0, 12)).slice(0, 8);
   return (
     <div className="space-y-2">
-      {events.slice(0, 8).map((event, index) => {
+      {deduped.map((event, index) => {
         const expanded = expandedId === event.id;
         const detailText = event.detail ?? "Sin detalle";
-        const tsShort = new Date(event.createdAt).toLocaleString("es-ES", {
-          day: "2-digit",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
+        const rel = relativeTime(event.createdAt);
         return (
           <div key={event.id} className="relative flex items-start gap-3">
-            {index < Math.min(events.length, 8) - 1 && (
+            {index < deduped.length - 1 && (
               <div className="absolute left-[7px] top-5 h-[calc(100%-0.25rem)] w-px bg-[var(--color-accent)]/15" />
             )}
             <div className="z-10 mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full border-2 border-[var(--color-accent)]/35 bg-[var(--color-surface)] shadow-[0_0_0_1px_var(--color-border)]" />
             <div className="min-w-0 flex-1 pb-4">
               <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-                <p className="text-sm font-semibold text-[var(--color-text-1)]">{event.actor}</p>
-                <time className="shrink-0 text-[10px] tabular-nums text-[var(--color-text-3)]" dateTime={event.createdAt}>
-                  {tsShort}
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--color-text-1)]">
+                  {event.actor}
+                  {event.repetitions > 1 ? (
+                    <span
+                      className="num-tabular rounded-full border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0 text-[10px] font-medium text-[var(--color-text-3)]"
+                      title={`${event.repetitions} eventos similares agrupados`}
+                    >
+                      ×{event.repetitions}
+                    </span>
+                  ) : null}
+                </p>
+                <time
+                  className="num-tabular shrink-0 text-[10px] text-[var(--color-text-3)]"
+                  dateTime={event.createdAt}
+                  title={new Date(event.createdAt).toLocaleString("es-ES")}
+                >
+                  {rel}
                 </time>
               </div>
-              <p className={cn("mt-0.5 text-[12px] leading-snug text-[var(--color-text-2)]", !expanded && "line-clamp-2")} title={event.action}>
+              <p
+                className={cn("mt-0.5 text-[12px] leading-snug text-[var(--color-text-2)]", !expanded && "line-clamp-2")}
+                title={event.action}
+              >
                 {event.action}
               </p>
               <p
@@ -253,13 +266,144 @@ function MaintenanceAlertsPanel({
   );
 }
 
+function TicketsHeroHeader({
+  total,
+  abiertos,
+  enProceso,
+  esperandoRepuesto,
+  resueltosHoy,
+  slaVencidos,
+}: {
+  total: number;
+  abiertos: number;
+  enProceso: number;
+  esperandoRepuesto: number;
+  resueltosHoy: number;
+  slaVencidos: number;
+}) {
+  return (
+    <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
+      />
+      <div className="relative flex flex-wrap items-end justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/20">
+            <TicketIcon size={18} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-3)]">
+              <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold text-[var(--color-text-3)]">
+                CCMGC
+              </span>
+              Operación
+            </div>
+            <h1 className="mt-0.5 text-[20px] font-semibold tracking-tight text-[var(--color-text-1)]">
+              Bandeja de tickets
+            </h1>
+            <p className="mt-0.5 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
+              Incidencias del Centro de Control. Crea, asigna, sigue y cierra tickets con trazabilidad completa.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <KpiPill label="Total" value={total} tone="neutral" />
+          <KpiPill label="Abiertos" value={abiertos} tone="info" />
+          <KpiPill label="En proceso" value={enProceso} tone="accent" />
+          {esperandoRepuesto > 0 ? (
+            <KpiPill label="Esperando" value={esperandoRepuesto} tone="warning" />
+          ) : null}
+          {resueltosHoy > 0 ? (
+            <KpiPill label="Resueltos hoy" value={resueltosHoy} tone="success" />
+          ) : null}
+          {slaVencidos > 0 ? (
+            <KpiPill label="SLA vencido" value={slaVencidos} tone="error" icon={<Timer size={11} strokeWidth={1.8} aria-hidden />} />
+          ) : null}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+type KpiTone = "neutral" | "info" | "accent" | "warning" | "success" | "error";
+
+function KpiPill({
+  label,
+  value,
+  tone,
+  icon,
+}: {
+  label: string;
+  value: number;
+  tone: KpiTone;
+  icon?: React.ReactNode;
+}) {
+  const TONE_BG: Record<KpiTone, string> = {
+    neutral: "bg-[var(--color-surface-2)] text-[var(--color-text-2)] ring-[var(--color-border)]",
+    info: "bg-[var(--color-surface-2)] text-[var(--color-text-1)] ring-[var(--color-border)]",
+    accent: "bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-[var(--color-accent)]/30",
+    warning: "bg-[var(--color-warning-light)] text-[var(--color-warning)] ring-[var(--color-warning)]/30",
+    success: "bg-[var(--color-success-light)] text-[var(--color-success)] ring-[var(--color-success)]/30",
+    error: "bg-[var(--color-error-light)] text-[var(--color-error)] ring-[var(--color-error)]/30",
+  };
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10.5px] font-medium ring-1 backdrop-blur",
+        TONE_BG[tone],
+      )}
+    >
+      {icon ?? null}
+      <span className="num-tabular text-[12.5px] font-semibold tabular-nums">{value}</span>
+      <span className="uppercase tracking-wide opacity-80">{label}</span>
+    </span>
+  );
+}
+
 export function TicketsModule() {
   const t = useTickets();
+
+  const heroKpis = useMemo(() => {
+    const now = Date.now();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayMs = todayStart.getTime();
+    let abiertos = 0;
+    let enProceso = 0;
+    let esperandoRepuesto = 0;
+    let resueltosHoy = 0;
+    let slaVencidos = 0;
+    for (const tk of t.tickets) {
+      if (tk.status === "abierto") abiertos += 1;
+      else if (tk.status === "en_proceso") enProceso += 1;
+      else if (tk.status === "esperando_repuesto") esperandoRepuesto += 1;
+      else if (tk.status === "resuelto") {
+        const resAt = (tk as { resolvedAt?: string | null }).resolvedAt ?? tk.updatedAt;
+        if (resAt && new Date(resAt).getTime() >= todayMs) resueltosHoy += 1;
+      }
+      if (
+        tk.status !== "resuelto" &&
+        tk.slaDeadline &&
+        new Date(tk.slaDeadline).getTime() < now
+      ) {
+        slaVencidos += 1;
+      }
+    }
+    return {
+      total: t.tickets.length,
+      abiertos,
+      enProceso,
+      esperandoRepuesto,
+      resueltosHoy,
+      slaVencidos,
+    };
+  }, [t.tickets]);
 
   if (t.loading) {
     return (
       <div className="space-y-4">
-        <div className="h-24 animate-pulse rounded-xl bg-[var(--color-surface-2)]" />
+        <div className="h-20 animate-pulse rounded-2xl bg-[var(--color-surface-2)]" />
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
           <div className="h-[min(480px,62vh)] min-h-[360px] animate-pulse rounded-xl bg-[var(--color-surface-2)] xl:col-span-5" />
           <div className="flex h-[min(480px,62vh)] min-h-[360px] flex-col gap-3 animate-pulse rounded-xl bg-[var(--color-surface-2)] p-4 xl:col-span-7">
@@ -274,9 +418,18 @@ export function TicketsModule() {
 
   return (
     <div className="space-y-4">
+      <TicketsHeroHeader
+        total={heroKpis.total}
+        abiertos={heroKpis.abiertos}
+        enProceso={heroKpis.enProceso}
+        esperandoRepuesto={heroKpis.esperandoRepuesto}
+        resueltosHoy={heroKpis.resueltosHoy}
+        slaVencidos={heroKpis.slaVencidos}
+      />
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         <TicketCreateForm
           catalog={t.catalog}
+          lineas={t.lineas}
           tipologias={t.tipologias}
           sessionUser={t.sessionUser}
           saving={t.saving}
@@ -357,19 +510,16 @@ export function TicketsModule() {
           ) : null}
 
           {t.showTicketsUiHint ? (
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-2 rounded-lg border border-[var(--color-accent)]/25 bg-[var(--color-accent-light)] px-3 py-2.5 text-xs text-[var(--color-text-2)]">
-              <p className="min-w-0 flex-1 leading-relaxed">
-                <span className="font-medium text-[var(--color-text-1)]">Consejo:</span>{" "}
-                <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1 font-mono">/</kbd>{" "}
-                filtro estado,{" "}
-                <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1 font-mono">N</kbd>{" "}
-                nuevo ticket,{" "}
-                <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1 font-mono">?</kbd>{" "}
-                ayuda. Los filtros se reflejan en la URL para compartir la vista.
+            // Consejo discreto: tono neutro (no accent saturado), texto compacto.
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 text-[11.5px] text-[var(--color-text-3)]">
+              <p className="min-w-0 flex-1 leading-snug">
+                <span className="kbd">/</span> filtro,{" "}
+                <span className="kbd">N</span> nuevo,{" "}
+                <span className="kbd">?</span> ayuda — los filtros viven en la URL para compartir la vista.
               </p>
               <button
                 type="button"
-                className="shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:text-[var(--color-text-1)]"
+                className="shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/40 px-2 py-1 text-[11px] font-medium text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
                 onClick={() => {
                   try {
                     sessionStorage.setItem(TICKETS_UI_HINT_KEY, "1");
@@ -384,103 +534,149 @@ export function TicketsModule() {
             </div>
           ) : null}
 
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-label text-[var(--color-text-3)]">Bandeja de tickets</p>
+          {/* Feedback button en la esquina superior derecha de la zona de
+              filtros (el título "Bandeja de tickets" duplicado se quita: ya
+              vive dentro de la propia card TicketsBandeja). */}
+          <div className="mb-2 flex items-center justify-end">
             <FeedbackTargetButton id="tickets/bandeja" label="Bandeja de tickets" />
           </div>
 
-          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 lg:flex-row lg:flex-wrap lg:items-center">
+          {canUseFilters(t.role) ? (
+            <div className="mb-2">
+              <SavedViewsBar
+                currentQuery={(() => {
+                  const q = new URLSearchParams();
+                  if (t.statusFilter !== "todos") q.set("status", t.statusFilter);
+                  if (t.priorityFilter !== "todos") q.set("priority", t.priorityFilter);
+                  if (t.operatorFilter !== "todas") q.set("operator", t.operatorFilter);
+                  if (t.busFilter !== "todas") q.set("busId", t.busFilter);
+                  if (t.partCodeFromQuery) q.set("partCode", t.partCodeFromQuery);
+                  if (t.onlyMine) q.set("mine", "1");
+                  return q.toString();
+                })()}
+                onApply={t.applyView}
+              />
+            </div>
+          ) : null}
+
+          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/55 px-3 py-2.5 lg:flex-row lg:flex-wrap lg:items-center">
             {t.filtersInUrl ? (
-              <div
-                className="flex items-center gap-1.5 rounded-md border border-[var(--color-accent)]/25 bg-[var(--color-accent-light)]/35 px-2 py-1.5 text-[10px] font-medium text-[var(--color-text-2)]"
-                title="La barra de direcciones incluye filtros; puedes copiar el enlace para compartir esta vista."
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--color-accent)]/25 bg-[var(--color-accent-light)]/50 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-accent)]"
+                title="La URL incluye los filtros activos; cópiala para compartir esta vista."
               >
-                <Link2 size={12} className="shrink-0 text-[var(--color-accent)]" aria-hidden />
-                Vista compartible (filtros en URL)
-              </div>
+                <Link2 size={10} strokeWidth={1.8} className="shrink-0" aria-hidden />
+                Vista compartible
+              </span>
             ) : null}
             <div className="flex min-w-0 flex-1 flex-col gap-1.5 md:flex-row md:flex-wrap md:items-center md:gap-2">
-              <div
-                className="flex flex-wrap items-center gap-1"
-                title="A = Alta, M = Media, B = Baja. Leyenda también en la segunda línea en pantallas estrechas."
-              >
-                <Badge variant="error" className="px-1.5 py-0 text-[10px] font-semibold" title="Prioridad alta">
-                  A:{t.ticketCountByPriority.alta}
-                </Badge>
-                <Badge variant="warning" className="px-1.5 py-0 text-[10px] font-semibold" title="Prioridad media">
-                  M:{t.ticketCountByPriority.media}
-                </Badge>
-                <Badge variant="success" className="px-1.5 py-0 text-[10px] font-semibold" title="Prioridad baja">
-                  B:{t.ticketCountByPriority.baja}
-                </Badge>
-                <span className="hidden pl-1 text-[11px] leading-snug text-[var(--color-text-3)] sm:inline">
-                  · Alta · Media · Baja
+              {/* Chips de conteo por prioridad con dot del color y label
+               *  explicito (no criptico "A:1 / M:2 / B:1"). */}
+              <div className="flex flex-wrap items-center gap-1" aria-label="Conteo por prioridad">
+                <span
+                  className="inline-flex items-center gap-1 rounded-md bg-[var(--color-error-light)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-error)] ring-1 ring-[var(--color-error)]/25"
+                  title={`${t.ticketCountByPriority.alta} de prioridad alta`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-error)]" aria-hidden />
+                  Alta <span className="num-tabular">{t.ticketCountByPriority.alta}</span>
+                </span>
+                <span
+                  className="inline-flex items-center gap-1 rounded-md bg-[var(--color-warning-light)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-warning)] ring-1 ring-[var(--color-warning)]/25"
+                  title={`${t.ticketCountByPriority.media} de prioridad media`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warning)]" aria-hidden />
+                  Media <span className="num-tabular">{t.ticketCountByPriority.media}</span>
+                </span>
+                <span
+                  className="inline-flex items-center gap-1 rounded-md bg-[var(--color-success-light)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-success)] ring-1 ring-[var(--color-success)]/25"
+                  title={`${t.ticketCountByPriority.baja} de prioridad baja`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-success)]" aria-hidden />
+                  Baja <span className="num-tabular">{t.ticketCountByPriority.baja}</span>
                 </span>
               </div>
-              <p className="w-full pl-0.5 text-balance text-[11px] leading-snug text-[var(--color-text-3)] sm:hidden">
-                Alta · Media · Baja
-              </p>
 
               <div className="hidden h-5 w-px shrink-0 bg-[var(--color-border)] sm:block" />
 
               {canUseFilters(t.role) ? (
                 <>
                   <div className="hidden flex-wrap items-center gap-2 md:flex">
-                    <div className="relative">
-                      <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]" aria-hidden />
+                    <div className="group relative">
+                      <Search
+                        size={13}
+                        strokeWidth={1.8}
+                        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-3)] transition-colors group-focus-within:text-[var(--color-accent)]"
+                        aria-hidden
+                      />
                       <input
                         type="text"
                         value={t.searchQuery}
                         onChange={(e) => t.setSearchQuery(e.target.value)}
-                        placeholder="Buscar tickets…"
-                        className="w-44 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] py-1.5 pl-8 pr-7 text-xs text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                        placeholder={"Buscar t\u00EDtulo, bus, pieza\u2026"}
+                        className="w-56 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] py-1.5 pl-8 pr-7 text-xs text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] shadow-sm transition-colors focus:border-[var(--color-accent)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-light)]"
                       />
                       {t.searchQuery && (
                         <button
                           onClick={() => t.setSearchQuery("")}
                           aria-label="Limpiar búsqueda"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-3)] hover:text-[var(--color-text-1)]"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
                         >
-                          <X size={12} aria-hidden />
+                          <X size={11} aria-hidden />
                         </button>
                       )}
                     </div>
-                    <select
+                    {t.sessionUser ? (
+                      <button
+                        type="button"
+                        onClick={() => t.setOnlyMine((v) => !v)}
+                        aria-pressed={t.onlyMine}
+                        title={
+                          t.onlyMine
+                            ? "Mostrando solo tickets asignados a ti"
+                            : "Mostrar solo tickets asignados a ti"
+                        }
+                        className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors ${
+                          t.onlyMine
+                            ? "border-[var(--color-accent)]/60 bg-[var(--color-accent)]/15 text-[var(--color-accent)] shadow-sm"
+                            : "border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
+                        }`}
+                      >
+                        <UserCheck size={13} aria-hidden />
+                        Mis tickets
+                      </button>
+                    ) : null}
+                    <Select
                       ref={t.statusFilterSelectRef}
                       value={t.statusFilter}
                       onChange={(e) => t.setStatusFilter(e.target.value as "todos" | TicketStatus)}
-                      className={cn(
-                        ccmgcNativeSelectClassName,
-                        "w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs focus:ring-2 focus:ring-[var(--color-accent)]",
-                      )}
+                      wrapperClassName="w-auto"
+                      className="w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs"
+                      aria-label="Filtrar por estado"
                     >
                       <option value="todos">Todos los estados</option>
                       <option value="abierto">Abierto</option>
                       <option value="en_proceso">En Proceso</option>
                       <option value="esperando_repuesto">Esperando Repuesto</option>
                       <option value="resuelto">Resuelto</option>
-                    </select>
-                    <select
+                    </Select>
+                    <Select
                       value={t.priorityFilter}
                       onChange={(e) => t.setPriorityFilter(e.target.value as "todos" | TicketPriority)}
-                      className={cn(
-                        ccmgcNativeSelectClassName,
-                        "w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs focus:ring-2 focus:ring-[var(--color-accent)]",
-                      )}
+                      wrapperClassName="w-auto"
+                      className="w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs"
                       aria-label="Filtrar por prioridad"
                     >
                       <option value="todos">Todas las prioridades</option>
                       <option value="alta">Prioridad alta</option>
                       <option value="media">Prioridad media</option>
                       <option value="baja">Prioridad baja</option>
-                    </select>
-                    <select
+                    </Select>
+                    <Select
                       value={t.operatorFilter}
                       onChange={(e) => t.setOperatorFilter(e.target.value)}
-                      className={cn(
-                        ccmgcNativeSelectClassName,
-                        "w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs focus:ring-2 focus:ring-[var(--color-accent)]",
-                      )}
+                      wrapperClassName="w-auto"
+                      className="w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs"
+                      aria-label="Filtrar por operadora"
                     >
                       <option value="todas">Todas las operadoras</option>
                       {t.operators.map((op) => (
@@ -488,14 +684,13 @@ export function TicketsModule() {
                           {op}
                         </option>
                       ))}
-                    </select>
-                    <select
+                    </Select>
+                    <Select
                       value={t.busFilter}
                       onChange={(e) => t.setBusFilter(e.target.value)}
-                      className={cn(
-                        ccmgcNativeSelectClassName,
-                        "w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs focus:ring-2 focus:ring-[var(--color-accent)]",
-                      )}
+                      wrapperClassName="w-auto"
+                      className="w-auto !min-h-9 bg-[var(--color-surface-3)] py-1.5 text-xs"
+                      aria-label="Filtrar por bus"
                     >
                       <option value="todas">Todos los buses</option>
                       {t.catalog.map((bus) => (
@@ -503,7 +698,7 @@ export function TicketsModule() {
                           {bus.id}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                   <details
                     className="group w-full md:hidden"
@@ -511,7 +706,9 @@ export function TicketsModule() {
                       const root = e.currentTarget;
                       if (!root.open) return;
                       window.requestAnimationFrame(() => {
-                        root.querySelector<HTMLSelectElement>("select")?.focus();
+                        root
+                          .querySelector<HTMLButtonElement>('button[role="combobox"]')
+                          ?.focus();
                       });
                     }}
                   >
@@ -527,32 +724,49 @@ export function TicketsModule() {
                       />
                     </summary>
                     <div className="mt-2 flex flex-col gap-2">
-                      <select
+                      {t.sessionUser ? (
+                        <button
+                          type="button"
+                          onClick={() => t.setOnlyMine((v) => !v)}
+                          aria-pressed={t.onlyMine}
+                          className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-xs font-medium transition-colors ${
+                            t.onlyMine
+                              ? "border-[var(--color-accent)]/60 bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                              : "border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-text-2)]"
+                          }`}
+                        >
+                          <UserCheck size={14} aria-hidden />
+                          Solo mis tickets
+                        </button>
+                      ) : null}
+                      <Select
                         value={t.statusFilter}
                         onChange={(e) => t.setStatusFilter(e.target.value as "todos" | TicketStatus)}
-                        className={cn(ccmgcNativeSelectClassName, "!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs focus:ring-2 focus:ring-[var(--color-accent)]")}
+                        className="!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs"
+                        aria-label="Filtrar por estado"
                       >
                         <option value="todos">Todos los estados</option>
                         <option value="abierto">Abierto</option>
                         <option value="en_proceso">En Proceso</option>
                         <option value="esperando_repuesto">Esperando Repuesto</option>
                         <option value="resuelto">Resuelto</option>
-                      </select>
-                      <select
+                      </Select>
+                      <Select
                         value={t.priorityFilter}
                         onChange={(e) => t.setPriorityFilter(e.target.value as "todos" | TicketPriority)}
-                        className={cn(ccmgcNativeSelectClassName, "!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs focus:ring-2 focus:ring-[var(--color-accent)]")}
+                        className="!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs"
                         aria-label="Filtrar por prioridad"
                       >
                         <option value="todos">Todas las prioridades</option>
                         <option value="alta">Prioridad alta</option>
                         <option value="media">Prioridad media</option>
                         <option value="baja">Prioridad baja</option>
-                      </select>
-                      <select
+                      </Select>
+                      <Select
                         value={t.operatorFilter}
                         onChange={(e) => t.setOperatorFilter(e.target.value)}
-                        className={cn(ccmgcNativeSelectClassName, "!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs focus:ring-2 focus:ring-[var(--color-accent)]")}
+                        className="!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs"
+                        aria-label="Filtrar por operadora"
                       >
                         <option value="todas">Todas las operadoras</option>
                         {t.operators.map((op) => (
@@ -560,11 +774,12 @@ export function TicketsModule() {
                             {op}
                           </option>
                         ))}
-                      </select>
-                      <select
+                      </Select>
+                      <Select
                         value={t.busFilter}
                         onChange={(e) => t.setBusFilter(e.target.value)}
-                        className={cn(ccmgcNativeSelectClassName, "!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs focus:ring-2 focus:ring-[var(--color-accent)]")}
+                        className="!min-h-10 bg-[var(--color-surface-3)] py-2 text-xs"
+                        aria-label="Filtrar por bus"
                       >
                         <option value="todas">Todos los buses</option>
                         {t.catalog.map((bus) => (
@@ -572,7 +787,7 @@ export function TicketsModule() {
                             {bus.id}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                   </details>
                 </>
@@ -593,6 +808,28 @@ export function TicketsModule() {
               >
                 <Download size={12} aria-hidden />
                 CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Construye la URL del export con los mismos filtros que ve el usuario.
+                  const query = new URLSearchParams();
+                  if (t.statusFilter !== "todos") query.set("status", t.statusFilter);
+                  if (t.priorityFilter !== "todos") query.set("priority", t.priorityFilter);
+                  if (t.operatorFilter !== "todas") query.set("operator", t.operatorFilter);
+                  if (t.busFilter !== "todas") query.set("busId", t.busFilter);
+                  if (t.partCodeFromQuery) query.set("partCode", t.partCodeFromQuery);
+                  if (t.onlyMine) query.set("mine", "1");
+                  const qs = query.toString();
+                  const url = `/api/tickets/export${qs ? `?${qs}` : ""}`;
+                  window.location.assign(url);
+                }}
+                disabled={t.tickets.length === 0}
+                title="Exportar la bandeja (con filtros) a un Excel (.xlsx)"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-2)] transition-all duration-200 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0"
+              >
+                <Download size={12} aria-hidden />
+                Excel
               </button>
               <button
                 type="button"
@@ -619,28 +856,23 @@ export function TicketsModule() {
             </div>
           </div>
 
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs leading-snug text-[var(--color-text-2)]">
-            <span className="min-w-0">
-              <span className="hidden min-[1360px]:inline">
-                Atajos: <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-1)]">/</kbd> estado ·{" "}
-                <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-1)]">N</kbd> nuevo ·{" "}
-                <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-1)]">?</kbd> ayuda ·{" "}
-                <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-1)]">Esc</kbd> cerrar
-              </span>
-              <span className="inline min-[1360px]:hidden">
-                <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[11px]">?</kbd> o botón Atajos (lista completa dentro)
-              </span>
-            </span>
+          <div className="mb-3 flex items-center justify-end">
             <button
               type="button"
               onClick={() => t.setShortcutsOpen((v) => !v)}
-              title="Atajos: / estado, ? ayuda, N nuevo ticket, Escape cerrar."
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)]"
+              title={"Atajos: / filtra estado \u00B7 N nuevo \u00B7 ? ayuda \u00B7 Esc cerrar"}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+                t.shortcutsOpen
+                  ? "border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] text-[var(--color-accent)]"
+                  : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+              )}
               aria-expanded={t.shortcutsOpen}
               aria-controls="tickets-shortcuts-panel"
             >
-              <Keyboard size={14} className="text-[var(--color-text-3)]" aria-hidden />
+              <Keyboard size={11} strokeWidth={1.8} aria-hidden />
               Atajos
+              <kbd className="ml-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-1)] px-1 font-mono text-[9px] text-[var(--color-text-3)]">?</kbd>
             </button>
           </div>
 
@@ -687,56 +919,65 @@ export function TicketsModule() {
             onClearFilters={t.handleClearFilters}
           />
 
+          {/* Operativa secundaria: bloque visual diferenciado del tronco
+            * (bandeja + form). Header con título + divider para separar
+            * jerarquía. */}
+          <div className="mt-6 mb-3 flex items-center gap-3">
+            <span className="text-eyebrow whitespace-nowrap">Operativa secundaria</span>
+            <span className="h-px flex-1 bg-[var(--color-border)]/70" aria-hidden />
+            <span className="hidden text-[10px] uppercase tracking-widest text-[var(--color-text-3)]/70 sm:inline">
+              Contexto del centro
+            </span>
+          </div>
+          {/*
+           * Distribución del contexto operativo:
+           *   - Fila principal: Alertas preventivas + Tareas preventivas, en
+           *     pareja (50/50 en desktop) por ser las dos vistas que todo el
+           *     personal usa a diario.
+           *   - Auditoría: solo visible para `gestor_centro_control`; ocupa el
+           *     ancho completo abajo, porque sus filas son más anchas y se
+           *     beneficia de hacerse panorámica.
+           */}
           <div className="mb-4 grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2 md:items-stretch">
-            <div className="flex min-h-[min(220px,32vh)] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-border-hover)] hover:shadow-md md:min-h-[240px]">
-              <p className="mb-3 flex h-9 shrink-0 items-center gap-1.5 text-label text-[var(--color-text-2)]">
-                <PackageSearch size={14} className="text-[var(--color-text-3)]" aria-hidden />
-                Inventario
-              </p>
-              <div className="min-h-0 flex-1 max-h-52 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
-                <InventoryPanel items={t.inventorySummary} />
-              </div>
-            </div>
-
-            <div className="flex min-h-[min(220px,32vh)] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-border-hover)] hover:shadow-md md:min-h-[240px]">
-              <p className="mb-3 flex h-9 min-h-9 shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-label text-[var(--color-text-2)]">
-                <ClipboardList size={14} className="text-[var(--color-text-3)]" aria-hidden />
-                Auditoría reciente
-                {t.auditEvents.length > 0 ? (
-                  <span className="ml-auto text-[10px] font-normal text-[var(--color-text-3)]">
-                    {t.auditEvents.length} evento{t.auditEvents.length === 1 ? "" : "s"} recientes
+            {/* Alertas preventivas */}
+            <div className="flex min-h-[min(220px,32vh)] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-[var(--color-border-hover)] hover:shadow-md md:min-h-[260px]">
+              <div className="mb-3 flex shrink-0 items-center gap-2.5">
+                <span
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1",
+                    t.maintenanceAlerts.length > 0
+                      ? "bg-[var(--color-warning-light)] text-[var(--color-warning)] ring-[var(--color-warning)]/25"
+                      : "bg-[var(--color-success-light)] text-[var(--color-success)] ring-[var(--color-success)]/25",
+                  )}
+                >
+                  <AlertTriangle size={13} strokeWidth={1.7} aria-hidden />
+                </span>
+                <h4 className="text-[13px] font-semibold text-[var(--color-text-1)]">Alertas preventivas</h4>
+                {t.maintenanceAlerts.length > 0 ? (
+                  <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--color-warning-light)] px-1.5 text-[10px] font-semibold text-[var(--color-warning)]">
+                    {t.maintenanceAlerts.length}
                   </span>
                 ) : null}
-              </p>
-              <div className="relative min-h-0 flex-1">
-                <div className="max-h-52 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
-                  <AuditPanel events={t.auditEvents} />
-                </div>
-                {t.auditEvents.length > 3 ? (
-                  <div
-                    className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[var(--color-surface-2)] via-[var(--color-surface-2)]/80 to-transparent"
-                    aria-hidden
-                  />
-                ) : null}
               </div>
-            </div>
-
-            <div className="flex min-h-[min(220px,32vh)] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-border-hover)] hover:shadow-md md:min-h-[240px]">
-              <p className="mb-3 flex h-9 shrink-0 items-center gap-1.5 text-label text-[var(--color-text-2)]">
-                <AlertTriangle size={14} className="text-[var(--color-text-3)]" aria-hidden />
-                Alertas preventivas
-              </p>
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
                 <MaintenanceAlertsPanel alerts={t.maintenanceAlerts} onCreateTask={t.handleCreatePreventiveTask} />
               </div>
             </div>
 
-            <div className="flex min-h-[min(220px,32vh)] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-border-hover)] hover:shadow-md md:min-h-[240px]">
-              <p className="mb-3 flex h-9 shrink-0 items-center gap-1.5 text-label text-[var(--color-text-2)]">
-                <CalendarCheck size={14} className="text-[var(--color-text-3)]" aria-hidden />
-                Tareas preventivas
-              </p>
-              <p className="mb-3 shrink-0 text-[10px] text-[var(--color-text-3)]">
+            {/* Tareas preventivas */}
+            <div className="flex min-h-[min(220px,32vh)] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-[var(--color-border-hover)] hover:shadow-md md:min-h-[240px]">
+              <div className="mb-1 flex shrink-0 items-center gap-2.5">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/20">
+                  <CalendarCheck size={13} strokeWidth={1.7} aria-hidden />
+                </span>
+                <h4 className="text-[13px] font-semibold text-[var(--color-text-1)]">Tareas preventivas</h4>
+                {t.preventiveTasks.length > 0 ? (
+                  <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--color-surface)] px-1.5 text-[10px] font-semibold text-[var(--color-text-2)]">
+                    {t.preventiveTasks.length}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mb-3 ml-[2.375rem] shrink-0 text-[10px] text-[var(--color-text-3)]">
                 Mantenimiento programado y seguimiento por bus / activo.
               </p>
               <div className="min-h-0 flex-1 max-h-[min(320px,42vh)] space-y-2 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
@@ -816,7 +1057,7 @@ export function TicketsModule() {
                     )}
                     {t.role === "gestor_centro_control" && (
                       <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto]">
-                        <select
+                        <Select
                           value={t.taskPlans[task.id]?.assignedToUserId ?? ""}
                           onChange={(event) =>
                             t.setTaskPlans((prev) => ({
@@ -827,10 +1068,9 @@ export function TicketsModule() {
                               },
                             }))
                           }
-                          className={cn(
-                            ccmgcNativeSelectClassName,
-                            "!min-h-9 rounded-md px-2 py-1.5 text-[11px] focus:ring-2 focus:ring-[var(--color-accent)]",
-                          )}
+                          className="!min-h-9 rounded-md px-2 py-1.5 text-[11px]"
+                          placeholder="Asignar tecnico"
+                          aria-label="Asignar tecnico"
                         >
                           <option value="">Asignar tecnico</option>
                           {t.technicians.map((technician) => (
@@ -838,7 +1078,7 @@ export function TicketsModule() {
                               {technician.name}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                         <input
                           type="datetime-local"
                           value={t.taskPlans[task.id]?.scheduledAt ?? ""}
@@ -868,12 +1108,54 @@ export function TicketsModule() {
                     icon={CalendarCheck}
                     title="Sin tareas preventivas activas"
                     hint="No hay mantenimientos programados."
-                    iconSize={36}
+                    iconSize={26}
                   />
                 )}
               </div>
             </div>
           </div>
+
+          {/*
+           * Auditoría reciente: panel reservado a gestores del centro. Va
+           * full-width abajo porque sus filas (actor + acción + detalle +
+           * fecha relativa) son largas y se benefician de ancho extra.
+           */}
+          {t.role === "gestor_centro_control" ? (
+            <div className="mb-4 flex min-h-[14rem] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-[var(--color-border-hover)] hover:shadow-md">
+              <div className="mb-3 flex shrink-0 items-center gap-2.5">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-3)] text-[var(--color-text-2)] ring-1 ring-[var(--color-border)]">
+                  <ClipboardList size={13} strokeWidth={1.7} aria-hidden />
+                </span>
+                <h4 className="text-[13px] font-semibold text-[var(--color-text-1)]">Auditoría reciente</h4>
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-[var(--color-text-3)]"
+                  title="Sólo visible para gestores del centro de control"
+                >
+                  <Lock size={9} strokeWidth={1.8} aria-hidden />
+                  Gestor
+                </span>
+                {t.auditEvents.length > 0 ? (
+                  <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--color-surface)] px-1.5 text-[10px] font-semibold text-[var(--color-text-2)]">
+                    {t.auditEvents.length}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mb-3 text-[10.5px] text-[var(--color-text-3)]">
+                Trazabilidad del centro: cambios de ticket, accesos y operaciones recientes.
+              </p>
+              <div className="relative min-h-0 flex-1">
+                <div className="max-h-72 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
+                  <AuditPanel events={t.auditEvents} />
+                </div>
+                {t.auditEvents.length > 5 ? (
+                  <div
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[var(--color-surface-2)] via-[var(--color-surface-2)]/80 to-transparent"
+                    aria-hidden
+                  />
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </motion.article>
       </section>
 
@@ -886,6 +1168,23 @@ export function TicketsModule() {
           t.setAssignTarget(ticketId);
           t.setAssignTechnicianId(currentTechnicianId ?? "");
           t.setActionMenuTicketId(null);
+        }}
+        onOpenDelete={(ticketId, ticketTitle) => {
+          t.setDeleteTarget({ id: ticketId, title: ticketTitle });
+          t.setActionMenuTicketId(null);
+        }}
+      />
+
+      <DeleteTicketDialog
+        ticketId={t.deleteTarget?.id ?? null}
+        ticketLabel={
+          t.deleteTarget
+            ? `#${t.deleteTarget.id.slice(-8).toUpperCase()} · ${t.deleteTarget.title}`
+            : undefined
+        }
+        onClose={() => t.setDeleteTarget(null)}
+        onDeleted={() => {
+          void t.handleTicketDeleted();
         }}
       />
 
@@ -914,11 +1213,11 @@ export function TicketsModule() {
                 <label className="mt-4 block text-xs font-medium text-[var(--color-text-2)]" htmlFor="assign-tech-select">
                   Técnico
                 </label>
-                <select
+                <Select
                   id="assign-tech-select"
                   value={t.assignTechnicianId}
                   onChange={(event) => t.setAssignTechnicianId(event.target.value)}
-                  className={cn(ccmgcNativeSelectClassName, "mt-1.5 w-full")}
+                  wrapperClassName="mt-1.5"
                 >
                   <option value="">Sin asignar</option>
                   {t.technicians.map((technician) => (
@@ -926,7 +1225,7 @@ export function TicketsModule() {
                       {technician.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <div className="mt-5 flex justify-end gap-2">
                   <Button
                     type="button"

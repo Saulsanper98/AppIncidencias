@@ -88,6 +88,61 @@ export function adminUsersCopy(locale: AdminLocale) {
     errorLoad: en ? "Could not load administration module." : "No se pudo cargar el módulo de administración.",
     errorClose: en ? "Close error message" : "Cerrar mensaje de error",
     roleLabel: (r: UserRole) => userRoleLabel(r, locale),
+    // ----- Nueva funcionalidad: editar, eliminar, reset contraseña, aviso rol, CSV -----
+    editAction: en ? "Edit" : "Editar",
+    deleteAction: en ? "Delete" : "Eliminar",
+    resetPasswordAction: en ? "Reset password" : "Restablecer contraseña",
+    moreActions: en ? "More actions" : "Más acciones",
+    editDialogTitle: en ? "Edit user" : "Editar usuario",
+    editDialogSave: en ? "Save changes" : "Guardar cambios",
+    deleteDialogTitle: en ? "Delete user permanently?" : "¿Eliminar usuario permanentemente?",
+    deleteDialogBody: (name: string) =>
+      en
+        ? `${name} will be removed and cannot recover their account. Audit history is preserved (user reference becomes null). This action cannot be undone.`
+        : `${name} será eliminado y no podrá recuperar su cuenta. El historial de auditoría se conserva (la referencia al usuario queda en blanco). Esta acción no se puede deshacer.`,
+    confirmDelete: en ? "Delete permanently" : "Eliminar definitivamente",
+    resetDialogTitle: en ? "Reset password" : "Restablecer contraseña",
+    resetDialogBody: (name: string) =>
+      en
+        ? `Generate a new temporary password for ${name}. It will be shown only once and ${name} must change it at next sign-in.`
+        : `Genera una nueva contraseña temporal para ${name}. Solo se mostrará una vez y ${name} tendrá que cambiarla al iniciar sesión.`,
+    confirmReset: en ? "Generate and show" : "Generar y mostrar",
+    initialPasswordTitle: en ? "Temporary password generated" : "Contraseña temporal generada",
+    initialPasswordBody: (name: string) =>
+      en
+        ? `Communicate this password to ${name} via a secure channel. It will not be shown again.`
+        : `Comunica esta contraseña a ${name} por un canal seguro. No se volverá a mostrar.`,
+    copyPassword: en ? "Copy password" : "Copiar contraseña",
+    passwordCopied: en ? "Password copied." : "Contraseña copiada.",
+    close: en ? "Close" : "Cerrar",
+    optionalPasswordLabel: en ? "Initial password (optional)" : "Contraseña inicial (opcional)",
+    optionalPasswordHint: en
+      ? "Leave empty to generate a random temporary password."
+      : "Déjalo vacío para generar una contraseña temporal aleatoria.",
+    minPasswordHint: en ? "At least 10 chars, letters and digits." : "Mínimo 10 caracteres, letras y dígitos.",
+    forceChangeLabel: en ? "Force change at next sign-in" : "Forzar cambio en el próximo inicio de sesión",
+    confirmRoleGestorTitle: en ? "Grant manager role?" : "¿Otorgar rol gestor?",
+    confirmRoleGestorBody: (name: string) =>
+      en
+        ? `${name} will be able to manage users and the whole catalog. Only grant this role to control-center managers.`
+        : `${name} podrá gestionar usuarios y el catálogo completo. Solo asigna este rol a responsables del centro de control.`,
+    confirmRoleGestorAccept: en ? "Yes, grant manager role" : "Sí, otorgar rol gestor",
+    importCsvCta: en ? "Import CSV" : "Importar CSV",
+    importDialogTitle: en ? "Bulk import users from CSV" : "Importar usuarios desde CSV",
+    importDialogHint: en
+      ? "Required columns: name, email, role. Role accepts: conductor, tecnico_campo, gestor_centro_control."
+      : "Columnas requeridas: name, email, role. El rol acepta: conductor, tecnico_campo, gestor_centro_control.",
+    importPickFile: en ? "Choose CSV file" : "Elegir fichero CSV",
+    importRunCta: en ? "Import" : "Importar",
+    importRowsDetected: (n: number) =>
+      en ? `${n} rows detected.` : `${n} filas detectadas.`,
+    importResultsTitle: en ? "Import results" : "Resultado de la importación",
+    importStat: (label: string, n: number) => `${label}: ${n}`,
+    importDownloadCsv: en ? "Download passwords (CSV)" : "Descargar contraseñas (CSV)",
+    badgeNoPassword: en ? "No password set" : "Sin contraseña asignada",
+    badgeMustChange: en ? "Must change at next login" : "Debe cambiar al entrar",
+    colLastLogin: en ? "Last sign-in" : "Último acceso",
+    never: en ? "Never" : "Nunca",
   };
 }
 

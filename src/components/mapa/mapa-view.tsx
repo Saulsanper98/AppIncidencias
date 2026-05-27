@@ -15,6 +15,7 @@ import {
   PanelLeftClose,
   RefreshCw,
   SlidersHorizontal,
+  Timer,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -1321,75 +1322,95 @@ export function MapaView() {
   return (
     <div className={cn("flex h-full min-h-0 w-full min-w-0 flex-1 flex-col", mapaMuro ? "gap-2" : "gap-3")}>
       {!mapaMuro ? (
-      <header className="shrink-0 border-b border-[var(--color-border)] pb-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex flex-wrap items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/15">
-                <MapPinned size={18} className="text-[var(--color-accent)]" aria-hidden />
+      <header className="relative shrink-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/25 p-4 shadow-sm">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
+        />
+        <div className="relative flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/20">
+              <MapPinned size={18} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-3)]">
+                <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold text-[var(--color-text-3)]">
+                  CCMGC
+                </span>
+                Vista operativa
               </div>
-              <h1 className="flex items-center gap-2 text-heading">
+              <h1 className="mt-0.5 flex items-center gap-2 text-[20px] font-semibold tracking-tight text-[var(--color-text-1)]">
                 Mapa operativo
-                {data ? (
-                  <span className="text-base font-normal text-[var(--color-text-3)]">· {nVisible} en vista</span>
-                ) : null}
                 <FeedbackTargetButton id="mapa/vista-operativa" label="Mapa operativo de incidencias" />
               </h1>
-            </div>
-            <p className="hidden max-w-2xl text-pretty text-body text-[var(--color-text-2)] sm:block sm:pl-11">
-              Incidencias por municipio del bus (aprox.) o coordenadas GPS si el ticket las tiene. Clic en marcador o
-              lista para centrar;{" "}
-              <span className="whitespace-nowrap" title="Datos aproximados cuando no hay GPS">
-                <abbr className="cursor-help underline decoration-dotted">aprox.</abbr>
-              </span>{" "}
-              por agrupación municipal.
-            </p>
-            <p className="mt-1 pl-11 text-caption text-[var(--color-text-3)] sm:hidden">
-              Municipio o GPS; toca marcador o fila de la lista.
-            </p>
-            <p className="mt-2 text-caption text-[var(--color-text-3)] sm:pl-11">{filterSummary}</p>
-            {data ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2 sm:pl-11">
-                {urgentCount > 0 ? (
-                  <span className="order-first rounded-full border border-[var(--color-error)]/50 bg-[var(--color-error-light)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-error)] shadow-[0_0_0_1px_rgba(220,38,38,0.15)]">
-                    Urgentes / SLA: {urgentCount}
+              <p className="mt-0.5 hidden max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)] sm:block">
+                Incidencias por municipio del bus (
+                <span className="whitespace-nowrap" title="Datos aproximados cuando no hay GPS">
+                  <abbr className="cursor-help underline decoration-dotted">aprox.</abbr>
+                </span>
+                ) o coordenadas GPS si el ticket las tiene. Pulsa un marcador o una fila para centrar.
+              </p>
+              <p className="mt-0.5 text-[11.5px] text-[var(--color-text-3)] sm:hidden">
+                Municipio o GPS; toca marcador o fila de la lista.
+              </p>
+              {data ? (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {urgentCount > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-error-light)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-error)] ring-1 ring-[var(--color-error)]/30">
+                      <span className="num-tabular text-[12px] font-bold">{urgentCount}</span>
+                      <span className="uppercase tracking-wide opacity-80">Urgentes / SLA</span>
+                    </span>
+                  ) : null}
+                  <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10.5px] font-medium text-[var(--color-text-2)] ring-1 ring-[var(--color-border)]">
+                    <span className="num-tabular text-[12px] font-semibold text-[var(--color-text-1)]">{nVisible}</span>
+                    <span className="uppercase tracking-wide opacity-80">En mapa</span>
                   </span>
-                ) : null}
-                <span className="rounded-full border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/80 px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-3)]">
-                  Mapa: {nVisible} ticket{nVisible === 1 ? "" : "s"}
-                </span>
-                <span className="rounded-full border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/80 px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-3)]">
-                  Lista: {sortedFilteredList.length}
-                  {listSearch.trim() ? " (búsqueda local)" : ""}
-                </span>
-              </div>
-            ) : null}
+                  <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10.5px] font-medium text-[var(--color-text-2)] ring-1 ring-[var(--color-border)]">
+                    <span className="num-tabular text-[12px] font-semibold text-[var(--color-text-1)]">{sortedFilteredList.length}</span>
+                    <span className="uppercase tracking-wide opacity-80">
+                      En lista{listSearch.trim() ? "*" : ""}
+                    </span>
+                  </span>
+                  <span className="hidden text-[10.5px] text-[var(--color-text-3)] sm:inline">
+                    {"\u00B7"} {filterSummary}
+                  </span>
+                </div>
+              ) : null}
+            </div>
           </div>
-          <div className="relative flex flex-wrap items-center gap-2">
-            <Button
+          <div className="relative flex shrink-0 flex-wrap items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] p-1 shadow-sm">
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              className="min-h-[44px] gap-2 px-2 text-[var(--color-text-2)] hover:text-[var(--color-text-1)]"
               onClick={() => setPresentationMode((v) => !v)}
               title={presentationMode ? "Mostrar panel lateral" : "Solo mapa (oculta panel)"}
+              aria-pressed={presentationMode}
+              className={cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors",
+                presentationMode
+                  ? "bg-[var(--color-accent-light)] text-[var(--color-accent)]"
+                  : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+              )}
             >
-              <PanelLeftClose size={18} className={cn(presentationMode && "text-[var(--color-accent)]")} aria-hidden />
+              <PanelLeftClose size={14} strokeWidth={1.7} aria-hidden />
               <span className="hidden sm:inline">{presentationMode ? "Panel" : "Enfoque"}</span>
-            </Button>
+            </button>
+            <span aria-hidden className="h-5 w-px shrink-0 bg-[var(--color-border)]" />
             <div className="relative" data-map-shortcuts>
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className="min-h-[44px] px-2 text-[var(--color-text-2)] hover:text-[var(--color-text-1)]"
-                aria-expanded={shortcutsOpen}
                 onClick={() => setShortcutsOpen((o) => !o)}
+                aria-expanded={shortcutsOpen}
                 title="Atajos de teclado"
+                className={cn(
+                  "inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition-colors",
+                  shortcutsOpen
+                    ? "bg-[var(--color-accent-light)] text-[var(--color-accent)]"
+                    : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+                )}
               >
-                <HelpCircle size={18} aria-hidden />
+                <HelpCircle size={14} strokeWidth={1.7} aria-hidden />
                 <span className="sr-only">Atajos</span>
-              </Button>
+              </button>
               {shortcutsOpen ? (
                 <div
                   className="absolute right-0 top-[calc(100%+6px)] z-[80] w-[min(100vw-2rem,18rem)] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-[12px] text-[var(--color-text-2)] shadow-xl"
@@ -1407,12 +1428,13 @@ export function MapaView() {
                 </div>
               ) : null}
             </div>
+            <span aria-hidden className="h-5 w-px shrink-0 bg-[var(--color-border)]" />
             <Link
               href={ticketsHref}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-accent-light)] px-3 py-2 text-sm font-medium text-[var(--color-text-1)] transition-all duration-200 hover:bg-[var(--color-surface-2)]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-2.5 text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
             >
-              <ExternalLink size={14} aria-hidden />
-              Ir a bandeja
+              <ExternalLink size={13} strokeWidth={1.7} aria-hidden />
+              <span className="hidden sm:inline">Ir a bandeja</span>
             </Link>
           </div>
         </div>
@@ -1607,34 +1629,42 @@ export function MapaView() {
                 <ul className="divide-y divide-[var(--color-border)]" role="listbox" aria-label="Tickets en el mapa">
                   {sortedFilteredList.map((t) => {
                     const slaOver = new Date(t.slaDeadline).getTime() < Date.now();
+                    const isSelected = selectedId === t.id;
+                    const isHover = highlightTicketId === t.id;
+                    const priColor =
+                      t.priority === "alta"
+                        ? "var(--color-error)"
+                        : t.priority === "media"
+                          ? "var(--color-warning)"
+                          : "var(--color-success)";
                     return (
                       <li key={t.id}>
                         <button
                           type="button"
                           role="option"
-                          aria-selected={selectedId === t.id}
+                          aria-selected={isSelected}
                           ref={(el) => {
                             if (el) listItemRefs.current.set(t.id, el);
                             else listItemRefs.current.delete(t.id);
                           }}
                           onMouseEnter={() => setHighlightTicketId(t.id)}
                           onClick={() => setSelectedId(t.id)}
+                          style={{
+                            borderLeftColor: isSelected
+                              ? "var(--color-accent)"
+                              : isHover
+                                ? priColor
+                                : priColor,
+                            borderLeftWidth: isSelected || isHover ? (mapaMuro ? 4 : 3) : mapaMuro ? 4 : 2,
+                            borderLeftStyle: "solid",
+                            opacity: isSelected || isHover ? 1 : undefined,
+                          }}
                           className={cn(
-                            "flex w-full flex-col gap-1 text-left transition-colors hover:bg-[var(--color-surface-2)]",
+                            "flex w-full flex-col gap-1 text-left transition-all hover:bg-[var(--color-surface-2)]",
                             mapaMuro
                               ? "gap-2.5 px-5 py-6 text-xl lg:gap-3 lg:px-6 lg:py-8 lg:text-2xl min-[2200px]:lg:px-8 min-[2200px]:lg:py-10 min-[2200px]:lg:text-3xl"
                               : "gap-1 px-3 py-2.5 text-sm",
-                            selectedId === t.id
-                              ? cn(
-                                  "border-l-[var(--color-accent)] bg-[var(--color-accent-light)]/45",
-                                  mapaMuro ? "border-l-4" : "border-l-2",
-                                )
-                              : highlightTicketId === t.id
-                                ? cn(
-                                    "border-l-sky-400/60 bg-sky-500/10",
-                                    mapaMuro ? "border-l-4" : "border-l-2",
-                                  )
-                                : cn("border-l-transparent", mapaMuro ? "border-l-4" : "border-l-2"),
+                            isSelected && "bg-[var(--color-accent-light)]/45",
                           )}
                         >
                           <div className={cn("flex flex-wrap items-center", mapaMuro ? "gap-2 lg:gap-2.5" : "gap-1.5 lg:gap-2")}>
@@ -1673,10 +1703,14 @@ export function MapaView() {
                             {slaOver ? (
                               <span
                                 className={cn(
-                                  "font-bold text-[var(--color-error)]",
-                                  mapaMuro ? "text-base lg:text-lg min-[2200px]:lg:text-xl" : "text-[10px]",
+                                  "inline-flex items-center gap-1 rounded-md bg-[var(--color-error-light)] px-1.5 py-0.5 font-bold text-[var(--color-error)] ring-1 ring-[var(--color-error)]/30",
+                                  mapaMuro
+                                    ? "text-base lg:text-lg min-[2200px]:lg:text-xl"
+                                    : "text-[10px]",
                                 )}
+                                title="Plazo de SLA vencido"
                               >
+                                <Timer size={mapaMuro ? 14 : 10} strokeWidth={2} aria-hidden />
                                 SLA vencido
                               </span>
                             ) : null}

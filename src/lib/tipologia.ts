@@ -29,6 +29,7 @@ export const TIPOLOGIA_CSV: TipologiaItem[] = [
   { tipo: "Estado general", subtipo: "Software", subsubtipo: "Hora atrasada", dominio: "Sistema", nivelImpacto: "Bajo", origenTecnico: "Configuracion", observaciones: "" },
   { tipo: "Comunicaciones", subtipo: "Informativo", subsubtipo: "Alarma Comunicaciones", dominio: "Comunicaciones", nivelImpacto: "Bajo", origenTecnico: "Red", observaciones: "" },
   { tipo: "Comunicaciones", subtipo: "Informativo", subsubtipo: "Alarma Paquetes", dominio: "Comunicaciones", nivelImpacto: "Bajo", origenTecnico: "Red", observaciones: "" },
+  { tipo: "Comunicaciones", subtipo: "Informativo", subsubtipo: "Paneles", dominio: "Comunicaciones", nivelImpacto: "Medio", origenTecnico: "Hardware", observaciones: "" },
   { tipo: "Comunicaciones", subtipo: "No comunica", subsubtipo: "Vehiculo no comunica", dominio: "Comunicaciones", nivelImpacto: "Alto", origenTecnico: "Red", observaciones: "" },
   { tipo: "Comunicaciones", subtipo: "No comunica", subsubtipo: "Fonia sin comunicacion", dominio: "Comunicaciones", nivelImpacto: "Medio", origenTecnico: "Red", observaciones: "" },
   { tipo: "Comunicaciones", subtipo: "Reset", subsubtipo: "Reset router", dominio: "Comunicaciones", nivelImpacto: "Medio", origenTecnico: "Red", observaciones: "" },
@@ -62,8 +63,29 @@ export const TIPOLOGIA_CSV: TipologiaItem[] = [
   { tipo: "Desvios", subtipo: "No configurado", subsubtipo: "Desvio no cargado", dominio: "Itinerario", nivelImpacto: "Alto", origenTecnico: "Datos", observaciones: "" },
   { tipo: "Desvios", subtipo: "Activo incorrecto", subsubtipo: "Desvio fuera de horario", dominio: "Itinerario", nivelImpacto: "Medio", origenTecnico: "Datos", observaciones: "" },
   { tipo: "Desvios", subtipo: "Impacto en localizacion", subsubtipo: "Cambio automatico de linea", dominio: "Itinerario", nivelImpacto: "Alto", origenTecnico: "Sistema", observaciones: "" },
+  /*
+   * Catch-all "Generica": el usuario lo elige cuando ninguna fila previa
+   * encaja con lo que ve. La UI fuerza estos valores en `subtipo` y
+   * `subsubtipo` para que no haya que rellenarlos a mano (la descripcion
+   * del campo "Detalle" pasa a ser la fuente principal de informacion).
+   */
+  { tipo: "Generica", subtipo: "Generica", subsubtipo: "Incidencia generica", dominio: "General", nivelImpacto: "Medio", origenTecnico: "Otros", observaciones: "Caso no contemplado en el cuadro de tipologias." },
 ];
+
+/** Etiquetas estables para la opcion "Generica" (catch-all). */
+export const GENERIC_TIPO = "Generica";
+export const GENERIC_SUBTIPO = "Generica";
+export const GENERIC_SUBSUBTIPO = "Incidencia generica";
 
 export function findTipologiaBySubsubtipo(subsubtipo: string) {
   return TIPOLOGIA_CSV.find((item) => item.subsubtipo === subsubtipo) ?? null;
+}
+
+/** Devuelve la fila completa de la opcion "Generica" (siempre existe). */
+export function getGenericTipologia(): TipologiaItem {
+  const item = TIPOLOGIA_CSV.find((t) => t.subsubtipo === GENERIC_SUBSUBTIPO);
+  if (!item) {
+    throw new Error("Tipologia 'Generica' no esta definida en TIPOLOGIA_CSV.");
+  }
+  return item;
 }

@@ -32,6 +32,8 @@ type LocalUser = {
   name: string;
   email: string;
   role: UserRole;
+  avatarUrl?: string | null;
+  position?: string | null;
 };
 
 type ErrorSource = "bootstrap" | "login";
@@ -109,7 +111,9 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
     () =>
       users.map((u) => ({
         value: u.id,
-        label: `${u.name} (${userRoleLabel(u.role, locale)})`,
+        label: u.name,
+        secondary: u.position?.trim() || userRoleLabel(u.role, locale),
+        avatarUrl: u.avatarUrl ?? null,
       })),
     [users, locale],
   );
@@ -123,6 +127,12 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [announce, setAnnounce] = useState("");
   const [flashWelcome, setFlashWelcome] = useState<string | null>(null);
+
+  // Estado del campo de contraseña. El email ya no se introduce: el usuario
+  // elige su nombre/avatar del selector y solo escribe la contraseña.
+  const [passwordInput, setPasswordInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   const userPickerTriggerRef = useRef<HTMLButtonElement>(null);
   const primaryRef = useRef<HTMLButtonElement>(null);
@@ -160,13 +170,8 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
       setSessionUser(null);
     }
 
-    if (!devSelector) {
-      setUsers([]);
-      setSelectedUserId("");
-      setReady(true);
-      return;
-    }
-
+    // Cargamos siempre la lista de usuarios: el login en LAN es modo selector +
+    // contraseña para todos los roles.
     const now = Date.now();
     let usersList: LocalUser[];
     if (usersModuleCache && now - usersModuleCache.fetchedAt < USERS_TTL_MS) {
@@ -208,7 +213,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
     }
 
     setReady(true);
-  }, [devSelector, locale, t]);
+  }, [locale, t]);
 
   useEffect(() => {
     void loadBootstrap();
@@ -224,23 +229,21 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
       primaryRef.current?.focus();
       return;
     }
-    if (devSelector && users.length > 0) {
-      userPickerTriggerRef.current?.focus();
-      return;
-    }
-    if (devSelector && users.length === 0) {
+    if (users.length === 0) {
       emptyListRetryRef.current?.focus();
       return;
     }
-    if (!devSelector) {
-      langEsRef.current?.focus();
+    // Con el selector cargado, el foco va directo al campo de contraseña: el
+    // usuario más habitual ya está autoseleccionado, solo le falta escribir.
+    if (!devSelector || selectedUserId) {
+      passwordInputRef.current?.focus();
       return;
     }
-    primaryRef.current?.focus();
-  }, [ready, sessionUser, devSelector, users.length, loggingIn, flashWelcome, error]);
+    userPickerTriggerRef.current?.focus();
+  }, [ready, sessionUser, devSelector, users.length, loggingIn, flashWelcome, error, selectedUserId]);
 
   const persistLastDevUser = (userId: string) => {
-    if (!devSelector) return;
+    if (!userId) return;
     try {
       localStorage.setItem(LAST_DEV_USER_KEY, userId);
     } catch {
@@ -249,17 +252,31 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
   };
 
   const handleLogin = async () => {
-    if (!devSelector || !selectedUserId || loggingIn) return;
+    if (!selectedUserId || loggingIn) return;
+    const password = passwordInput;
+    // En modo dev (selector sin contraseña) se permite enviar sin password.
+    // Fuera de ese modo, el backend exige contraseña: bloqueamos en cliente.
+    if (!devSelector && !password) {
+      setError(t.errorPasswordRequired);
+      setErrorSource("login");
+      return;
+    }
     trackLoginEvent("click_login", { locale, devSelector, nextPath });
     setError(null);
     setErrorSource(null);
     setLoggingIn(true);
     persistLastDevUser(selectedUserId);
 
-    const result = await fetchJsonWithTimeout<{ authenticated: boolean; user: SessionUser }>("/api/auth/session", {
+    const body: Record<string, string> = { userId: selectedUserId };
+    if (password) body.password = password;
+
+    const result = await fetchJsonWithTimeout<{
+      authenticated: boolean;
+      user: SessionUser & { mustChangePassword?: boolean };
+    }>("/api/auth/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: selectedUserId }),
+      body: JSON.stringify(body),
       timeoutMs: 12_000,
     });
 
@@ -267,18 +284,32 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
 
     if (!result.ok) {
       const apiMsg = parseApiMessage(result.message);
-      setError(apiMsg ?? loginErrorMessage(locale, result.kind, t));
+      if (result.kind === "unauthorized") {
+        setError(apiMsg ?? t.errorInvalidCredentials);
+      } else {
+        setError(apiMsg ?? loginErrorMessage(locale, result.kind, t));
+      }
       setErrorSource("login");
       trackLoginEvent("login_error_kind", { kind: result.kind, locale, devSelector, nextPath });
       return;
     }
 
     setSessionUser(result.data.user);
+    setPasswordInput("");
     trackLoginEvent("login_success", { locale, devSelector, nextPath, authenticated: true });
     const name = result.data.user.name;
-    setFlashWelcome(t.welcomeBack(name));
     setAnnounce(t.sessionStarted(name));
     playOptionalLoginSuccessChime();
+
+    if (result.data.user.mustChangePassword) {
+      const dest = nextPath
+        ? `/account/cambiar-password?next=${encodeURIComponent(nextPath)}`
+        : "/account/cambiar-password";
+      window.setTimeout(() => router.push(dest), 120);
+      return;
+    }
+
+    setFlashWelcome(t.welcomeBack(name));
     const dest = nextPath ?? "/dashboard";
     window.setTimeout(() => {
       router.push(dest);
@@ -458,63 +489,88 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
             ) : null}
           </div>
 
-          {!devSelector ? (
-            <div
-              role="status"
-              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-4 text-body leading-relaxed text-[var(--color-text-2)]"
-            >
-              <p className="font-medium text-[var(--color-text-1)]">{t.ssoTitle}</p>
-              <p className="mt-2">{t.ssoBody}</p>
-              <p className="mt-2 text-caption text-[var(--color-text-3)]">{t.ssoSupport}</p>
-            </div>
-          ) : sessionUser ? null : (
+          {sessionUser ? null : (
             <div className="flex w-full flex-col items-center text-center">
-              <div className="w-full max-w-md space-y-3">
-                <label
-                  htmlFor="login-user-select"
-                  className="block text-balance text-label tracking-wide text-[var(--color-text-3)]"
-                >
-                  {t.labelUser}
-                </label>
-                {!ready && users.length === 0 ? (
-                  <div
-                    className="h-12 w-full rounded-lg bg-[var(--color-surface-2)] motion-safe:animate-pulse"
-                    aria-hidden
-                  />
-                ) : users.length === 0 && !error ? (
-                  <div
-                    role="status"
-                    className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 p-4 text-center"
+              <div className="w-full max-w-md space-y-4 text-left">
+                {/* === Selector de usuario === */}
+                <div>
+                  <label
+                    htmlFor="login-user-select"
+                    className="mb-1.5 block text-label tracking-wide text-[var(--color-text-3)]"
                   >
-                    <p className="text-subheading text-balance text-[var(--color-text-1)]">{t.emptyUsersTitle}</p>
-                    <p className="mt-2 text-body text-pretty text-[var(--color-text-2)]">{t.emptyUsersBody}</p>
-                    <Button
-                      ref={emptyListRetryRef}
-                      type="button"
-                      variant="secondary"
-                      className="mt-4 w-full"
-                      onClick={handleRetryEmptyList}
+                    {t.labelUser}
+                  </label>
+                  {!ready && users.length === 0 ? (
+                    <div
+                      className="h-12 w-full rounded-lg bg-[var(--color-surface-2)] motion-safe:animate-pulse"
+                      aria-hidden
+                    />
+                  ) : users.length === 0 && !error ? (
+                    <div
+                      role="status"
+                      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 p-4 text-center"
                     >
-                      {t.retry}
-                    </Button>
+                      <p className="text-subheading text-balance text-[var(--color-text-1)]">{t.emptyUsersTitle}</p>
+                      <p className="mt-2 text-body text-pretty text-[var(--color-text-2)]">{t.emptyUsersBody}</p>
+                      <Button
+                        ref={emptyListRetryRef}
+                        type="button"
+                        variant="secondary"
+                        className="mt-4 w-full"
+                        onClick={handleRetryEmptyList}
+                      >
+                        {t.retry}
+                      </Button>
+                    </div>
+                  ) : users.length === 0 ? null : (
+                    <LoginUserListbox
+                      ref={userPickerTriggerRef}
+                      id="login-user-select"
+                      value={selectedUserId}
+                      options={loginUserOptions}
+                      onChange={(v) => {
+                        setSelectedUserId(v);
+                        persistLastDevUser(v);
+                      }}
+                      aria-describedby="login-user-hint"
+                    />
+                  )}
+                </div>
+
+                {/* === Campo contraseña === */}
+                {users.length > 0 ? (
+                  <div>
+                    <label
+                      htmlFor="login-password"
+                      className="mb-1.5 block text-label tracking-wide text-[var(--color-text-3)]"
+                    >
+                      {t.fieldPasswordLabel}
+                    </label>
+                    <div className="relative">
+                      <input
+                        ref={passwordInputRef}
+                        id="login-password"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete="current-password"
+                        placeholder={t.fieldPasswordPlaceholder}
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        className="login-focusable w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 pr-20 text-body text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:border-[color-mix(in_oklab,var(--color-accent)_60%,var(--color-border))] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-caption text-[var(--color-text-3)] hover:text-[var(--color-text-1)]"
+                        aria-label={showPassword ? t.hidePassword : t.showPassword}
+                      >
+                        {showPassword ? t.hidePassword : t.showPassword}
+                      </button>
+                    </div>
+                    <p id="login-user-hint" className="mt-1.5 text-caption text-[var(--color-text-3)]">
+                      {t.selectorHint}
+                    </p>
+                    <p className="mt-1 text-caption text-[var(--color-text-3)]">{t.forgotPassword}</p>
                   </div>
-                ) : users.length === 0 ? null : (
-                  <LoginUserListbox
-                    ref={userPickerTriggerRef}
-                    id="login-user-select"
-                    value={selectedUserId}
-                    options={loginUserOptions}
-                    onChange={(v) => {
-                      setSelectedUserId(v);
-                      persistLastDevUser(v);
-                    }}
-                    aria-describedby={users.length > 0 ? "login-user-hint" : undefined}
-                  />
-                )}
-                {ready && users.length > 0 ? (
-                  <p id="login-user-hint" className="login-secondary-text text-pretty leading-snug">
-                    {t.devHint}
-                  </p>
                 ) : null}
               </div>
             </div>
@@ -551,13 +607,18 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                 void handleLogin();
               }}
             >
-              {devSelector && users.length > 0 ? (
+              {users.length > 0 ? (
                 <Button
                   ref={primaryRef}
                   type="submit"
                   size="lg"
                   className="login-primary-cta login-focusable login-motion-transform w-full motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0"
-                  disabled={!ready || loggingIn}
+                  disabled={
+                    !ready ||
+                    loggingIn ||
+                    !selectedUserId ||
+                    (!devSelector && !passwordInput)
+                  }
                 >
                   {loggingIn ? (
                     <>
@@ -581,7 +642,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                 </p>
               ) : null}
 
-              {!ready && devSelector ? (
+              {!ready ? (
                 <p className="login-secondary-text text-caption" role="status">
                   {t.ariaBusy}
                 </p>

@@ -1,13 +1,23 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
 
+import { AnnouncementsBanner } from "@/components/novedades/AnnouncementsBanner";
+import { AnnouncementsToastListener } from "@/components/novedades/AnnouncementsToastListener";
 import { AppSidebar } from "@/components/app-sidebar";
+import { ClockChip } from "@/components/clock-chip";
+import { DensityToggle } from "@/components/density-toggle";
+import { DesvioNotificationsListener } from "@/components/desvios/DesvioNotificationsListener";
 import { FeedbackModal } from "@/components/feedback/FeedbackModal";
+import { GlobalShortcuts } from "@/components/global-shortcuts";
+import { HeaderUserMenu } from "@/components/header-user-menu";
 import { NotificationBell } from "@/components/notification-bell";
+import { OfflineQueueIndicator } from "@/components/OfflineQueueIndicator";
+import { QuickSearch } from "@/components/quick-search";
+import { ToastHost } from "@/components/toast-host";
 import type { SessionUser } from "@/lib/domain";
 import type { FeedbackPrefillTarget } from "@/components/feedback/FeedbackForm";
 
@@ -102,16 +112,16 @@ export default function PrivateLayout({
   const breadcrumbs = useMemo((): Crumb[] => {
     const root: Crumb = { label: "CCMGC", href: "/dashboard" };
     if (pathname.startsWith("/admin/users")) {
-      return [root, { label: "Administracion", href: "/admin" }, { label: "Usuarios" }];
+      return [root, { label: "Administración", href: "/admin" }, { label: "Usuarios" }];
     }
     if (pathname.startsWith("/admin/catalog")) {
-      return [root, { label: "Administracion", href: "/admin" }, { label: "Catálogo" }];
+      return [root, { label: "Administración", href: "/admin" }, { label: "Catálogo" }];
     }
     if (pathname.startsWith("/admin/feedback")) {
-      return [root, { label: "Administracion", href: "/admin" }, { label: "Feedback" }];
+      return [root, { label: "Administración", href: "/admin" }, { label: "Feedback" }];
     }
     if (pathname === "/admin") {
-      return [root, { label: "Administracion", href: "/admin" }];
+      return [root, { label: "Administración", href: "/admin" }];
     }
     if (pathname.startsWith("/feedback")) {
       return [root, { label: "Feedback" }];
@@ -155,11 +165,22 @@ export default function PrivateLayout({
           : "flex min-h-screen bg-[var(--color-bg)]"
       }
     >
+      <a
+        href="#main-content"
+        className="ccmgc-skip-link"
+      >
+        Saltar al contenido principal
+      </a>
       <Suspense fallback={null}>
         <MapaMuroUrlSync setMapaMuro={setMapaMuro} />
       </Suspense>
       {inventoryControlRoom || mapaMuro ? null : <AppSidebar />}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* Banner global de avisos críticos / warnings. Aparece encima del
+            header cuando hay un Announcement publicado y sin leer. Se monta
+            fuera del header para no romper la altura sticky de la barra
+            superior. */}
+        {mapaMuroChrome ? null : <AnnouncementsBanner />}
         {mapaMuroChrome ? null : (
         <header
           className={
@@ -170,13 +191,20 @@ export default function PrivateLayout({
         >
           <nav
             aria-label="Migas de pan"
-            className="flex min-w-0 max-w-[min(100%,52rem)] flex-wrap items-center gap-1.5 rounded-lg border border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/50 px-2.5 py-1.5 text-sm md:max-w-none"
+            className="flex min-w-0 max-w-[min(100%,52rem)] flex-wrap items-center gap-1.5 text-[13px] md:max-w-none"
           >
             {breadcrumbs.map((crumb, index) => {
               const isLast = index === breadcrumbs.length - 1;
               return (
                 <Fragment key={`${crumb.label}-${index}`}>
-                  {index > 0 ? <ChevronRight size={14} className="shrink-0 text-[var(--color-text-3)]" aria-hidden /> : null}
+                  {index > 0 ? (
+                    <ChevronRight
+                      size={13}
+                      strokeWidth={1.5}
+                      className="shrink-0 text-[var(--color-text-3)]/60"
+                      aria-hidden
+                    />
+                  ) : null}
                   {crumb.href && !isLast ? (
                     <Link
                       href={crumb.href}
@@ -188,7 +216,7 @@ export default function PrivateLayout({
                     <span
                       className={
                         isLast
-                          ? "min-w-0 max-w-[12rem] truncate rounded-md bg-[var(--color-surface-3)] px-2 py-0.5 font-medium text-[var(--color-text-1)] sm:max-w-[20rem] md:max-w-[28rem]"
+                          ? "min-w-0 max-w-[16rem] truncate font-semibold text-[var(--color-text-1)] sm:max-w-[24rem] md:max-w-[32rem]"
                           : "min-w-0 truncate text-[var(--color-text-3)]"
                       }
                       title={isLast ? crumb.label : undefined}
@@ -201,14 +229,44 @@ export default function PrivateLayout({
               );
             })}
           </nav>
-          <div className="flex items-center gap-3">
-            <NotificationBell />
-            <span className="h-6 w-px bg-[var(--color-border)]" />
-            <p className="text-caption text-[var(--color-text-1)]">{sessionUser?.name ?? "Sin sesion"}</p>
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Búsqueda: campo amplio con icono y atajo. Se parece a un input
+                real para que el usuario lo identifique como "buscador del
+                centro de control" en lugar de un botón sin contexto. */}
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("ccmgc-open-quick-search"))}
+              title="Búsqueda rápida (Ctrl+K)"
+              aria-label="Abrir búsqueda rápida"
+              className="group hidden h-9 w-[15rem] items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/55 pl-2.5 pr-1.5 text-[12.5px] text-[var(--color-text-3)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all duration-150 hover:border-[var(--color-accent)]/45 hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-2)] hover:shadow-[0_4px_14px_-10px_rgba(0,0,0,0.55)] md:inline-flex lg:w-[18rem]"
+            >
+              <Search
+                size={14}
+                strokeWidth={1.6}
+                className="shrink-0 text-[var(--color-text-3)] transition-colors group-hover:text-[var(--color-accent)]"
+                aria-hidden
+              />
+              <span className="flex-1 text-left">Buscar en CCMGC…</span>
+              <span className="kbd shrink-0">Ctrl K</span>
+            </button>
+            {/* Trío de utilidades: reloj + densidad + notificaciones */}
+            <div
+              className="flex h-9 items-center gap-0.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+              role="group"
+              aria-label="Atajos del centro de control"
+            >
+              <ClockChip />
+              <span className="h-5 w-px bg-[var(--color-border)]/70" aria-hidden />
+              <DensityToggle />
+              <span className="h-5 w-px bg-[var(--color-border)]/70" aria-hidden />
+              <NotificationBell />
+            </div>
+            <HeaderUserMenu user={sessionUser} />
           </div>
         </header>
         )}
         <main
+          id="main-content"
           className={
             inventoryControlRoom
               ? "flex-1 overflow-auto px-3 pb-3 pt-2 md:px-4 md:pb-4 md:pt-3"
@@ -226,6 +284,12 @@ export default function PrivateLayout({
         target={feedbackTarget}
         onClose={() => setFeedbackTarget(null)}
       />
+      <QuickSearch />
+      <ToastHost />
+      <GlobalShortcuts />
+      <DesvioNotificationsListener />
+      <AnnouncementsToastListener />
+      <OfflineQueueIndicator />
     </div>
   );
 }

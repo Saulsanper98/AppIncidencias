@@ -3,17 +3,20 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { FeedbackForm } from "@/components/feedback/FeedbackForm";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { SectionTabs } from "@/components/ui/section-tabs";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 export default async function FeedbackPage() {
   const cookieStore = await cookies();
-  const userId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
+  const userId = verifySessionToken(token);
   if (!userId) {
     redirect("/login?auth=required&next=/feedback");
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
+      <SectionTabs preset="account" />
 
       {/* Hero header */}
       <div className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6"

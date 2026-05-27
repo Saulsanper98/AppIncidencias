@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Check, ChevronDown, Plus, UploadCloud } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ExternalLink, Film, ImageIcon, Info, Plus, UploadCloud } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -15,6 +15,8 @@ import {
 } from "react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
+import { TicketTemplatePicker } from "@/components/tickets/TicketTemplatePicker";
+import { VoiceInputButton } from "@/components/ui/VoiceInputButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
@@ -26,16 +28,27 @@ import type {
   TicketFormSectionId,
 } from "@/components/tickets/tickets-module-types";
 import {
-  TICKET_ATTACH_MAX_BYTES,
+  TICKET_ATTACH_ACCEPT,
   TICKET_ATTACH_MAX_FILES,
+  TICKET_ATTACH_MAX_IMAGE_BYTES,
+  TICKET_ATTACH_MAX_TOTAL_BYTES,
+  TICKET_ATTACH_MAX_VIDEO_BYTES,
   TICKET_FORM_DRAFT_KEY,
   TICKET_FORM_SECTION_ORDER,
+  attachByteLimit,
+  classifyAttachFile,
   defaultForm,
   normalizeAccordionOpen,
 } from "@/components/tickets/tickets-module-types";
 import type { SessionUser } from "@/lib/domain";
 import { calculatePriority, calculateSlaMinutes, toUiPriority } from "@/lib/ticketing";
-import type { TipologiaItem } from "@/lib/tipologia";
+import {
+  GENERIC_SUBSUBTIPO,
+  GENERIC_SUBTIPO,
+  GENERIC_TIPO,
+  getGenericTipologia,
+  type TipologiaItem,
+} from "@/lib/tipologia";
 import { priorityBadgeProps } from "@/lib/ticket-ui";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +66,92 @@ const TicketLocationPicker = dynamic(
     ),
   },
 );
+
+/**
+ * Stepper visual de 4 pasos: círculos numerados con estado completado /
+ * activo / pendiente, conectados por una línea de progreso continuo.
+ * Mucho más legible que la barra de 4 segmentos del diseño anterior.
+ */
+function FormStepper({
+  steps,
+  nextIndex,
+  openIndex,
+  flashIndex,
+  onJump,
+  percent,
+}: {
+  steps: boolean[];
+  nextIndex: number | null;
+  openIndex: number;
+  flashIndex: number | null;
+  onJump: (i: number) => void;
+  percent: number;
+}) {
+  const labels = ["Equipo", "Tipología", "Detalle", "Adjuntos"] as const;
+  return (
+    <div
+      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 pb-3 pt-3"
+      aria-label="Progreso del borrador"
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-eyebrow">Progreso</span>
+        <span className="num-tabular text-[12px] font-semibold text-[var(--color-text-1)]">{percent}%</span>
+      </div>
+      <div className="relative flex items-center justify-between">
+        {/* Línea base */}
+        <div className="absolute left-3 right-3 top-3.5 h-px bg-[var(--color-border)]" aria-hidden />
+        {/* Línea de progreso (proporcional al porcentaje completado, capada al
+            tramo entre el primer y último paso). */}
+        <div
+          className="absolute left-3 top-3.5 h-px bg-[var(--color-accent)] transition-[width] duration-300 ease-out"
+          style={{ width: `calc(${percent}% - 24px * ${percent / 100})` }}
+          aria-hidden
+        />
+        {steps.map((done, i) => {
+          const isOpen = i === openIndex;
+          const isNext = i === nextIndex;
+          const flash = i === flashIndex;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onJump(i)}
+              aria-current={isOpen ? "step" : undefined}
+              className="relative z-10 flex flex-col items-center gap-1.5 px-1"
+              title={labels[i]}
+            >
+              <span
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-full border-2 text-[11px] font-semibold transition-all duration-200",
+                  done
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                    : isNext || isOpen
+                      ? "border-[var(--color-accent)] bg-[var(--color-surface)] text-[var(--color-accent)]"
+                      : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-3)]",
+                  flash && "ccmgc-draft-step-flash",
+                )}
+              >
+                {done ? <Check size={13} strokeWidth={3} /> : i + 1}
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] font-medium transition-colors",
+                  done
+                    ? "text-[var(--color-text-2)]"
+                    : isOpen || isNext
+                      ? "text-[var(--color-text-1)]"
+                      : "text-[var(--color-text-3)]",
+                )}
+              >
+                {labels[i]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function CollapsibleFormBlock({
   title,
@@ -120,6 +219,11 @@ function CollapsibleFormBlock({
 
 export type TicketCreateFormProps = {
   catalog: CatalogBus[];
+  /**
+   * Catalogo de lineas validas (alimenta el autocompletar del campo "Servicio /
+   * linea"). El input acepta texto libre, esto solo sugiere valores conocidos.
+   */
+  lineas: string[];
   tipologias: TipologiaItem[];
   sessionUser: SessionUser | null;
   saving: boolean;
@@ -132,6 +236,7 @@ export type TicketCreateFormProps = {
 
 export function TicketCreateForm({
   catalog,
+  lineas,
   tipologias,
   sessionUser,
   saving,
@@ -149,14 +254,94 @@ export function TicketCreateForm({
   const [stagedUploadFiles, setStagedUploadFiles] = useState<File[]>([]);
   const photoFileInputRef = useRef<HTMLInputElement>(null);
   const [mapLocationHint, setMapLocationHint] = useState<string | null>(null);
+  // Sugerencias KB para evitar duplicar tickets que ya tienen artículo
+  // resuelto en la base de conocimiento. Se rellenan según se escriben
+  // título / descripción (debounced a 350 ms).
+  const [kbSuggestions, setKbSuggestions] = useState<
+    { id: string; slug: string; title: string; summary: string | null; category: string | null }[]
+  >([]);
+  const [kbSuggestDismissed, setKbSuggestDismissed] = useState(false);
+  // SLA configurable en BD: lo leemos al montar para que el preview use los
+  // tiempos reales en lugar de los defaults 30/120/240. Si el fetch falla,
+  // `calculateSlaMinutes` cae al default histórico (lo que tampoco rompe nada).
+  const [slaOverride, setSlaOverride] = useState<Record<"alta" | "media" | "baja", number> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/sla-config", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { sla?: Record<"alta" | "media" | "baja", number> };
+        if (!cancelled && data.sla) setSlaOverride(data.sla);
+      } catch {
+        /* ignorar: caemos al default histórico */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const selectedBus = useMemo(() => catalog.find((bus) => bus.id === form.busId), [catalog, form.busId]);
-  const availableAssets = selectedBus?.assets ?? [];
-  const selectedAsset = availableAssets.find((asset) => asset.id === form.assetId);
-  const availableTipos = useMemo(
-    () => Array.from(new Set(tipologias.map((item) => item.tipo))).sort((a, b) => a.localeCompare(b)),
-    [tipologias],
-  );
+  // Sugerencias KB en tiempo real: cada vez que el usuario edita título o
+  // descripción esperamos 350 ms y pedimos hasta 5 sugerencias. Si el
+  // usuario las descarta, no volvemos a mostrar hasta que cambie el texto.
+  useEffect(() => {
+    const probe = `${form.title} ${form.description}`.trim();
+    if (probe.length < 6) {
+      setKbSuggestions([]);
+      return;
+    }
+    const controller = new AbortController();
+    const handle = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/kb/suggest?q=${encodeURIComponent(probe)}`, {
+          cache: "no-store",
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          suggestions: { id: string; slug: string; title: string; summary: string | null; category: string | null }[];
+        };
+        setKbSuggestions(data.suggestions ?? []);
+      } catch (error) {
+        if ((error as { name?: string })?.name !== "AbortError") {
+          console.warn("kb-suggest:", error);
+        }
+      }
+    }, 350);
+    return () => {
+      window.clearTimeout(handle);
+      controller.abort();
+    };
+  }, [form.title, form.description]);
+
+  // Si el usuario cambia el texto tras haber descartado, reaparece la caja.
+  useEffect(() => {
+    setKbSuggestDismissed(false);
+  }, [form.title, form.description]);
+
+  const trimmedBusId = form.busId.trim();
+  const selectedBus = useMemo(() => catalog.find((bus) => bus.id === trimmedBusId), [catalog, trimmedBusId]);
+  /**
+   * Pedro pidió poder teclear un bus que no esté en el catálogo. Si el usuario
+   * escribe algo que no coincide con ningún bus existente, lo marcamos como
+   * "nuevo": al guardar, el backend lo creará al vuelo con un activo
+   * SAE-DEFAULT y se ocultará el selector de activo.
+   */
+  const isNewBus = trimmedBusId !== "" && !selectedBus;
+  // El activo se asigna automaticamente en backend (SAE-DEFAULT del bus). Solo
+  // conservamos `selectedAsset` para el SLA del catalogo si existiera explicito.
+  const selectedAsset = (selectedBus?.assets ?? []).find((asset) => asset.id === form.assetId);
+  const availableTipos = useMemo(() => {
+    // "Generica" se relega al final aunque alfabeticamente caiga antes,
+    // para que el usuario la vea como ultima opcion (catch-all).
+    const tipos = Array.from(new Set(tipologias.map((item) => item.tipo)));
+    const generic = tipos.find((t) => t === GENERIC_TIPO);
+    const rest = tipos.filter((t) => t !== GENERIC_TIPO).sort((a, b) => a.localeCompare(b));
+    return generic ? [...rest, generic] : rest;
+  }, [tipologias]);
+  const isGenericTipo = form.tipo === GENERIC_TIPO;
   const availableSubtipos = useMemo(
     () =>
       Array.from(new Set(tipologias.filter((item) => item.tipo === form.tipo).map((item) => item.subtipo))).sort((a, b) =>
@@ -180,24 +365,35 @@ export function TicketCreateForm({
   );
 
   const computedPriority = useMemo(() => {
-    if (!selectedAsset) {
-      return "baja";
+    if (selectedAsset) {
+      return calculatePriority({
+        assetType: selectedAsset.type,
+        impactedLines: form.impactedLines,
+        serviceStopped: form.serviceStopped,
+        nivelImpacto: form.nivelImpacto,
+      });
     }
-    return calculatePriority({
-      assetType: selectedAsset.type,
-      impactedLines: form.impactedLines,
-      serviceStopped: form.serviceStopped,
-      nivelImpacto: form.nivelImpacto,
-    });
-  }, [selectedAsset, form.impactedLines, form.serviceStopped, form.nivelImpacto]);
+    // Para un bus nuevo (sin activo aún) usamos el tipo por defecto SAE para
+    // que el cálculo de prioridad y SLA tenga sentido en el preview.
+    if (isNewBus) {
+      return calculatePriority({
+        assetType: "sae",
+        impactedLines: form.impactedLines,
+        serviceStopped: form.serviceStopped,
+        nivelImpacto: form.nivelImpacto,
+      });
+    }
+    return "baja";
+  }, [selectedAsset, isNewBus, form.impactedLines, form.serviceStopped, form.nivelImpacto]);
 
   const computedSla =
     selectedAsset?.slaMinutes != null && selectedAsset.slaMinutes > 0
       ? selectedAsset.slaMinutes
-      : calculateSlaMinutes(computedPriority);
+      : calculateSlaMinutes(computedPriority, slaOverride);
   const ticketFormProgress = useMemo(() => {
     const checks = [
-      Boolean(form.busId && form.assetId),
+      // Paso 1: hay bus indicado (el activo se asigna automaticamente en backend).
+      Boolean(trimmedBusId),
       Boolean(form.tipo && form.subtipo && form.subsubtipo),
       form.title.trim().length >= 3,
       form.description.trim().length >= 8,
@@ -211,7 +407,7 @@ export function TicketCreateForm({
       checks,
       nextStepIndex: nextStepIndex === -1 ? null : nextStepIndex,
     };
-  }, [form]);
+  }, [form, trimmedBusId, isNewBus]);
 
   const reduceMotionUi = useReducedMotion();
   const prevFormProgressFilledRef = useRef(ticketFormProgress.filled);
@@ -221,12 +417,29 @@ export function TicketCreateForm({
     const prev = prevFormProgressFilledRef.current;
     if (ticketFormProgress.filled > prev) {
       setDraftStepFlashIndex(ticketFormProgress.filled - 1);
-      const t = window.setTimeout(() => setDraftStepFlashIndex(null), 700);
+      const flashTimer = window.setTimeout(() => setDraftStepFlashIndex(null), 700);
+      // Auto-avance al completar un paso: abrimos automáticamente el siguiente
+      // paso pendiente. Si todos están completos, dejamos abierto el último.
+      // 280ms para dar tiempo a ver la animación de check antes del cambio.
+      const advanceTimer = window.setTimeout(() => {
+        const nextIdx = ticketFormProgress.nextStepIndex;
+        if (nextIdx === null) return;
+        const id = TICKET_FORM_SECTION_ORDER[nextIdx];
+        setFormSectionOpen({
+          equipment: id === "equipment",
+          tipologia: id === "tipologia",
+          detail: id === "detail",
+          attachments: id === "attachments",
+        });
+      }, 280);
       prevFormProgressFilledRef.current = ticketFormProgress.filled;
-      return () => window.clearTimeout(t);
+      return () => {
+        window.clearTimeout(flashTimer);
+        window.clearTimeout(advanceTimer);
+      };
     }
     prevFormProgressFilledRef.current = ticketFormProgress.filled;
-  }, [ticketFormProgress.filled]);
+  }, [ticketFormProgress.filled, ticketFormProgress.nextStepIndex]);
 
   const toggleFormSection = useCallback((id: TicketFormSectionId) => {
     setFormSectionOpen((prev) => {
@@ -239,21 +452,6 @@ export function TicketCreateForm({
       };
     });
   }, []);
-
-  const goToNextIncompleteFormStep = useCallback(() => {
-    const idx = ticketFormProgress.nextStepIndex;
-    if (idx === null) return;
-    const id = TICKET_FORM_SECTION_ORDER[idx];
-    setFormSectionOpen({
-      equipment: id === "equipment",
-      tipologia: id === "tipologia",
-      detail: id === "detail",
-      attachments: id === "attachments",
-    });
-    window.setTimeout(() => {
-      document.getElementById("tickets-new-form-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
-  }, [ticketFormProgress.nextStepIndex]);
 
   const formSectionLiveMessage = useMemo(() => {
     const id = TICKET_FORM_SECTION_ORDER.find((k) => formSectionOpen[k]);
@@ -275,10 +473,15 @@ export function TicketCreateForm({
         const parsed = JSON.parse(raw) as TicketFormDraftPayload;
         if (parsed?.form) {
           const d = parsed.form;
-          const busOk = catalog.some((b) => b.id === d.busId);
-          const busId = busOk ? d.busId : catalog[0].id;
+          // Conservamos el busId del borrador aunque no esté en el catálogo:
+          // puede ser un "bus nuevo" tecleado por el usuario (sugerencia de
+          // Pedro). Si en cambio el borrador no tenía busId, usamos el primero
+          // del catálogo como punto de partida.
+          const draftBusId = (d.busId ?? "").trim();
+          const busId = draftBusId !== "" ? draftBusId : catalog[0].id;
+          const busInCatalog = catalog.some((b) => b.id === busId);
           const assets = catalog.find((b) => b.id === busId)?.assets ?? [];
-          const assetOk = assets.some((a) => a.id === d.assetId);
+          const assetOk = busInCatalog && assets.some((a) => a.id === d.assetId);
           const rawDraft = d as FormState & { photoNames?: unknown };
           const { photoNames, ...draftFields } = rawDraft;
           void photoNames;
@@ -291,6 +494,11 @@ export function TicketCreateForm({
                 ? Math.min(10, Math.max(1, d.impactedLines))
                 : 1,
             serviceStopped: Boolean(d.serviceStopped),
+            // Drafts previos no tenian `lineaLabel`. Garantizamos string vacio
+            // (no undefined) para que el input controlado no chille.
+            lineaLabel: typeof d.lineaLabel === "string" ? d.lineaLabel : "",
+            servicioLabel: typeof d.servicioLabel === "string" ? d.servicioLabel : "",
+            conductorLabel: typeof d.conductorLabel === "string" ? d.conductorLabel : "",
           });
           setStagedUploadFiles([]);
           if (parsed.openSections) {
@@ -303,7 +511,9 @@ export function TicketCreateForm({
     }
     setForm((prev) => {
       if (catalog.length === 0) return prev;
-      if (catalog.some((b) => b.id === prev.busId) && prev.busId) return prev;
+      // Si el form ya tiene un busId (sea del catálogo o "nuevo"), lo dejamos
+      // intacto; sólo cuando está vacío inicializamos con el primer bus.
+      if (prev.busId.trim()) return prev;
       return defaultForm(catalog[0].id);
     });
     setFormDraftHydrated(true);
@@ -337,16 +547,30 @@ export function TicketCreateForm({
     if (!list?.length) return;
     const accepted: File[] = [];
     const errors: string[] = [];
+    let combinedBytes = stagedUploadFiles.reduce((sum, f) => sum + f.size, 0);
+
     for (const file of Array.from(list)) {
-      if (file.size > TICKET_ATTACH_MAX_BYTES) {
-        errors.push(`${file.name} supera ${Math.round(TICKET_ATTACH_MAX_BYTES / (1024 * 1024))} MB.`);
+      const kind = classifyAttachFile(file);
+      if (!kind) {
+        errors.push(`${file.name}: tipo no permitido (solo imágenes o vídeos).`);
         continue;
       }
-      if (!file.type.startsWith("image/")) {
-        errors.push(`${file.name}: solo imágenes.`);
+      const limit = attachByteLimit(kind);
+      if (file.size > limit) {
+        const limitMb = Math.round(limit / (1024 * 1024));
+        errors.push(
+          `${file.name}: ${kind === "video" ? "vídeo" : "imagen"} supera ${limitMb} MB.`,
+        );
         continue;
       }
-      if (file.name.trim()) accepted.push(file);
+      if (combinedBytes + file.size > TICKET_ATTACH_MAX_TOTAL_BYTES) {
+        const totalMb = Math.round(TICKET_ATTACH_MAX_TOTAL_BYTES / (1024 * 1024));
+        errors.push(`Tamaño total supera ${totalMb} MB; se omite ${file.name}.`);
+        continue;
+      }
+      if (!file.name.trim()) continue;
+      accepted.push(file);
+      combinedBytes += file.size;
     }
     setStagedUploadFiles((prev) => mergeStagedUploadFiles(prev, accepted));
     if (errors.length) {
@@ -362,15 +586,20 @@ export function TicketCreateForm({
   };
 
   const submitCreate = async () => {
-    if (!sessionUser || !selectedBus || !selectedAsset || !selectedTipologia) {
-      if (!sessionUser) setError("Debes iniciar sesión para crear tickets.");
+    if (!sessionUser) {
+      setError("Debes iniciar sesión para crear tickets.");
       return;
     }
+    if (!selectedTipologia || !trimmedBusId) {
+      return;
+    }
+    // Si el bus es nuevo o el usuario no eligió activo concreto, dejamos que el
+    // backend resuelva (creará bus + SAE-DEFAULT al vuelo).
     await onCreateTicket({
       form,
       stagedUploadFiles,
-      selectedBus,
-      selectedAsset,
+      selectedBus: selectedBus ?? null,
+      selectedAsset: selectedAsset ?? null,
       selectedTipologia,
       onTicketCreated: () => {
         setForm((prev) => ({ ...defaultForm(prev.busId), busId: prev.busId }));
@@ -398,169 +627,184 @@ export function TicketCreateForm({
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {formSectionLiveMessage}
       </p>
-      <div className="mb-5 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)]">
-            <Plus size={16} className="text-[var(--color-accent)]" />
+      {/* ── Cabecera con 3 zonas verticales bien separadas (premium iter. 4) ── */}
+      <header className="mb-4 space-y-3">
+        {/* 1. Título + icono + identidad del ticket en una línea. */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)]">
+              <Plus size={16} strokeWidth={1.5} className="text-[var(--color-accent)]" />
+            </div>
+            <div className="min-w-0">
+              <h3 id="tickets-new-form-title" className="text-[15px] font-semibold leading-tight text-[var(--color-text-1)]">
+                Nuevo ticket
+              </h3>
+              <p className="mt-0.5 text-[12px] leading-tight text-[var(--color-text-3)]">
+                Ancla la incidencia a un bus y activo concreto
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 id="tickets-new-form-title" className="text-subheading">
-              Nuevo ticket
-            </h3>
-            <p className="text-sm leading-snug text-[var(--color-text-3)]">Ancla la incidencia a un bus y activo concreto</p>
-          </div>
+          <FeedbackTargetButton id="tickets/formulario-nuevo" label="Formulario de nuevo ticket" />
         </div>
-        <FeedbackTargetButton id="tickets/formulario-nuevo" label="Formulario de nuevo ticket" />
-      </div>
 
-      <div className="mb-4 rounded-lg border border-[var(--color-border)]/80 bg-[var(--color-surface-2)]/60 px-3 py-2.5 text-[12px] leading-snug text-[var(--color-text-2)]">
-        <span className="font-mono font-medium text-[var(--color-text-1)]">{selectedBus?.id ?? "—"}</span>
-        <span className="text-[var(--color-text-3)]"> · </span>
-        <span>
-          {selectedAsset
-            ? `${selectedAsset.id} (${selectedAsset.type})`
-            : selectedBus
-              ? "Selecciona activo"
-              : "Selecciona bus"}
-        </span>
-        <span className="text-[var(--color-text-3)]"> · </span>
-        <span className="tabular-nums font-semibold text-[var(--color-text-1)]">Borrador {ticketFormProgress.pct}%</span>
-      </div>
-
-      <div
-        className="mb-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 px-3 py-3"
-        aria-label="Progreso del borrador del formulario"
-      >
-        <div className="mb-2 flex items-center justify-between gap-2 text-caption text-[var(--color-text-2)]">
-          <span className="font-medium text-[var(--color-text-1)]">Borrador</span>
-          <span className="tabular-nums text-[var(--color-text-1)]">
-            {ticketFormProgress.filled}/{ticketFormProgress.total} · {ticketFormProgress.pct}%
+        {/* 2. Chip identidad: Bus + estado del activo. Limpio, una sola línea. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 text-[12px] leading-snug text-[var(--color-text-2)]">
+          <span className="text-eyebrow shrink-0">Identidad</span>
+          <span className="num-tabular font-mono text-[13px] font-semibold text-[var(--color-text-1)]">
+            {trimmedBusId || "—"}
+          </span>
+          {isNewBus ? (
+            <span
+              className="inline-flex items-center rounded-full border border-[rgba(245,158,11,0.35)] bg-[var(--color-warning-light)] px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-[var(--color-warning)]"
+              title="Este bus se creará en el catálogo al guardar"
+            >
+              nuevo
+            </span>
+          ) : null}
+          <span className="text-[var(--color-text-3)]/60">·</span>
+          <span className="min-w-0 truncate">
+            {selectedAsset
+              ? `${selectedAsset.id} (${selectedAsset.type})`
+              : isNewBus
+                ? "SAE por defecto (auto)"
+                : selectedBus
+                  ? "Selecciona activo"
+                  : "Selecciona o teclea un bus"}
           </span>
         </div>
-        <div className="h-3 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
-          <div
-            className="h-3 rounded-full bg-[var(--color-accent)] transition-[width] duration-200 ease-out"
-            style={{ width: `${ticketFormProgress.pct}%` }}
-          />
-        </div>
-        <div className="mt-2.5 flex gap-1.5">
-          {(["Equipo", "Tipo", "Título", "Desc"] as const).map((label, i) => {
-            const done = ticketFormProgress.checks[i];
-            const active = !done && ticketFormProgress.nextStepIndex === i;
-            const openHere = formSectionOpen[TICKET_FORM_SECTION_ORDER[i]];
-            return (
-              <div key={label} className="flex min-w-0 flex-1 flex-col items-center gap-1" title={label}>
-                <div
-                  className={cn(
-                    "h-1.5 w-full max-w-[4rem] rounded-full transition-colors duration-200",
-                    done && "bg-[var(--color-accent)]",
-                    active && "bg-[var(--color-accent)]/45 ring-1 ring-[var(--color-accent)]/60",
-                    !done && !active && openHere && "bg-[var(--color-surface-3)] ring-1 ring-[var(--color-text-2)]/45",
-                    !done && !active && !openHere && "bg-[var(--color-surface-3)]",
-                    draftStepFlashIndex === i && !reduceMotionUi && "ccmgc-draft-step-flash",
-                  )}
-                />
-                <span className="hidden w-full truncate text-center text-[9px] text-[var(--color-text-3)] sm:block">
-                  {label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-          <p className="min-w-0 flex-1 text-[11px] leading-snug text-[var(--color-text-2)]" aria-live="polite">
-            {ticketFormProgress.nextStepIndex === null ? (
-              <span className="font-medium text-[var(--color-success)]">Pasos obligatorios completados.</span>
-            ) : (
-              <>
-                <span className="font-medium text-[var(--color-text-1)]">Siguiente:</span>{" "}
-                {
-                  (["Equipo con activo", "Tipología completa", "Título (min. 3 caracteres)", "Descripción (min. 8)"] as const)[
-                    ticketFormProgress.nextStepIndex
-                  ]
-                }
-              </>
-            )}
-          </p>
-          {ticketFormProgress.nextStepIndex !== null ? (
-            <button
-              type="button"
-              onClick={goToNextIncompleteFormStep}
-              className="shrink-0 self-start rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-text-2)] transition-all duration-200 hover:border-[var(--color-accent)]/35 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]"
-            >
-              Ir al siguiente paso
-            </button>
-          ) : null}
-        </div>
-        <details className="mt-2 rounded-md border border-[var(--color-border)]/70 bg-[var(--color-surface)]/50 px-2 py-1.5">
-          <summary className="cursor-pointer list-none text-[11px] font-medium text-[var(--color-text-2)] [&::-webkit-details-marker]:hidden">
-            Requisitos del borrador
-          </summary>
-          <ul className="mt-2 space-y-1.5 text-[11px] text-[var(--color-text-2)]">
-            {[
-              { ok: ticketFormProgress.checks[0], label: "Bus y activo seleccionados" },
-              { ok: ticketFormProgress.checks[1], label: "Tipología completa" },
-              { ok: ticketFormProgress.checks[2], label: "Título (mín. 3 caracteres)" },
-              { ok: ticketFormProgress.checks[3], label: "Descripción (mín. 8 caracteres)" },
-            ].map((row) => (
-              <li key={row.label} className="flex items-start gap-2">
-                <span
-                  className={cn(
-                    "mt-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border text-[10px]",
-                    row.ok
-                      ? "border-[var(--color-success)]/40 bg-[var(--color-success-light)] text-[var(--color-success)]"
-                      : "border-[var(--color-border)] bg-[var(--color-surface-3)]/60 text-[var(--color-text-3)]",
-                  )}
-                  aria-hidden
-                >
-                  {row.ok ? <Check size={10} strokeWidth={3} /> : ""}
-                </span>
-                <span className={cn(!row.ok && "text-[var(--color-text-3)]")}>{row.label}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      </div>
+
+        {/* 3. Stepper visual: círculos numerados conectados por línea, con
+              estado completado / activo / pendiente. Auto-clicable. */}
+        <FormStepper
+          steps={ticketFormProgress.checks}
+          nextIndex={ticketFormProgress.nextStepIndex}
+          openIndex={TICKET_FORM_SECTION_ORDER.findIndex((id) => formSectionOpen[id])}
+          flashIndex={!reduceMotionUi ? draftStepFlashIndex : null}
+          onJump={(idx) => {
+            const id = TICKET_FORM_SECTION_ORDER[idx];
+            setFormSectionOpen({
+              equipment: id === "equipment",
+              tipologia: id === "tipologia",
+              detail: id === "detail",
+              attachments: id === "attachments",
+            });
+          }}
+          percent={ticketFormProgress.pct}
+        />
+      </header>
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="space-y-3">
+          <TicketTemplatePicker form={form} setForm={setForm} sessionUser={sessionUser} />
           <CollapsibleFormBlock
             title="Equipo afectado"
             stepLabel="1/4"
-            subtitle={selectedBus ? `${selectedBus.id} · ${selectedBus.operator}` : "Bus y activo"}
+            subtitle={
+              selectedBus
+                ? [
+                    `${selectedBus.id}${selectedBus.operator ? ` · ${selectedBus.operator}` : ""}`,
+                    form.lineaLabel.trim() ? `Línea ${form.lineaLabel.trim()}` : null,
+                    form.servicioLabel.trim() ? `Servicio ${form.servicioLabel.trim()}` : null,
+                    form.conductorLabel.trim() ? form.conductorLabel.trim() : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : isNewBus
+                  ? `${trimmedBusId} · bus nuevo`
+                  : "Bus, línea, servicio y conductor"
+            }
             open={formSectionOpen.equipment}
             onToggle={() => toggleFormSection("equipment")}
           >
-            <div className="grid grid-cols-2 gap-3">
+            {/*
+             * Layout unificado: Bus + Linea + Servicio + Conductor en una sola
+             * fila (grid 4 columnas en desktop, responsive en moviles).
+             *  - Bus: combobox (catalogo + texto libre).
+             *  - Linea: autocomplete contra catalogo `Linea`, acepta texto libre.
+             *  - Servicio: texto libre puro (turno, codigo de servicio…).
+             *  - Conductor: texto libre puro.
+             * El activo SAE-DEFAULT se asigna automaticamente en backend.
+             */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <label className="block space-y-1">
                 <span className="text-label">Bus</span>
-                <Select
+                <Input
+                  list="ticket-bus-options"
                   value={form.busId}
-                  onChange={(event) => setForm((prev) => ({ ...prev, busId: event.target.value, assetId: "" }))}
-                >
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, busId: event.target.value, assetId: "" }))
+                  }
+                  placeholder="Teclea o selecciona…"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <datalist id="ticket-bus-options">
                   {catalog.map((bus) => (
                     <option key={bus.id} value={bus.id}>
-                      {bus.id} - {bus.operator}
+                      {bus.operator}
+                      {bus.municipio ? ` · ${bus.municipio}` : ""}
                     </option>
                   ))}
-                </Select>
+                </datalist>
               </label>
               <label className="block space-y-1">
-                <span className="text-label">Activo</span>
-                <Select
-                  value={form.assetId}
-                  onChange={(event) => setForm((prev) => ({ ...prev, assetId: event.target.value }))}
-                >
-                  <option value="">Selecciona un activo</option>
-                  {availableAssets.map((asset) => (
-                    <option key={asset.id} value={asset.id}>
-                      {asset.id} ({asset.type})
-                    </option>
+                <span className="text-label">
+                  Línea
+                  <span className="ml-1 text-[10px] font-normal text-[var(--color-text-3)]">(opcional)</span>
+                </span>
+                <Input
+                  list="ticket-linea-options"
+                  value={form.lineaLabel}
+                  onChange={(event) => setForm((prev) => ({ ...prev, lineaLabel: event.target.value }))}
+                  placeholder="Ej: GL-1, GL-30…"
+                  maxLength={120}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <datalist id="ticket-linea-options">
+                  {Array.from(
+                    new Set([...(selectedBus?.lineas ?? []), ...lineas]),
+                  ).map((linea) => (
+                    <option key={linea} value={linea} />
                   ))}
-                </Select>
+                </datalist>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-label">
+                  Servicio
+                  <span className="ml-1 text-[10px] font-normal text-[var(--color-text-3)]">(opcional)</span>
+                </span>
+                <Input
+                  value={form.servicioLabel}
+                  onChange={(event) => setForm((prev) => ({ ...prev, servicioLabel: event.target.value }))}
+                  placeholder="Turno, código de servicio…"
+                  maxLength={120}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-label">
+                  Conductor
+                  <span className="ml-1 text-[10px] font-normal text-[var(--color-text-3)]">(opcional)</span>
+                </span>
+                <Input
+                  value={form.conductorLabel}
+                  onChange={(event) => setForm((prev) => ({ ...prev, conductorLabel: event.target.value }))}
+                  placeholder="Ej: Juan Pérez"
+                  maxLength={120}
+                  autoComplete="off"
+                />
               </label>
             </div>
-            {form.busId ? (
+
+            {isNewBus ? (
+              <p className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[12px] leading-snug text-amber-100">
+                <span className="font-medium">Bus nuevo:</span> al guardar se creará{" "}
+                <span className="font-mono">{trimmedBusId}</span> en el catálogo. El gestor podrá completar
+                operador, municipio y líneas más tarde desde Administración → Catálogo.
+              </p>
+            ) : null}
+            {form.busId && !isNewBus ? (
               <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] leading-snug text-[var(--color-text-2)]">
                 <Link
                   href="/inventory"
@@ -576,91 +820,146 @@ export function TicketCreateForm({
           <CollapsibleFormBlock
             title="Tipología de incidencia"
             stepLabel="2/4"
-            subtitle={form.subsubtipo ? `${form.tipo} · ${form.subtipo}` : "Tipo, subtipo e incidencia"}
+            subtitle={
+              isGenericTipo
+                ? "Generica (sin clasificar)"
+                : form.subsubtipo
+                  ? `${form.tipo} · ${form.subtipo}`
+                  : "Tipo, subtipo e incidencia"
+            }
             open={formSectionOpen.tipologia}
             onToggle={() => toggleFormSection("tipologia")}
           >
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-3",
+                isGenericTipo ? "md:grid-cols-1" : "md:grid-cols-3",
+              )}
+            >
               <label className="block space-y-1">
                 <span className="text-label">Tipo</span>
                 <Select
                   value={form.tipo}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const nextTipo = event.target.value;
+                    if (nextTipo === GENERIC_TIPO) {
+                      const generic = getGenericTipologia();
+                      setForm((prev) => ({
+                        ...prev,
+                        tipo: GENERIC_TIPO,
+                        subtipo: GENERIC_SUBTIPO,
+                        subsubtipo: GENERIC_SUBSUBTIPO,
+                        dominio: generic.dominio,
+                        nivelImpacto: generic.nivelImpacto,
+                        origenTecnico: generic.origenTecnico,
+                        observaciones: generic.observaciones,
+                      }));
+                      return;
+                    }
                     setForm((prev) => ({
                       ...prev,
-                      tipo: event.target.value,
+                      tipo: nextTipo,
                       subtipo: "",
                       subsubtipo: "",
                       dominio: "",
                       nivelImpacto: "Medio",
                       origenTecnico: "",
                       observaciones: "",
-                    }))
-                  }
+                    }));
+                  }}
                 >
                   <option value="">Selecciona tipo</option>
                   {availableTipos.map((tipo) => (
                     <option key={tipo} value={tipo}>
-                      {tipo}
+                      {tipo === GENERIC_TIPO ? `${tipo} (sin clasificar)` : tipo}
                     </option>
                   ))}
                 </Select>
               </label>
-              <label className="block space-y-1">
-                <span className="text-label">Subtipo</span>
-                <Select
-                  value={form.subtipo}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      subtipo: event.target.value,
-                      subsubtipo: "",
-                      dominio: "",
-                      nivelImpacto: "Medio",
-                      origenTecnico: "",
-                      observaciones: "",
-                    }))
-                  }
-                  disabled={!form.tipo}
-                >
-                  <option value="">Selecciona subtipo</option>
-                  {availableSubtipos.map((subtipo) => (
-                    <option key={subtipo} value={subtipo}>
-                      {subtipo}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="block space-y-1">
-                <span className="text-label">Incidencia</span>
-                <Select
-                  value={form.subsubtipo}
-                  onChange={(event) => {
-                    const chosen = tipologias.find(
-                      (item) =>
-                        item.tipo === form.tipo && item.subtipo === form.subtipo && item.subsubtipo === event.target.value,
-                    );
-                    setForm((prev) => ({
-                      ...prev,
-                      subsubtipo: event.target.value,
-                      dominio: chosen?.dominio ?? "",
-                      nivelImpacto: chosen?.nivelImpacto ?? "Medio",
-                      origenTecnico: chosen?.origenTecnico ?? "",
-                      observaciones: chosen?.observaciones ?? "",
-                    }));
-                  }}
-                  disabled={!form.subtipo}
-                >
-                  <option value="">Selecciona incidencia</option>
-                  {availableSubsubtipos.map((subsubtipo) => (
-                    <option key={subsubtipo} value={subsubtipo}>
-                      {subsubtipo}
-                    </option>
-                  ))}
-                </Select>
-              </label>
+              {isGenericTipo ? null : (
+                <>
+                  <label className="block space-y-1">
+                    <span className="text-label">Subtipo</span>
+                    <Select
+                      value={form.subtipo}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          subtipo: event.target.value,
+                          subsubtipo: "",
+                          dominio: "",
+                          nivelImpacto: "Medio",
+                          origenTecnico: "",
+                          observaciones: "",
+                        }))
+                      }
+                      disabled={!form.tipo}
+                    >
+                      <option value="">Selecciona subtipo</option>
+                      {availableSubtipos.map((subtipo) => (
+                        <option key={subtipo} value={subtipo}>
+                          {subtipo}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-label">Incidencia</span>
+                    <Select
+                      value={form.subsubtipo}
+                      onChange={(event) => {
+                        const chosen = tipologias.find(
+                          (item) =>
+                            item.tipo === form.tipo &&
+                            item.subtipo === form.subtipo &&
+                            item.subsubtipo === event.target.value,
+                        );
+                        setForm((prev) => ({
+                          ...prev,
+                          subsubtipo: event.target.value,
+                          dominio: chosen?.dominio ?? "",
+                          nivelImpacto: chosen?.nivelImpacto ?? "Medio",
+                          origenTecnico: chosen?.origenTecnico ?? "",
+                          observaciones: chosen?.observaciones ?? "",
+                        }));
+                      }}
+                      disabled={!form.subtipo}
+                    >
+                      <option value="">Selecciona incidencia</option>
+                      {availableSubsubtipos.map((subsubtipo) => (
+                        <option key={subsubtipo} value={subsubtipo}>
+                          {subsubtipo}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                </>
+              )}
             </div>
-            {selectedTipologia ? (
+            {isGenericTipo ? (
+              <div
+                className="mt-3 flex items-start gap-3 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/45 p-3 text-xs text-[var(--color-text-2)]"
+                role="status"
+              >
+                <span
+                  className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/30"
+                  aria-hidden
+                >
+                  <Info size={14} strokeWidth={1.8} />
+                </span>
+                <div className="min-w-0 space-y-1.5">
+                  <p className="text-[12.5px] font-semibold text-[var(--color-text-1)]">
+                    Tipo gen&eacute;rico seleccionado
+                  </p>
+                  <p className="leading-relaxed">
+                    &Uacute;salo cuando la incidencia <strong>no encaja en ning&uacute;n caso</strong> del cuadro de
+                    tipolog&iacute;as. <em>Subtipo</em> e <em>Incidencia</em> no aplican: describe lo ocurrido con
+                    todo detalle en el bloque <strong>&ldquo;Detalle de la incidencia&rdquo;</strong> (t&iacute;tulo
+                    + descripci&oacute;n). El gestor podr&aacute; reclasificar el ticket m&aacute;s tarde si procede.
+                  </p>
+                </div>
+              </div>
+            ) : selectedTipologia ? (
               <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 text-xs text-[var(--color-text-2)]">
                 <p>
                   Dominio: <span className="font-medium text-[var(--color-text-1)]">{selectedTipologia.dominio}</span>
@@ -697,14 +996,79 @@ export function TicketCreateForm({
               />
             </label>
 
-            <Textarea
-              label="Descripción técnica"
-              placeholder="Incluye síntomas, contexto y pruebas realizadas."
-              value={form.description}
-              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-              className="min-h-[80px]"
-              wrapperClassName="mt-3"
-            />
+            <div className="mt-3">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-label">Descripción técnica</span>
+                <VoiceInputButton
+                  onTranscript={(text) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      description: prev.description.trim()
+                        ? `${prev.description.trimEnd()} ${text}`
+                        : text,
+                    }))
+                  }
+                />
+              </div>
+              <Textarea
+                placeholder="Incluye síntomas, contexto y pruebas realizadas."
+                value={form.description}
+                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                className="min-h-[80px]"
+              />
+            </div>
+
+            {kbSuggestions.length > 0 && !kbSuggestDismissed ? (
+              <div className="mt-3 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--color-accent)]">
+                    <BookOpen size={13} aria-hidden />
+                    ¿Ya está resuelto en la KB?
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setKbSuggestDismissed(true)}
+                    className="text-[11px] text-[var(--color-text-3)] hover:text-[var(--color-text-1)]"
+                  >
+                    Ocultar
+                  </button>
+                </div>
+                <p className="mb-2 text-[11px] text-[var(--color-text-3)]">
+                  Artículos relacionados con lo que estás escribiendo. Ábrelos en otra pestaña antes de crear el ticket: a veces el problema ya tiene solución conocida.
+                </p>
+                <ul className="space-y-1">
+                  {kbSuggestions.map((s) => (
+                    <li key={s.id}>
+                      <Link
+                        href={`/kb/${s.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group flex items-start gap-2 rounded-md border border-transparent bg-[var(--color-surface)] px-2.5 py-1.5 text-left transition-colors hover:border-[var(--color-accent)]/30"
+                      >
+                        <ExternalLink
+                          size={12}
+                          className="mt-0.5 shrink-0 text-[var(--color-text-3)] group-hover:text-[var(--color-accent)]"
+                          aria-hidden
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-medium text-[var(--color-text-1)]">
+                            {s.title}
+                          </p>
+                          {s.summary ? (
+                            <p className="line-clamp-1 text-[11px] text-[var(--color-text-3)]">{s.summary}</p>
+                          ) : null}
+                        </div>
+                        {s.category ? (
+                          <span className="hidden shrink-0 rounded-sm bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-text-3)] sm:inline">
+                            {s.category}
+                          </span>
+                        ) : null}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -770,25 +1134,26 @@ export function TicketCreateForm({
             stepLabel="4/4"
             subtitle={
               stagedUploadFiles.length || form.comment.trim()
-                ? `${stagedUploadFiles.length} imagen(es) · comentario ${form.comment.trim() ? "rellenado" : "opcional"}`
-                : "Fotos y comentario inicial (opcional)"
+                ? `${stagedUploadFiles.length} archivo(s) · comentario ${form.comment.trim() ? "rellenado" : "opcional"}`
+                : "Fotos, vídeos y comentario inicial (opcional)"
             }
             open={formSectionOpen.attachments}
             onToggle={() => toggleFormSection("attachments")}
           >
             <div className="space-y-2">
-              <span className="text-label">Fotos adjuntas</span>
+              <span className="text-label">Fotos y vídeos adjuntos</span>
               <p className="text-[12px] leading-snug text-[var(--color-text-3)]">
-                Las imágenes se suben al servidor con el ticket (almacén local bajo /uploads). Hasta {TICKET_ATTACH_MAX_FILES}{" "}
-                archivos — max. {Math.round(TICKET_ATTACH_MAX_BYTES / (1024 * 1024))} MB c/u.
+                Hasta {TICKET_ATTACH_MAX_FILES} archivos · imágenes hasta {Math.round(TICKET_ATTACH_MAX_IMAGE_BYTES / (1024 * 1024))} MB · vídeos hasta {Math.round(TICKET_ATTACH_MAX_VIDEO_BYTES / (1024 * 1024))} MB · tope combinado {Math.round(TICKET_ATTACH_MAX_TOTAL_BYTES / (1024 * 1024))} MB.
+                <br />
+                Formatos: JPG, PNG, WEBP, GIF · MP4, WEBM, MOV.
               </p>
               <input
                 ref={photoFileInputRef}
                 type="file"
-                accept="image/*"
+                accept={TICKET_ATTACH_ACCEPT}
                 multiple
                 className="sr-only"
-                aria-label="Seleccionar imágenes adjuntas"
+                aria-label="Seleccionar imágenes y vídeos adjuntos"
                 onChange={handlePhotoInputChange}
               />
               <Button
@@ -802,25 +1167,78 @@ export function TicketCreateForm({
                 Elegir archivos
               </Button>
               {stagedUploadFiles.length > 0 ? (
-                <ul className="mt-2 space-y-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)]/40 p-2">
-                  {stagedUploadFiles.map((file, index) => (
-                    <li
-                      key={`${file.name}-${file.size}-${index}`}
-                      className="flex items-center justify-between gap-2 text-[12px] text-[var(--color-text-1)]"
-                    >
-                      <span className="min-w-0 truncate font-mono" title={file.name}>
-                        {file.name}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removePhotoAt(index)}
-                        className="shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] text-[var(--color-text-2)] transition-colors duration-200 hover:border-[var(--color-error)]/40 hover:text-[var(--color-error)]"
-                      >
-                        Quitar
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="mt-2 space-y-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)]/40 p-2">
+                    {stagedUploadFiles.map((file, index) => {
+                      const kind = classifyAttachFile(file);
+                      const sizeMb = file.size / (1024 * 1024);
+                      const sizeLabel = sizeMb >= 1
+                        ? `${sizeMb.toFixed(sizeMb >= 10 ? 0 : 1)} MB`
+                        : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+                      const isVideo = kind === "video";
+                      return (
+                        <li
+                          key={`${file.name}-${file.size}-${index}`}
+                          className="flex items-center justify-between gap-2 text-[12px] text-[var(--color-text-1)]"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={cn(
+                                "flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1",
+                                isVideo
+                                  ? "bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-[var(--color-accent)]/30"
+                                  : "bg-[var(--color-surface-2)] text-[var(--color-text-2)] ring-[var(--color-border)]",
+                              )}
+                              title={isVideo ? "Vídeo" : "Imagen"}
+                              aria-hidden
+                            >
+                              {isVideo ? <Film size={13} strokeWidth={1.8} /> : <ImageIcon size={13} strokeWidth={1.8} />}
+                            </span>
+                            <span className="min-w-0 truncate font-mono" title={file.name}>
+                              {file.name}
+                            </span>
+                            <span className="shrink-0 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-3)]">
+                              {sizeLabel}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removePhotoAt(index)}
+                            className="shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] text-[var(--color-text-2)] transition-colors duration-200 hover:border-[var(--color-error)]/40 hover:text-[var(--color-error)]"
+                          >
+                            Quitar
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {(() => {
+                    const total = stagedUploadFiles.reduce((sum, f) => sum + f.size, 0);
+                    const totalMb = total / (1024 * 1024);
+                    const capMb = TICKET_ATTACH_MAX_TOTAL_BYTES / (1024 * 1024);
+                    const pct = Math.min(100, (total / TICKET_ATTACH_MAX_TOTAL_BYTES) * 100);
+                    const isWarn = pct >= 75;
+                    return (
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center justify-between text-[10.5px] text-[var(--color-text-3)]">
+                          <span>{stagedUploadFiles.length} / {TICKET_ATTACH_MAX_FILES} archivos</span>
+                          <span className={cn(isWarn && "font-semibold text-[var(--color-warning)]")}>
+                            {totalMb.toFixed(totalMb >= 10 ? 0 : 1)} MB / {capMb.toFixed(0)} MB
+                          </span>
+                        </div>
+                        <div className="h-1 overflow-hidden rounded-full bg-[var(--color-surface-2)]">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-300",
+                              isWarn ? "bg-[var(--color-warning)]" : "bg-[var(--color-accent)]",
+                            )}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
               ) : null}
             </div>
 
@@ -863,8 +1281,34 @@ export function TicketCreateForm({
         </p>
       </div>
 
-      <div className="-mx-5 -mb-5 mt-2 sticky bottom-0 z-10 rounded-b-xl border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 p-4 shadow-[0_-10px_28px_rgba(0,0,0,0.35)] backdrop-blur-sm">
-        <Button variant="primary" size="lg" onClick={() => void submitCreate()} disabled={saving} className="w-full">
+      {/* Footer sticky: indicador del siguiente requisito + CTA principal.
+       *  Mantiene visible el botón al hacer scroll del formulario largo.   */}
+      <div className="-mx-5 -mb-5 mt-3 sticky bottom-0 z-10 rounded-b-xl border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3 shadow-[0_-10px_28px_rgba(0,0,0,0.35)] backdrop-blur-sm">
+        {ticketFormProgress.nextStepIndex !== null ? (
+          <p className="mb-2 flex items-center gap-1.5 text-[11px] text-[var(--color-text-3)]" aria-live="polite">
+            <span className="h-1 w-1 rounded-full bg-[var(--color-warning)]" />
+            Falta:&nbsp;
+            <span className="font-medium text-[var(--color-text-2)]">
+              {
+                (["Equipo con activo", "Tipología completa", "Título (mín. 3 caracteres)", "Descripción (mín. 8)"] as const)[
+                  ticketFormProgress.nextStepIndex
+                ]
+              }
+            </span>
+          </p>
+        ) : (
+          <p className="mb-2 flex items-center gap-1.5 text-[11px] text-[var(--color-success)]" aria-live="polite">
+            <span className="h-1 w-1 rounded-full bg-[var(--color-success)]" />
+            Listo para crear
+          </p>
+        )}
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={() => void submitCreate()}
+          disabled={saving || ticketFormProgress.nextStepIndex !== null}
+          className="w-full"
+        >
           {saving ? (
             <>
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white" />
@@ -872,7 +1316,7 @@ export function TicketCreateForm({
             </>
           ) : (
             <>
-              <UploadCloud size={16} />
+              <UploadCloud size={16} strokeWidth={1.5} />
               Crear ticket
             </>
           )}

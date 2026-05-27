@@ -2,19 +2,41 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
+// El handler maneja subidas multipart con vídeos (hasta 120 MB combinados),
+// por lo que se fuerza el runtime Node (Edge tendría límite de body de 4 MB)
+// y se marca como dinámico para evitar cualquier intento de prerender.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+
 import type { TicketPriority, TicketStatus } from "@/lib/domain";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { ensureCatalogSeeded } from "@/lib/catalog";
 import { reservePartForAssetType } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
 import { canCreateTicket } from "@/lib/rbac";
-import { saveTicketUploadFiles, TICKET_UPLOAD_MAX_BYTES, TICKET_UPLOAD_MAX_FILES } from "@/lib/ticket-uploads";
-import { addMinutesIso, calculatePriority, calculateSlaMinutes } from "@/lib/ticketing";
+import {
+  TICKET_UPLOAD_MAX_FILES,
+  TICKET_UPLOAD_MAX_IMAGE_BYTES,
+  TICKET_UPLOAD_MAX_TOTAL_BYTES,
+  TICKET_UPLOAD_MAX_VIDEO_BYTES,
+  classifyTicketUploadFile,
+  saveTicketUploadFiles,
+  ticketUploadByteLimit,
+} from "@/lib/ticket-uploads";
+import { getSlaMinutesForPriority } from "@/lib/sla-config";
+import { publishTicketEvent } from "@/lib/tickets-events";
+import { addMinutesIso, calculatePriority } from "@/lib/ticketing";
 import type { NivelImpacto } from "@/lib/tipologia";
 
 const createTicketSchema = z.object({
-  busId: z.string().min(1),
-  assetId: z.string().min(1),
+  // El usuario puede teclear un bus que no esté en el catálogo: lo crearemos al
+  // vuelo con valores por defecto. Por eso la validación es laxa (longitud
+  // mínima 1) y dejamos al backend la decisión de crear o no.
+  busId: z.string().trim().min(1),
+  // Si el bus es nuevo, el assetId puede venir vacío y el backend usa
+  // `${busId}-SAE-DEFAULT`.
+  assetId: z.string().trim().optional().default(""),
   tipo: z.string().min(1),
   subtipo: z.string().min(1),
   subsubtipo: z.string().min(1),
@@ -31,6 +53,29 @@ const createTicketSchema = z.object({
   latitude: z.number().finite().gte(-90).lte(90).optional(),
   longitude: z.number().finite().gte(-180).lte(180).optional(),
   mapPlaceMunicipio: z.string().trim().max(160).optional(),
+  // Etiquetas libres opcionales (sugerencia de Pedro). Si llegan vacías o sólo
+  // espacios se convierten a null.
+  lineaLabel: z
+    .string()
+    .trim()
+    .max(120)
+    .transform((value) => (value === "" ? null : value))
+    .nullable()
+    .optional(),
+  servicioLabel: z
+    .string()
+    .trim()
+    .max(120)
+    .transform((value) => (value === "" ? null : value))
+    .nullable()
+    .optional(),
+  conductorLabel: z
+    .string()
+    .trim()
+    .max(120)
+    .transform((value) => (value === "" ? null : value))
+    .nullable()
+    .optional(),
 }).refine(
   (d) =>
     (d.latitude === undefined && d.longitude === undefined) ||
@@ -71,6 +116,12 @@ export async function GET(request: Request) {
     const operator = searchParams.get("operator");
     const busId = searchParams.get("busId");
     const partCodeRaw = searchParams.get("partCode")?.trim() ?? "";
+    // `mine=1` (o `assignee=me`) limita la bandeja a los tickets asignados al
+    // usuario que hace la petición. Para gestores es útil para "ver lo mío",
+    // y para técnicos es la vista por defecto que les abre la app.
+    const mineRaw = searchParams.get("mine") ?? searchParams.get("assignee");
+    const mineActive = mineRaw === "1" || mineRaw === "true" || mineRaw === "me";
+    const onlyMine = mineActive && actor.userId ? actor.userId : null;
 
     let partTicketIds: string[] | null = null;
     if (partCodeRaw) {
@@ -98,6 +149,7 @@ export async function GET(request: Request) {
         priority: priority === "todos" ? undefined : priority,
         busId: busId && busId !== "todas" ? busId : undefined,
         bus: operator && operator !== "todas" ? { operator } : undefined,
+        ...(onlyMine ? { assignedToUserId: onlyMine } : {}),
         ...(partTicketIds !== null
           ? partTicketIds.length > 0
             ? { id: { in: partTicketIds } }
@@ -157,6 +209,9 @@ export async function GET(request: Request) {
         observaciones: ticket.observaciones,
         operator: ticket.bus.operator,
         municipio: ticket.mapPlaceMunicipio?.trim() || ticket.bus.municipio,
+        lineaLabel: ticket.lineaLabel ?? null,
+        servicioLabel: ticket.servicioLabel ?? null,
+        conductorLabel: ticket.conductorLabel ?? null,
         title: ticket.title,
         description: ticket.description,
         status: ticket.status,
@@ -230,18 +285,46 @@ export async function POST(request: Request) {
         }
       }
       if (uploadedFiles.length > TICKET_UPLOAD_MAX_FILES) {
-        return NextResponse.json({ message: `Máximo ${TICKET_UPLOAD_MAX_FILES} archivos` }, { status: 400 });
+        return NextResponse.json(
+          { message: `Máximo ${TICKET_UPLOAD_MAX_FILES} archivos por ticket` },
+          { status: 400 },
+        );
       }
+      let combinedBytes = 0;
       for (const f of uploadedFiles) {
-        if (f.size > TICKET_UPLOAD_MAX_BYTES) {
+        const kind = classifyTicketUploadFile(f.type, f.name);
+        if (!kind) {
           return NextResponse.json(
-            { message: `Cada archivo debe ser como máximo ${Math.round(TICKET_UPLOAD_MAX_BYTES / (1024 * 1024))} MB` },
+            {
+              message:
+                "Tipo no permitido: solo imágenes (jpg, png, webp, gif) o vídeos (mp4, webm, mov).",
+            },
             { status: 400 },
           );
         }
-        if (!f.type.startsWith("image/")) {
-          return NextResponse.json({ message: "Solo se permiten imagenes (image/*)" }, { status: 400 });
+        const limit = ticketUploadByteLimit(kind);
+        if (f.size > limit) {
+          const limitMb = Math.round(limit / (1024 * 1024));
+          return NextResponse.json(
+            {
+              message: `Cada ${kind === "video" ? "vídeo" : "imagen"} debe ser como máximo ${limitMb} MB (${f.name}).`,
+              maxImageBytes: TICKET_UPLOAD_MAX_IMAGE_BYTES,
+              maxVideoBytes: TICKET_UPLOAD_MAX_VIDEO_BYTES,
+            },
+            { status: 413 },
+          );
         }
+        combinedBytes += f.size;
+      }
+      if (combinedBytes > TICKET_UPLOAD_MAX_TOTAL_BYTES) {
+        const totalMb = Math.round(TICKET_UPLOAD_MAX_TOTAL_BYTES / (1024 * 1024));
+        return NextResponse.json(
+          {
+            message: `El tamaño total de la subida supera ${totalMb} MB. Reduce el número o el peso de los archivos.`,
+            maxTotalBytes: TICKET_UPLOAD_MAX_TOTAL_BYTES,
+          },
+          { status: 413 },
+        );
       }
     } else {
       const payload = await request.json();
@@ -256,8 +339,8 @@ export async function POST(request: Request) {
     }
 
     const {
-      busId,
-      assetId,
+      busId: rawBusId,
+      assetId: rawAssetId,
       tipo,
       subtipo,
       subsubtipo,
@@ -274,14 +357,74 @@ export async function POST(request: Request) {
       latitude,
       longitude,
       mapPlaceMunicipio,
+      lineaLabel,
+      servicioLabel,
+      conductorLabel,
     } = parsed;
 
-    const asset = await prisma.asset.findUnique({
-      where: { id: assetId },
+    // ====== Resolver bus + activo (creando al vuelo si no existen) ======
+    // El usuario puede teclear un bus que no esté en el catálogo: si no existe
+    // lo creamos con valores por defecto y un activo SAE-DEFAULT, para que el
+    // ticket pueda persistir. El gestor del catálogo lo completará después.
+    const busId = rawBusId.trim();
+    const existingBus = await prisma.bus.findUnique({
+      where: { id: busId },
+      include: { assets: true },
     });
 
-    if (!asset || asset.busId !== busId) {
-      return NextResponse.json({ message: "Activo no valido para el bus indicado" }, { status: 400 });
+    let asset;
+    let busWasCreated = false;
+    if (!existingBus) {
+      const defaultAssetId = `${busId}-SAE-DEFAULT`;
+      const created = await prisma.bus.create({
+        data: {
+          id: busId,
+          operator: "Sin asignar",
+          municipio: "Sin asignar",
+          lineas: "",
+          assets: {
+            create: [
+              {
+                id: defaultAssetId,
+                type: "sae",
+                serialNumber: `SN-${busId}-01`,
+              },
+            ],
+          },
+        },
+        include: { assets: true },
+      });
+      busWasCreated = true;
+      asset = created.assets[0];
+    } else {
+      const assetIdTrimmed = rawAssetId?.trim() ?? "";
+      if (assetIdTrimmed) {
+        const found = existingBus.assets.find((row) => row.id === assetIdTrimmed);
+        if (!found) {
+          return NextResponse.json(
+            { message: "Activo no valido para el bus indicado" },
+            { status: 400 },
+          );
+        }
+        asset = found;
+      } else {
+        // Sin assetId explícito: usamos el primer activo del bus (típicamente el SAE).
+        // Si el bus no tiene ningún activo (caso del catálogo recién importado),
+        // creamos SAE-DEFAULT al vuelo en lugar de fallar.
+        if (existingBus.assets.length === 0) {
+          const defaultAssetId = `${busId}-SAE-DEFAULT`;
+          asset = await prisma.asset.create({
+            data: {
+              id: defaultAssetId,
+              busId,
+              type: "sae",
+              serialNumber: `SN-${busId}-01`,
+            },
+          });
+        } else {
+          asset = existingBus.assets[0];
+        }
+      }
     }
 
     const priority = calculatePriority({
@@ -290,8 +433,13 @@ export async function POST(request: Request) {
       serviceStopped,
       nivelImpacto: nivelImpacto as NivelImpacto,
     });
+    // El SLA por prioridad ahora se lee de la tabla SlaConfig (editable desde
+    // el panel de administración). El override por activo (Asset.slaMinutes)
+    // sigue siendo prioritario porque suele responder a casos puntuales.
     const slaMinutes =
-      asset.slaMinutes != null && asset.slaMinutes > 0 ? asset.slaMinutes : calculateSlaMinutes(priority);
+      asset.slaMinutes != null && asset.slaMinutes > 0
+        ? asset.slaMinutes
+        : await getSlaMinutesForPriority(priority);
 
     const attachmentCreates =
       uploadedFiles.length === 0 && photoNames.length > 0
@@ -301,7 +449,7 @@ export async function POST(request: Request) {
     const created = await prisma.ticket.create({
       data: {
         busId,
-        assetId,
+        assetId: asset.id,
         tipo,
         subtipo,
         subsubtipo,
@@ -314,6 +462,9 @@ export async function POST(request: Request) {
         status: "abierto",
         priority,
         slaDeadline: new Date(addMinutesIso(new Date(), slaMinutes)),
+        lineaLabel: lineaLabel ?? null,
+        servicioLabel: servicioLabel ?? null,
+        conductorLabel: conductorLabel ?? null,
         ...(latitude !== undefined && longitude !== undefined
           ? {
               latitude,
@@ -347,9 +498,21 @@ export async function POST(request: Request) {
       userId: actor.userId,
       ticketId: created.id,
       action: "ticket.created",
-      detail: reservation.reserved
-        ? `Ticket creado con reserva de ${reservation.partCode}`
-        : "Ticket creado sin stock disponible",
+      detail:
+        (busWasCreated ? `Bus '${busId}' creado al vuelo. ` : "") +
+        (reservation.reserved
+          ? `Ticket creado con reserva de ${reservation.partCode}`
+          : "Ticket creado sin stock disponible"),
+    });
+
+    publishTicketEvent("ticket_created", {
+      id: created.id,
+      busId: created.busId,
+      status: reservation.reserved ? created.status : "esperando_repuesto",
+      priority: created.priority,
+      title: created.title,
+      assignedToUserId: created.assignedToUserId,
+      by: actor.displayName,
     });
 
     return NextResponse.json(

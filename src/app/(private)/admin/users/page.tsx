@@ -5,11 +5,12 @@ import { Suspense } from "react";
 import { AdminUsersManager } from "@/components/admin-users-manager";
 import { prisma } from "@/lib/prisma";
 import { canManageUsers } from "@/lib/rbac";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 export default async function AdminUsersPage() {
   const cookieStore = await cookies();
-  const userId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
+  const userId = verifySessionToken(token);
   if (!userId) {
     redirect("/login?auth=required");
   }
