@@ -1,4 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="CCMGC">
-  <rect width="32" height="32" rx="7" fill="#2563eb"/>
-  <path fill="#f8fafc" d="M9 11h3.2c2.4 0 3.9 1.3 3.9 3.2 0 1.7-1.2 2.8-3.1 2.8H11v3H9V11zm2 4.6h1.1c1.1 0 1.7-.5 1.7-1.4 0-.9-.6-1.4-1.7-1.4H11v2.8zm7.3-4.6H22c2.1 0 3.5 1.2 3.5 3.1 0 1.2-.6 2.1-1.6 2.6l1.9 3.3h-2.3l-1.6-2.9h-1v2.9h-2V11zm2 4.3h1c1 0 1.5-.5 1.5-1.3 0-.9-.5-1.4-1.5-1.4h-1v2.7z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="CCMGC Operaciones">
+  <defs>
+    <linearGradient id="ccmgc-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="ccmgc-live" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="32" height="32" rx="7" fill="url(#ccmgc-bg)"/>
+  <rect x="0" y="0" width="32" height="32" rx="7" fill="none" stroke="#1e3a8a" stroke-opacity="0.45" stroke-width="1"/>
+  <text x="16" y="22.5" text-anchor="middle" font-family="Inter, 'Segoe UI', system-ui, -apple-system, Arial, sans-serif" font-weight="800" font-size="17" letter-spacing="-0.6" fill="#f8fafc">CC</text>
+  <circle cx="25.5" cy="6.5" r="4.5" fill="#0b1220"/>
+  <circle cx="25.5" cy="6.5" r="3.2" fill="url(#ccmgc-live)"/>
+  <circle cx="25.5" cy="6.5" r="3.2" fill="none" stroke="#bbf7d0" stroke-opacity="0.7" stroke-width="0.5"/>
 </svg>

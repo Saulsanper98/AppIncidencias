@@ -60,12 +60,14 @@ export async function GET(request: Request) {
   });
 
   return NextResponse.json({
+    actorId: actor.userId,
     items: items.map((h) => ({
       ...h,
       createdAt: h.createdAt.toISOString(),
       updatedAt: h.updatedAt.toISOString(),
       acknowledgedAt: h.acknowledgedAt?.toISOString() ?? null,
       openTickets: h.openTicketsJson ? safeJson(h.openTicketsJson) : null,
+      wasMine: h.authorId === actor.userId,
     })),
   });
 }

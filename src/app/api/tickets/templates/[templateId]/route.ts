@@ -85,6 +85,26 @@ export async function PATCH(request: Request, { params }: RouteParams) {
           ? (priorityRaw as TicketPriority)
           : undefined;
 
+  // Campos enriquecidos (sugerencia OP03): se aceptan opcionalmente; si vienen
+  // `null` se borran del template, si vienen como valor válido se actualizan.
+  const impactedLinesRaw = body.impactedLines;
+  const impactedLines =
+    impactedLinesRaw === undefined
+      ? undefined
+      : impactedLinesRaw === null
+        ? null
+        : typeof impactedLinesRaw === "number" && Number.isFinite(impactedLinesRaw)
+          ? Math.min(10, Math.max(1, Math.floor(impactedLinesRaw)))
+          : undefined;
+  const serviceStopped =
+    body.serviceStopped === undefined
+      ? undefined
+      : body.serviceStopped === null
+        ? null
+        : typeof body.serviceStopped === "boolean"
+          ? body.serviceStopped
+          : undefined;
+
   const updated = await prisma.ticketTemplate.update({
     where: { id: template.id },
     data: {
@@ -97,6 +117,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       subsubtipo: body.subsubtipo !== undefined ? sanitize(body.subsubtipo, 80) : undefined,
       priority,
       category: body.category !== undefined ? sanitize(body.category, 80) : undefined,
+      impactedLines,
+      serviceStopped,
+      lineaLabel: body.lineaLabel !== undefined ? sanitize(body.lineaLabel, 120) : undefined,
+      servicioLabel: body.servicioLabel !== undefined ? sanitize(body.servicioLabel, 120) : undefined,
+      commentInitial: body.commentInitial !== undefined ? sanitize(body.commentInitial, 2000) : undefined,
     },
   });
 

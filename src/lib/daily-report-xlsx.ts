@@ -131,12 +131,13 @@ export async function buildDailyReportXlsx(
   });
 
   // ============ COLUMNAS (anchos definidos primero) ============
+  // Nota: la columna "I/P" se retiró en mayo 2026 a petición del centro
+  // (no aporta valor a Jefatura). El layout es ahora de 11 columnas.
   const columns = [
     { key: "incidencia", header: "INCIDENCIA", width: 14 },
     { key: "fecha", header: "FECHA", width: 12 },
     { key: "vehiculo", header: "VEH\u00cdCULO", width: 11 },
     { key: "servicio", header: "SERVICIO", width: 14 },
-    { key: "ip", header: "I/P", width: 7 },
     { key: "operadora", header: "OPERADORA", width: 13 },
     { key: "conductor", header: "CONDUCTOR", width: 14 },
     { key: "hreporte", header: "H. REPORTE", width: 11 },
@@ -150,7 +151,7 @@ export async function buildDailyReportXlsx(
   });
 
   // ============ FILA 1: filete dorado superior fino ============
-  sheet.mergeCells("A1:L1");
+  sheet.mergeCells("A1:K1");
   const goldStripe = sheet.getCell("A1");
   goldStripe.fill = { type: "pattern", pattern: "solid", fgColor: { argb: T.gold } };
   sheet.getRow(1).height = 3;
@@ -161,7 +162,7 @@ export async function buildDailyReportXlsx(
   // de los titulares.  La franja completa se pinta del color de marca.
   for (let r = 2; r <= 7; r++) {
     sheet.getRow(r).height = 24;
-    for (let c = 1; c <= 12; c++) {
+    for (let c = 1; c <= 11; c++) {
       sheet.getCell(r, c).fill = {
         type: "pattern",
         pattern: "solid",
@@ -203,19 +204,19 @@ export async function buildDailyReportXlsx(
   // Titulares: empezamos en la columna E para dejar reservadas las primeras
   // 4 columnas (A-D) al logo. Esto le da al logo un margen derecho c?modo
   // (ya no toca el texto amarillo).
-  sheet.mergeCells("E3:L3");
+  sheet.mergeCells("E3:K3");
   const subtitleCell = sheet.getCell("E3");
   subtitleCell.value = "CCMGC \u00b7 CENTRO DE CONTROL DE MOVILIDAD DE GRAN CANARIA";
   subtitleCell.font = { name: "Calibri", size: 9, bold: true, color: { argb: "FFC9A227" } };
   subtitleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
 
-  sheet.mergeCells("E4:L5");
+  sheet.mergeCells("E4:K5");
   const titleCell = sheet.getCell("E4");
   titleCell.value = "Informe diario de incidencias";
   titleCell.font = { name: "Calibri", size: 22, bold: true, color: { argb: "FFFFFFFF" } };
   titleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
 
-  sheet.mergeCells("E6:L6");
+  sheet.mergeCells("E6:K6");
   const dateCell = sheet.getCell("E6");
   dateCell.value = capitalize(formatDateLong(meta.reportDate));
   dateCell.font = { name: "Calibri", size: 11, color: { argb: "FFCBD5E1" } };
@@ -224,7 +225,7 @@ export async function buildDailyReportXlsx(
   // ============ FILA 8: META (generado por) ============
   // Solo "Generado por <nombre>" y fecha-hora. Sin info de generaciones
   // previas (irrelevante para Jefatura).
-  sheet.mergeCells("A8:L8");
+  sheet.mergeCells("A8:K8");
   const metaRow = sheet.getCell("A8");
   metaRow.value = {
     richText: [
@@ -239,7 +240,7 @@ export async function buildDailyReportXlsx(
   metaRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: T.paper } };
   sheet.getRow(8).height = 24;
   // Borde fino abajo para separar de los KPI.
-  for (let c = 1; c <= 12; c++) {
+  for (let c = 1; c <= 11; c++) {
     sheet.getCell(8, c).border = {
       bottom: { style: "thin", color: { argb: T.border } },
     };
@@ -253,11 +254,12 @@ export async function buildDailyReportXlsx(
   // el desglose por estado (Abiertos/En proceso/Resueltos) porque al Jefe no
   // le aporta valor y satura la lectura.
   const totals = summarize(rows);
+  // 4 tarjetas en un layout de 11 columnas: 5 + 2 + 2 + 2 = 11.
   const cards: Array<{ range: string; label: string; value: string; accent: string; emphasis?: "primary" }> = [
     { range: "A10:E13", label: "TOTAL INCIDENCIAS", value: String(totals.total), accent: T.brand, emphasis: "primary" },
-    { range: "F10:H13", label: "PRIORIDAD ALTA", value: String(totals.byPriority.alta), accent: PRIORITY_TEXT.alta },
-    { range: "I10:J13", label: "PRIORIDAD MEDIA", value: String(totals.byPriority.media), accent: PRIORITY_TEXT.media },
-    { range: "K10:L13", label: "PRIORIDAD BAJA", value: String(totals.byPriority.baja), accent: PRIORITY_TEXT.baja },
+    { range: "F10:G13", label: "PRIORIDAD ALTA", value: String(totals.byPriority.alta), accent: PRIORITY_TEXT.alta },
+    { range: "H10:I13", label: "PRIORIDAD MEDIA", value: String(totals.byPriority.media), accent: PRIORITY_TEXT.media },
+    { range: "J10:K13", label: "PRIORIDAD BAJA", value: String(totals.byPriority.baja), accent: PRIORITY_TEXT.baja },
   ];
 
   for (const card of cards) {
@@ -320,7 +322,6 @@ export async function buildDailyReportXlsx(
       "",
       "",
       "",
-      "",
       "Sin incidencias el d\u00eda indicado",
       "\u2014",
       "No se registraron incidencias en el rango horario del informe.",
@@ -341,7 +342,6 @@ export async function buildDailyReportXlsx(
       formatDateShort(row.createdAt),
       stripBusPrefix(row.busId),
       row.servicioLabel ?? "",
-      "",
       row.operator ?? "",
       row.conductorLabel ?? "",
       formatTime(row.createdAt),
@@ -352,13 +352,17 @@ export async function buildDailyReportXlsx(
     ]);
 
     const isZebra = index % 2 === 1;
+    // Tras retirar "I/P", el layout es de 11 columnas:
+    //   1 INCIDENCIA · 2 FECHA · 3 VEHÍCULO · 4 SERVICIO · 5 OPERADORA
+    //   6 CONDUCTOR · 7 H. REPORTE · 8 Nº EXPEDICIÓN · 9 TIPO INCIDENCIA
+    //   10 CRITICIDAD · 11 DESCRIPCIÓN
     dataRow.eachCell((cell, colNumber) => {
       cell.font = { name: "Calibri", size: 10, color: { argb: T.ink } };
       cell.alignment = {
         vertical: "middle",
-        horizontal: colNumber === 12 ? "left" : colNumber >= 2 && colNumber <= 11 ? "center" : "left",
-        wrapText: colNumber === 12 || colNumber === 10,
-        indent: colNumber === 12 ? 1 : 0,
+        horizontal: colNumber === 11 ? "left" : colNumber >= 2 && colNumber <= 10 ? "center" : "left",
+        wrapText: colNumber === 11 || colNumber === 9,
+        indent: colNumber === 11 ? 1 : 0,
       };
       cell.border = {
         top: { style: "hair", color: { argb: T.border } },
@@ -371,8 +375,8 @@ export async function buildDailyReportXlsx(
       }
     });
 
-    // Celda de criticidad: badge de color seg?n prioridad.
-    const criticidadCell = dataRow.getCell(11);
+    // Celda de criticidad (col 10): badge de color seg?n prioridad.
+    const criticidadCell = dataRow.getCell(10);
     criticidadCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PRIORITY_FILL[row.priority] } };
     criticidadCell.font = { name: "Calibri", size: 10, bold: true, color: { argb: PRIORITY_TEXT[row.priority] } };
 
@@ -399,7 +403,7 @@ export async function buildDailyReportXlsx(
   const footerRow = sheet.addRow([
     `Documento confidencial generado autom\u00e1ticamente desde la aplicaci\u00f3n CCMGC el ${formatDateTimeLong(meta.generatedAt)}. Contiene ${rows.length} ${rows.length === 1 ? "registro" : "registros"}.`,
   ]);
-  sheet.mergeCells(footerRow.number, 1, footerRow.number, 12);
+  sheet.mergeCells(footerRow.number, 1, footerRow.number, 11);
   footerRow.getCell(1).font = { name: "Calibri", size: 9, italic: true, color: { argb: T.ink3 } };
   footerRow.getCell(1).alignment = { vertical: "middle", horizontal: "center" };
 

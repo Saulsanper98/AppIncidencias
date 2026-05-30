@@ -20,9 +20,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "Debes iniciar sesion" }, { status: 401 });
     }
 
-    const today = formatLocalIsoDate(new Date());
+    // ?date=YYYY-MM-DD opcional; por defecto, hoy en la zona horaria local
+    // del servidor (la app es de uso interno, todos están en la misma TZ).
+    const { searchParams } = new URL(request.url);
+    const requestedDate = (searchParams.get("date") ?? "").trim();
+    const targetDate = isValidIsoDate(requestedDate) ? requestedDate : formatLocalIsoDate(new Date());
+
     const reports = await prisma.dailyReport.findMany({
-      where: { reportDate: today },
+      where: { reportDate: targetDate },
       orderBy: { createdAt: "asc" },
       include: {
         generatedBy: { select: { id: true, name: true, email: true } },
@@ -30,7 +35,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({
-      reportDate: today,
+      reportDate: targetDate,
       count: reports.length,
       generatedToday: reports.length > 0,
       reports: reports.map((r) => ({
@@ -47,6 +52,12 @@ export async function GET(request: Request) {
     console.error("Error checking daily report:", error);
     return NextResponse.json({ message: "No se pudo comprobar el informe" }, { status: 500 });
   }
+}
+
+function isValidIsoDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00`);
+  return !Number.isNaN(d.getTime());
 }
 
 /** Fecha local en YYYY-MM-DD (zona horaria del proceso, sin UTC drift). */

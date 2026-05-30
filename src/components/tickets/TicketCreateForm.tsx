@@ -252,6 +252,25 @@ export function TicketCreateForm({
   );
   const [formDraftHydrated, setFormDraftHydrated] = useState(false);
   const [stagedUploadFiles, setStagedUploadFiles] = useState<File[]>([]);
+  // ─── Sugerencias Ibrahim (fase 1 mejoras técnicos campo) ──────────────
+  // 1b) Auto-asignar al técnico/gestor que crea el ticket. Si es conductor,
+  //     no aplica (no pueden ser asignados).
+  // 1c) Toggle para crear ya como resuelto (caso resuelto in situ).
+  const canActorAssumeTicket =
+    sessionUser?.role === "tecnico_campo" || sessionUser?.role === "gestor_centro_control";
+  const [assignToMe, setAssignToMe] = useState<boolean>(canActorAssumeTicket);
+  const [createAsResolved, setCreateAsResolved] = useState<boolean>(false);
+  const [resolutionNote, setResolutionNote] = useState<string>("");
+  // Si la sesión llega después del primer render (lo habitual), sincronizamos
+  // el default de "asignarme" al rol real una vez.
+  const initAssignSyncedRef = useRef(false);
+  useEffect(() => {
+    if (initAssignSyncedRef.current) return;
+    if (sessionUser?.role) {
+      initAssignSyncedRef.current = true;
+      setAssignToMe(canActorAssumeTicket);
+    }
+  }, [sessionUser?.role, canActorAssumeTicket]);
   const photoFileInputRef = useRef<HTMLInputElement>(null);
   const [mapLocationHint, setMapLocationHint] = useState<string | null>(null);
   // Sugerencias KB para evitar duplicar tickets que ya tienen artículo
@@ -418,28 +437,19 @@ export function TicketCreateForm({
     if (ticketFormProgress.filled > prev) {
       setDraftStepFlashIndex(ticketFormProgress.filled - 1);
       const flashTimer = window.setTimeout(() => setDraftStepFlashIndex(null), 700);
-      // Auto-avance al completar un paso: abrimos automáticamente el siguiente
-      // paso pendiente. Si todos están completos, dejamos abierto el último.
-      // 280ms para dar tiempo a ver la animación de check antes del cambio.
-      const advanceTimer = window.setTimeout(() => {
-        const nextIdx = ticketFormProgress.nextStepIndex;
-        if (nextIdx === null) return;
-        const id = TICKET_FORM_SECTION_ORDER[nextIdx];
-        setFormSectionOpen({
-          equipment: id === "equipment",
-          tipologia: id === "tipologia",
-          detail: id === "detail",
-          attachments: id === "attachments",
-        });
-      }, 280);
+      // Antes auto-avanzábamos al siguiente paso cerrando la sección activa,
+      // pero eso "robaba" el foco mientras el usuario aún estaba escribiendo
+      // (por ejemplo, al teclear el 3er carácter del título). Ahora SOLO
+      // mostramos el flash visual del ✓ y dejamos que el usuario navegue a
+      // mano (o pulse al botón principal cuando esté listo). El stepper
+      // superior sigue indicando qué paso falta.
       prevFormProgressFilledRef.current = ticketFormProgress.filled;
       return () => {
         window.clearTimeout(flashTimer);
-        window.clearTimeout(advanceTimer);
       };
     }
     prevFormProgressFilledRef.current = ticketFormProgress.filled;
-  }, [ticketFormProgress.filled, ticketFormProgress.nextStepIndex]);
+  }, [ticketFormProgress.filled]);
 
   const toggleFormSection = useCallback((id: TicketFormSectionId) => {
     setFormSectionOpen((prev) => {
@@ -501,9 +511,12 @@ export function TicketCreateForm({
             conductorLabel: typeof d.conductorLabel === "string" ? d.conductorLabel : "",
           });
           setStagedUploadFiles([]);
-          if (parsed.openSections) {
-            setFormSectionOpen(normalizeAccordionOpen(parsed.openSections));
-          }
+          // OJO: NO restauramos `parsed.openSections`. Aunque el draft
+          // guarda qué acordeón estaba abierto, al volver a entrar a
+          // "Tickets" queremos arrancar SIEMPRE en el paso 1 (equipo
+          // afectado). El stepper superior y los useState iniciales ya
+          // dejan abierto "equipment" por defecto, así que basta con
+          // dejar de aplicar el `openSections` persistido.
         }
       }
     } catch {
@@ -601,10 +614,15 @@ export function TicketCreateForm({
       selectedBus: selectedBus ?? null,
       selectedAsset: selectedAsset ?? null,
       selectedTipologia,
+      assignToMe: canActorAssumeTicket ? assignToMe : false,
+      createAsResolved: canActorAssumeTicket ? createAsResolved : false,
+      resolutionNote: createAsResolved ? resolutionNote.trim() : "",
       onTicketCreated: () => {
         setForm((prev) => ({ ...defaultForm(prev.busId), busId: prev.busId }));
         setStagedUploadFiles([]);
         setFormSectionOpen(normalizeAccordionOpen(undefined, "equipment"));
+        setCreateAsResolved(false);
+        setResolutionNote("");
       },
     });
   };
@@ -1251,6 +1269,66 @@ export function TicketCreateForm({
               wrapperClassName="mt-3"
             />
           </CollapsibleFormBlock>
+
+          {/* Asignación y cierre rápido — sugerencias Ibrahim (1b + 1c).
+              Solo visible para técnicos y gestores, que son los únicos
+              roles que pueden ser asignados y cerrar tickets. */}
+          {canActorAssumeTicket ? (
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
+              <div className="flex items-center gap-2">
+                <span className="text-label">Asignación y cierre</span>
+                <span className="text-[10.5px] text-[var(--color-text-3)]">
+                  (opcional, atajos para técnicos)
+                </span>
+              </div>
+              <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="group flex cursor-pointer items-start gap-2.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-2.5 transition-colors hover:border-[var(--color-accent)]/40">
+                  <input
+                    type="checkbox"
+                    checked={assignToMe}
+                    onChange={(e) => setAssignToMe(e.target.checked)}
+                    className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]/40"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-[12.5px] font-medium text-[var(--color-text-1)]">
+                      Asignármelo a mí
+                    </span>
+                    <span className="block text-[11px] leading-snug text-[var(--color-text-3)]">
+                      {sessionUser?.name
+                        ? `Marca a ${sessionUser.name} como responsable.`
+                        : "Marca al usuario actual como responsable."}
+                    </span>
+                  </span>
+                </label>
+                <label className="group flex cursor-pointer items-start gap-2.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-2.5 transition-colors hover:border-emerald-500/40">
+                  <input
+                    type="checkbox"
+                    checked={createAsResolved}
+                    onChange={(e) => setCreateAsResolved(e.target.checked)}
+                    className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-emerald-500 focus:ring-emerald-400/40"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-[12.5px] font-medium text-[var(--color-text-1)]">
+                      Crear ya como <span className="text-emerald-300">resuelto</span>
+                    </span>
+                    <span className="block text-[11px] leading-snug text-[var(--color-text-3)]">
+                      Para casos resueltos in situ. Deja trazabilidad sin pasos extra.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              {createAsResolved ? (
+                <Textarea
+                  label="Nota de resolución"
+                  placeholder="¿Qué se hizo para solucionarlo? Ej: Reinicio del SAE, pieza X sustituida…"
+                  value={resolutionNote}
+                  onChange={(e) => setResolutionNote(e.target.value)}
+                  className="min-h-[56px]"
+                  wrapperClassName="mt-2.5"
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="min-h-3 flex-1 xl:min-h-10" aria-hidden />
       </div>
@@ -1313,6 +1391,11 @@ export function TicketCreateForm({
             <>
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white" />
               Guardando...
+            </>
+          ) : createAsResolved ? (
+            <>
+              <UploadCloud size={16} strokeWidth={1.5} />
+              Crear y cerrar
             </>
           ) : (
             <>

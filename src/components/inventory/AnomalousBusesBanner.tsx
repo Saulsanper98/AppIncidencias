@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Banner colapsable de "buses anómalos" detectados en los últimos 30 días.
+ * Banner colapsable de "buses anómalos" detectados en la ventana
+ * configurada (por defecto 12 días, ajustable desde Admin → Buses anómalos).
  *
  * Consume `/api/buses/anomalous`. Si no hay buses anómalos no renderiza nada.
  * Pensado para verlo en `/inventory` y, posiblemente más adelante, en
@@ -17,6 +18,8 @@ import { cn } from "@/lib/utils";
 type AnomalousBus = {
   busId: string;
   ticketCount: number;
+  score: number;
+  topTypes: { tipo: string; count: number }[];
   operator: string | null;
   municipio: string | null;
   zScore: number | null;
@@ -24,6 +27,8 @@ type AnomalousBus = {
 
 type Payload = {
   windowDays: number;
+  zscoreThreshold?: number;
+  usingWeights?: boolean;
   stats: { mean: number; stddev: number; threshold: number };
   anomalous: AnomalousBus[];
 };
@@ -37,7 +42,7 @@ export function AnomalousBusesBanner() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch("/api/buses/anomalous?days=30", { cache: "no-store" });
+        const res = await fetch("/api/buses/anomalous", { cache: "no-store" });
         if (!res.ok) return;
         const json = (await res.json()) as Payload;
         if (!cancelled) setData(json);
@@ -81,7 +86,9 @@ export function AnomalousBusesBanner() {
               (últimos {data.windowDays} días)
             </p>
             <p className="text-[11px] text-[var(--color-text-3)]">
-              Media de tickets por bus: {data.stats.mean} · umbral: ≥ {data.stats.threshold}.
+              {data.usingWeights ? "Score ponderado" : "Media"} por bus:{" "}
+              {data.stats.mean} · umbral: ≥ {data.stats.threshold}.
+              {data.usingWeights ? " Pesa más los tipos críticos. " : " "}
               Revisa si requieren mantenimiento intensivo o sustitución.
             </p>
           </div>
@@ -115,16 +122,31 @@ export function AnomalousBusesBanner() {
                 <span
                   className={cn(
                     "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums",
-                    b.ticketCount >= data.stats.threshold * 2
+                    b.score >= data.stats.threshold * 2
                       ? "bg-[var(--color-error-light)] text-[var(--color-error)]"
                       : "bg-[var(--color-warning-light)] text-[var(--color-warning)]",
                   )}
+                  title={
+                    data.usingWeights
+                      ? `Score ponderado: ${b.score} · ${b.ticketCount} ticket(s) reales`
+                      : `${b.ticketCount} ticket(s)`
+                  }
                 >
-                  {b.ticketCount} tickets
+                  {data.usingWeights && b.score !== b.ticketCount
+                    ? `${b.score} pts`
+                    : `${b.ticketCount} tickets`}
                 </span>
                 {b.zScore != null ? (
                   <p className="mt-0.5 text-[10px] text-[var(--color-text-3)]">
                     z = {b.zScore}
+                  </p>
+                ) : null}
+                {b.topTypes?.length ? (
+                  <p
+                    className="mt-1 max-w-[170px] truncate text-[10px] text-[var(--color-text-3)]"
+                    title={b.topTypes.map((t) => `${t.tipo} ×${t.count}`).join(" · ")}
+                  >
+                    {b.topTypes[0].tipo} ×{b.topTypes[0].count}
                   </p>
                 ) : null}
               </div>

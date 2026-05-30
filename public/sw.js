@@ -12,8 +12,8 @@
  * desactualizadas en operaciones críticas (tickets, desvíos).
  */
 
-const STATIC_CACHE = "ccmgc-static-v2";
-const OFFLINE_CACHE = "ccmgc-offline-v2";
+const STATIC_CACHE = "ccmgc-static-v4";
+const OFFLINE_CACHE = "ccmgc-offline-v4";
 const OFFLINE_URL = "/offline";
 
 self.addEventListener("install", (event) => {

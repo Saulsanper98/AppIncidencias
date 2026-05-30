@@ -1,12 +1,10 @@
 import {
   BarChart3,
-  CalendarDays,
   ChartNoAxesCombined,
   ClipboardList,
   Handshake,
   LayoutDashboard,
   MessageSquarePlus,
-  Package,
   UserCircle2,
   type LucideIcon,
 } from "lucide-react";
@@ -26,7 +24,7 @@ export type SectionTab = {
   match?: (pathname: string) => boolean;
 };
 
-export type SectionTabsPresetId = "dashboard" | "tickets" | "inventory" | "account";
+export type SectionTabsPresetId = "dashboard" | "tickets" | "account";
 
 const isTechOrManager = (role: UserRole) =>
   role === "tecnico_campo" || role === "gestor_centro_control";
@@ -82,21 +80,6 @@ const ticketsTabs: SectionTab[] = [
 ];
 
 /**
- * Pestañas de la sección "Inventario". El calendario preventivo opera sobre la
- * misma flota que el inventario (vehículos y assets), así que se convierte en
- * vista hermana del listado. Los conductores no entran en el preventivo.
- */
-const inventoryTabs: SectionTab[] = [
-  { label: "Inventario", href: "/inventory", icon: Package },
-  {
-    label: "Preventivo",
-    href: "/preventivo",
-    icon: CalendarDays,
-    visibleTo: isTechOrManager,
-  },
-];
-
-/**
  * Pestañas de la sección "Mi cuenta". El feedback es una acción puntual y muy
  * personal (preferencias, opiniones del propio usuario) — pertenece a su
  * espacio. Disponible para todos los roles.
@@ -117,8 +100,6 @@ export function resolveSectionTabsPreset(id: SectionTabsPresetId): SectionTab[] 
       return dashboardTabs;
     case "tickets":
       return ticketsTabs;
-    case "inventory":
-      return inventoryTabs;
     case "account":
       return accountTabs;
   }

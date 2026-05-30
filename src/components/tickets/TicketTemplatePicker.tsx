@@ -26,6 +26,12 @@ export type TicketTemplate = {
   subsubtipo: string | null;
   priority: "alta" | "media" | "baja" | null;
   category: string | null;
+  /** Campos enriquecidos (Fase 2 sugerencia OP03 "ticket rápido"). */
+  impactedLines: number | null;
+  serviceStopped: boolean | null;
+  lineaLabel: string | null;
+  servicioLabel: string | null;
+  commentInitial: string | null;
   createdAt: string;
   updatedAt: string;
   canEdit: boolean;
@@ -86,6 +92,17 @@ export function TicketTemplatePicker({ form, setForm, sessionUser }: Props) {
         tipo: tpl.tipo ?? prev.tipo,
         subtipo: tpl.subtipo ?? prev.subtipo,
         subsubtipo: tpl.subsubtipo ?? prev.subsubtipo,
+        // Sugerencia OP03 ("ticket rápido"): aplica también las variables que
+        // afectan a la prioridad y a las etiquetas libres si la plantilla las
+        // memoriza. Si la plantilla no las tiene (null), respetamos lo actual.
+        impactedLines: tpl.impactedLines ?? prev.impactedLines,
+        serviceStopped:
+          tpl.serviceStopped === null || tpl.serviceStopped === undefined
+            ? prev.serviceStopped
+            : tpl.serviceStopped,
+        lineaLabel: tpl.lineaLabel ?? prev.lineaLabel,
+        servicioLabel: tpl.servicioLabel ?? prev.servicioLabel,
+        comment: tpl.commentInitial ?? prev.comment,
       }));
       setAppliedId(tpl.id);
       if (appliedTimeoutRef.current) window.clearTimeout(appliedTimeoutRef.current);
@@ -259,6 +276,10 @@ function SaveTemplateDialog({
   });
   const [scope, setScope] = useState<"personal" | "global">("personal");
   const [category, setCategory] = useState("");
+  // Sugerencia OP03 "ticket rápido": opción de guardar también las variables
+  // operativas (líneas, servicio detenido, línea, servicio y comentario).
+  // Activado por defecto para fomentar plantillas "completas".
+  const [includeOperationalFields, setIncludeOperationalFields] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -283,6 +304,15 @@ function SaveTemplateDialog({
           tipo: form.tipo,
           subtipo: form.subtipo,
           subsubtipo: form.subsubtipo,
+          ...(includeOperationalFields
+            ? {
+                impactedLines: form.impactedLines,
+                serviceStopped: form.serviceStopped,
+                lineaLabel: form.lineaLabel || null,
+                servicioLabel: form.servicioLabel || null,
+                commentInitial: form.comment || null,
+              }
+            : {}),
         }),
       });
       if (!res.ok) {
@@ -360,6 +390,23 @@ function SaveTemplateDialog({
                 Compartida con todo el centro de control{canShare ? "" : " (requiere gestor)"}
               </option>
             </Select>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-2.5">
+            <input
+              type="checkbox"
+              checked={includeOperationalFields}
+              onChange={(e) => setIncludeOperationalFields(e.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]/40"
+            />
+            <span>
+              <span className="block text-[12.5px] font-medium text-[var(--color-text-1)]">
+                Incluir variables operativas
+              </span>
+              <span className="block text-[11px] text-[var(--color-text-3)]">
+                Líneas afectadas, servicio detenido, línea/servicio y comentario inicial. Recomendado
+                para plantillas tipo "Salto de viaje".
+              </span>
+            </span>
           </label>
           {error ? <p className="text-xs text-[var(--color-error)]">{error}</p> : null}
         </div>

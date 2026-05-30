@@ -94,6 +94,54 @@ function hueFromId(id: string): number {
   return h;
 }
 
+/**
+ * Tonos visuales por rol — usados en los chips de filtro, los pills
+ * coloreados en cada fila y el anillo del avatar.
+ *
+ *  - gestor_centro_control → violeta (autoridad, gestión)
+ *  - tecnico_campo         → esmeralda (operativo, "en campo")
+ *  - conductor             → ámbar (driver, ruta)
+ */
+function roleTone(role: UserRole): {
+  ring: string;
+  pillActive: string;
+  pillIdle: string;
+  dot: string;
+  text: string;
+  bg: string;
+} {
+  switch (role) {
+    case "gestor_centro_control":
+      return {
+        ring: "ring-violet-400/60",
+        pillActive: "border-violet-400/50 bg-violet-500/15 text-violet-200 ring-1 ring-violet-400/30",
+        pillIdle: "border-violet-400/20 bg-violet-500/[0.05] text-violet-300 hover:bg-violet-500/10",
+        dot: "bg-violet-400",
+        text: "text-violet-300",
+        bg: "bg-violet-500/12",
+      };
+    case "tecnico_campo":
+      return {
+        ring: "ring-emerald-400/60",
+        pillActive: "border-emerald-400/50 bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/30",
+        pillIdle: "border-emerald-400/20 bg-emerald-500/[0.05] text-emerald-300 hover:bg-emerald-500/10",
+        dot: "bg-emerald-400",
+        text: "text-emerald-300",
+        bg: "bg-emerald-500/12",
+      };
+    case "conductor":
+    default:
+      return {
+        ring: "ring-amber-400/60",
+        pillActive: "border-amber-400/50 bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/30",
+        pillIdle: "border-amber-400/20 bg-amber-500/[0.05] text-amber-300 hover:bg-amber-500/10",
+        dot: "bg-amber-400",
+        text: "text-amber-300",
+        bg: "bg-amber-500/12",
+      };
+  }
+}
+
 function initialsFromName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -816,63 +864,99 @@ export function AdminUsersManager() {
         {t.liveFilter(processed.length, users.length)}
       </p>
 
-      <header className="mb-2">
-        <div className="mb-1 flex flex-wrap items-center gap-3">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)]">
-            <Users size={16} className="text-[var(--color-accent)]" />
+      {/* HERO unificado con KPIs */}
+      <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-violet-500/[0.06] p-5 shadow-sm">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-violet-500/15 blur-3xl"
+        />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-500/12 ring-1 ring-violet-400/25 text-violet-300">
+              <Users size={20} strokeWidth={1.7} aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[var(--color-text-3)]">
+                <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold">CCMGC</span>
+                Administración de equipos
+              </div>
+              <h1 className="mt-0.5 text-[22px] font-semibold tracking-tight text-[var(--color-text-1)]">
+                {t.title}
+              </h1>
+              <p className="mt-0.5 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
+                {t.subtitle}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-baseline gap-3">
-            <h1 className="text-heading">{t.title}</h1>
-            <span className="text-caption text-[var(--color-text-3)]">{t.visibleCount(processed.length, users.length)}</span>
-          </div>
-        </div>
-        <p className="max-w-2xl text-pretty text-body text-[var(--color-text-2)] sm:ml-11">{t.subtitle}</p>
-      </header>
 
-      {stats ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div
-            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 transition-colors hover:border-[color-mix(in_oklab,var(--color-border-hover)_65%,var(--color-border))]"
-            title={t.statsTipTotal}
-          >
-            <div className="mb-1 flex items-center gap-2 text-[var(--color-text-3)]">
-              <Users size={14} aria-hidden />
-              <p className="text-caption">{t.statsTotal}</p>
-            </div>
-            <p className="text-xl font-semibold text-[var(--color-text-1)]">{stats.total}</p>
-          </div>
-          <div
-            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 transition-colors hover:border-[color-mix(in_oklab,var(--color-border-hover)_65%,var(--color-border))]"
-            title={t.statsTipActive}
-          >
-            <div className="mb-1 flex items-center gap-2 text-[var(--color-success)]">
-              <UserCheck size={14} aria-hidden />
-              <p className="text-caption">{t.statsActive}</p>
-            </div>
-            <p className="text-xl font-semibold text-[var(--color-success)]">{stats.active}</p>
-          </div>
-          <div
-            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 transition-colors hover:border-[color-mix(in_oklab,var(--color-border-hover)_65%,var(--color-border))]"
-            title={t.statsTipInactive}
-          >
-            <div className="mb-1 flex items-center gap-2 text-[var(--color-text-3)]">
-              <UserMinus size={14} aria-hidden />
-              <p className="text-caption">{t.statsInactive}</p>
-            </div>
-            <p className="text-xl font-semibold text-[var(--color-text-2)]">{stats.inactive}</p>
-          </div>
-          <div
-            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 transition-colors hover:border-[color-mix(in_oklab,var(--color-border-hover)_65%,var(--color-border))]"
-            title={t.statsTipGestors}
-          >
-            <div className="mb-1 flex items-center gap-2 text-[var(--color-text-3)]">
-              <Shield size={14} aria-hidden />
-              <p className="text-caption">{t.statsGestors}</p>
-            </div>
-            <p className="text-xl font-semibold text-[var(--color-text-1)]">{stats.gestorsActive}</p>
-          </div>
+          {/* KPIs en vivo */}
+          {stats ? (
+            <dl className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <UsersKpi
+                icon={<Users size={11} aria-hidden />}
+                label={t.statsTotal}
+                value={stats.total}
+                tone="neutral"
+                title={t.statsTipTotal}
+              />
+              <UsersKpi
+                icon={<UserCheck size={11} aria-hidden />}
+                label={t.statsActive}
+                value={stats.active}
+                tone="success"
+                title={t.statsTipActive}
+              />
+              <UsersKpi
+                icon={<UserMinus size={11} aria-hidden />}
+                label={t.statsInactive}
+                value={stats.inactive}
+                tone={stats.inactive > 0 ? "warning" : "neutral"}
+                title={t.statsTipInactive}
+              />
+              <UsersKpi
+                icon={<Shield size={11} aria-hidden />}
+                label={t.statsGestors}
+                value={stats.gestorsActive}
+                tone="violet"
+                title={t.statsTipGestors}
+              />
+            </dl>
+          ) : null}
         </div>
-      ) : null}
+
+        {/* Distribución por rol */}
+        {stats ? (
+          <div className="relative mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-3">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+              Distribución
+            </span>
+            {(["gestor_centro_control", "tecnico_campo", "conductor"] as const).map((r) => {
+              const count = users.filter((u) => u.role === r).length;
+              const total = users.length || 1;
+              const pct = Math.round((count / total) * 100);
+              const tone = roleTone(r);
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setFilterRole(filterRole === r ? "all" : r)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                    filterRole === r ? tone.pillActive : tone.pillIdle,
+                  )}
+                  title={`Filtrar por ${userRoleLabel(r, locale)}`}
+                >
+                  <span className={cn("h-1.5 w-1.5 rounded-full", tone.dot)} aria-hidden />
+                  {userRoleLabel(r, locale)}
+                  <span className="opacity-75">
+                    {count} · {pct}%
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
 
       <div className="rounded-xl border border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-surface-2)_55%,transparent)] p-4 sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between">
@@ -965,21 +1049,30 @@ export function AdminUsersManager() {
             </button>
           ))}
           <span className="ml-2 self-center text-caption text-[var(--color-text-3)]">{t.filterRole}:</span>
-          {(["all", "conductor", "tecnico_campo", "gestor_centro_control"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setFilterRole(v)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150",
-                filterRole === v
-                  ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)] ring-1 ring-[var(--color-accent)]/35"
-                  : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
-              )}
-            >
-              {v === "all" ? t.chipAll : userRoleLabel(v, locale)}
-            </button>
-          ))}
+          {(["all", "conductor", "tecnico_campo", "gestor_centro_control"] as const).map((v) => {
+            const active = filterRole === v;
+            const tone = v === "all" ? null : roleTone(v);
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setFilterRole(v)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150",
+                  tone === null
+                    ? active
+                      ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)] ring-1 ring-[var(--color-accent)]/35"
+                      : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]"
+                    : active
+                      ? tone.pillActive
+                      : tone.pillIdle,
+                )}
+              >
+                {tone ? <span className={cn("h-1.5 w-1.5 rounded-full", tone.dot)} aria-hidden /> : null}
+                {v === "all" ? t.chipAll : userRoleLabel(v, locale)}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1252,11 +1345,14 @@ export function AdminUsersManager() {
                         <th scope="row" className="py-3 pr-2 text-left font-normal">
                           <div className="flex items-center gap-2.5">
                             <div
-                              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white"
+                              className={cn(
+                                "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white ring-2 ring-offset-2 ring-offset-[var(--color-surface)]",
+                                roleTone(user.role).ring,
+                              )}
                               style={{
                                 backgroundColor: `hsl(${hueFromId(user.id)} 42% 36%)`,
                               }}
-                              title={user.id}
+                              title={`${user.name} · ${userRoleLabel(user.role, locale)}`}
                             >
                               {initialsFromName(user.name)}
                             </div>
@@ -1388,9 +1484,12 @@ export function AdminUsersManager() {
                         />
                         <div className="flex min-w-0 items-center gap-2.5">
                           <div
-                            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                            className={cn(
+                              "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 ring-offset-2 ring-offset-[var(--color-surface-2)]",
+                              roleTone(user.role).ring,
+                            )}
                             style={{ backgroundColor: `hsl(${hueFromId(user.id)} 42% 36%)` }}
-                            title={user.id}
+                            title={`${user.name} · ${userRoleLabel(user.role, locale)}`}
                           >
                             {initialsFromName(user.name)}
                           </div>
@@ -1806,6 +1905,48 @@ export function AdminUsersManager() {
         </div>
       ) : null}
 
+    </div>
+  );
+}
+
+// ─── Subcomponentes del hero ───────────────────────────────────────────────
+
+type UsersKpiTone = "neutral" | "success" | "warning" | "violet";
+
+function UsersKpi({
+  icon,
+  label,
+  value,
+  tone,
+  title,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  tone: UsersKpiTone;
+  title?: string;
+}) {
+  const toneCls =
+    tone === "success"
+      ? "ring-[var(--color-success)]/30 bg-[var(--color-success-light)] text-[var(--color-success)]"
+      : tone === "warning"
+        ? "ring-[var(--color-warning)]/30 bg-[var(--color-warning-light)] text-[var(--color-warning)]"
+        : tone === "violet"
+          ? "ring-violet-400/30 bg-violet-500/12 text-violet-300"
+          : "ring-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)]";
+  return (
+    <div
+      className={cn(
+        "flex min-w-[100px] items-center gap-2 rounded-lg px-2.5 py-1.5 ring-1 transition-shadow hover:shadow-sm",
+        toneCls,
+      )}
+      title={title}
+    >
+      <span className="opacity-80">{icon}</span>
+      <div className="flex min-w-0 flex-col">
+        <span className="text-[10px] uppercase tracking-wider opacity-80">{label}</span>
+        <span className="num-tabular text-[15px] font-semibold leading-tight">{value}</span>
+      </div>
     </div>
   );
 }

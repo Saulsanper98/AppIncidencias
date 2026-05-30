@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   BookOpenCheck,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   ChartNoAxesCombined,
@@ -11,7 +12,6 @@ import {
   MapPinned,
   Megaphone,
   Menu,
-  Package,
   Shield,
   UserCircle2,
 } from "lucide-react";
@@ -60,10 +60,12 @@ type MenuSection = {
 //
 //   Dashboard       → tabs: Operación · Reportes · Cuadros (`/reportes`, `/dashboards`)
 //   Tickets         → tabs: Bandeja · Pase de turno         (`/handover`)
-//   Inventario      → tabs: Inventario · Preventivo         (`/preventivo`)
+//   Preventivo      → calendario + buses anómalos           (`/preventivo`)
 //   Mi cuenta       → tabs: Cuenta · Feedback               (`/feedback`)
 //
 // La barra de pestañas la pinta el componente `SectionTabs` en cada página.
+// "Inventario" se ocultó del menú (mayo 2026, decisión del centro: no se usa
+// de momento). La ruta /inventory sigue accesible por URL si hace falta.
 const menuSections: MenuSection[] = [
   {
     title: "Operación",
@@ -74,7 +76,7 @@ const menuSections: MenuSection[] = [
       // refresca por SSE en `desvio_nuevo` / `desvio_actualizado` y con un
       // fetch inicial de `/api/desvios/badge`.
       { label: "Desvíos", icon: AlertTriangle, href: "/desvios", badge: "desvios" },
-      { label: "Inventario", icon: Package, href: "/inventory" },
+      { label: "Preventivo", icon: CalendarDays, href: "/preventivo" },
       { label: "Mapa", icon: MapPinned, href: "/mapa" },
     ],
   },
@@ -315,9 +317,10 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
     if (href === "/tickets") {
       return pathname.startsWith("/tickets") || pathname.startsWith("/handover");
     }
-    // "Inventario" engloba el inventario y el calendario preventivo.
-    if (href === "/inventory") {
-      return pathname.startsWith("/inventory") || pathname.startsWith("/preventivo");
+    // "Preventivo" agrupa el calendario preventivo y el banner de buses
+    // anómalos. El antiguo /inventory ya no tiene entrada en el menú.
+    if (href === "/preventivo") {
+      return pathname.startsWith("/preventivo") || pathname.startsWith("/inventory");
     }
     // "Mi cuenta" engloba la cuenta y el formulario de feedback.
     if (href === "/account") {

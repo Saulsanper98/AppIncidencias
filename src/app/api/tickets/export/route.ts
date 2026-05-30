@@ -27,6 +27,96 @@ export const dynamic = "force-dynamic";
 
 const MAX_ROWS = 10_000;
 
+/**
+ * Rangos de fecha predefinidos (sugerencia de Javi). El usuario elige uno
+ * desde la UI y el servidor lo traduce a `from`/`to` en zona horaria local.
+ * `custom` requiere que la URL traiga `from`/`to` explícitos (ISO date).
+ *
+ * Filtramos por `createdAt` porque es el campo más natural cuando un técnico
+ * dice "los partes de hoy" o "del último mes".
+ */
+type DateRangePreset = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "lastMonth" | "custom";
+
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function resolveDateRange(
+  range: string | null,
+  fromRaw: string | null,
+  toRaw: string | null,
+): { from: Date | null; to: Date | null; preset: DateRangePreset | null; label: string } {
+  // Aceptamos ambos casings (`thisMonth` y `thismonth`) para ser tolerantes
+  // con el cliente; comparamos en lowercase pero devolvemos el preset
+  // canónico camelCase.
+  const lower = (range ?? "").toLowerCase();
+  const now = new Date();
+  switch (lower) {
+    case "today":
+      return { from: startOfDay(now), to: endOfDay(now), preset: "today", label: "Hoy" };
+    case "yesterday": {
+      const y = new Date(now);
+      y.setDate(now.getDate() - 1);
+      return { from: startOfDay(y), to: endOfDay(y), preset: "yesterday", label: "Ayer" };
+    }
+    case "last7": {
+      const f = new Date(now);
+      f.setDate(now.getDate() - 6);
+      return { from: startOfDay(f), to: endOfDay(now), preset: "last7", label: "Últimos 7 días" };
+    }
+    case "last30": {
+      const f = new Date(now);
+      f.setDate(now.getDate() - 29);
+      return { from: startOfDay(f), to: endOfDay(now), preset: "last30", label: "Últimos 30 días" };
+    }
+    case "thismonth": {
+      const f = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: startOfDay(f), to: endOfDay(now), preset: "thisMonth", label: "Mes en curso" };
+    }
+    case "lastmonth": {
+      const f = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const t = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: startOfDay(f), to: endOfDay(t), preset: "lastMonth", label: "Mes anterior" };
+    }
+    case "custom": {
+      const from = fromRaw ? new Date(fromRaw) : null;
+      const to = toRaw ? new Date(toRaw) : null;
+      const fromOk = from && !Number.isNaN(from.getTime()) ? startOfDay(from) : null;
+      const toOk = to && !Number.isNaN(to.getTime()) ? endOfDay(to) : null;
+      const label = [fromOk?.toISOString().slice(0, 10), toOk?.toISOString().slice(0, 10)]
+        .filter(Boolean)
+        .join(" → ") || "Personalizado";
+      return { from: fromOk, to: toOk, preset: "custom", label };
+    }
+    default: {
+      // Sin range: respetamos from/to si llegan sueltos (compat).
+      const from = fromRaw ? new Date(fromRaw) : null;
+      const to = toRaw ? new Date(toRaw) : null;
+      const fromOk = from && !Number.isNaN(from.getTime()) ? startOfDay(from) : null;
+      const toOk = to && !Number.isNaN(to.getTime()) ? endOfDay(to) : null;
+      if (!fromOk && !toOk) {
+        return { from: null, to: null, preset: null, label: "Sin límite" };
+      }
+      return {
+        from: fromOk,
+        to: toOk,
+        preset: "custom",
+        label: [fromOk?.toISOString().slice(0, 10), toOk?.toISOString().slice(0, 10)]
+          .filter(Boolean)
+          .join(" → "),
+      };
+    }
+  }
+}
+
 function normalizeStatus(value: string | null): TicketStatus | "todos" {
   if (!value || value === "todos") return "todos";
   if (
@@ -84,6 +174,11 @@ export async function GET(request: Request) {
     const mineRaw = searchParams.get("mine") ?? searchParams.get("assignee");
     const mineActive = mineRaw === "1" || mineRaw === "true" || mineRaw === "me";
     const onlyMine = mineActive && actor.userId ? actor.userId : null;
+    const dateRange = resolveDateRange(
+      searchParams.get("range"),
+      searchParams.get("from"),
+      searchParams.get("to"),
+    );
 
     // Resuelve `partCode` igual que el GET: tickets que tengan una reserva
     // de esa pieza (reservada o consumida).
@@ -107,12 +202,21 @@ export async function GET(request: Request) {
       }
     }
 
+    const createdAtFilter: Prisma.DateTimeFilter | undefined =
+      dateRange.from || dateRange.to
+        ? {
+            ...(dateRange.from ? { gte: dateRange.from } : {}),
+            ...(dateRange.to ? { lte: dateRange.to } : {}),
+          }
+        : undefined;
+
     const where: Prisma.TicketWhereInput = {
       status: status === "todos" ? undefined : status,
       priority: priority === "todos" ? undefined : priority,
       busId: busId && busId !== "todas" ? busId : undefined,
       bus: operator && operator !== "todas" ? { operator } : undefined,
       ...(onlyMine ? { assignedToUserId: onlyMine } : {}),
+      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
       ...(partTicketIds !== null
         ? partTicketIds.length > 0
           ? { id: { in: partTicketIds } }
@@ -231,6 +335,9 @@ export async function GET(request: Request) {
       { k: "Bus", v: busId && busId !== "todas" ? busId : "Todos" },
       { k: "Código pieza", v: partCodeRaw || "—" },
       { k: "Solo míos", v: onlyMine ? "Sí" : "No" },
+      { k: "Rango fechas", v: dateRange.label },
+      ...(dateRange.from ? [{ k: "Desde", v: formatCanary(dateRange.from) }] : []),
+      ...(dateRange.to ? [{ k: "Hasta", v: formatCanary(dateRange.to) }] : []),
       { k: "Exportado por", v: actor.displayName },
       { k: "Exportado en", v: formatCanary(new Date()) },
       { k: "Total filas", v: tickets.length },
@@ -239,7 +346,11 @@ export async function GET(request: Request) {
 
     const buffer = await workbook.xlsx.writeBuffer();
 
-    const filename = `tickets_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.xlsx`;
+    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const rangeSuffix = dateRange.preset
+      ? `_${dateRange.preset.replace(/[^a-z0-9]+/gi, "")}`
+      : "";
+    const filename = `tickets_${datePart}${rangeSuffix}.xlsx`;
     return new NextResponse(buffer as ArrayBuffer, {
       status: 200,
       headers: {

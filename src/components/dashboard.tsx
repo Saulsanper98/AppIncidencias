@@ -16,9 +16,12 @@ import {
   LayoutDashboard,
   MapPinned,
   Monitor,
+  Moon,
   Radio,
   RefreshCw,
   Search,
+  Sun,
+  Sunrise,
   TrendingUp,
   Wifi,
   Wrench,
@@ -38,8 +41,8 @@ import {
 
 import { ConductorViewPanel } from "@/components/conductor-view-panel";
 import { DailyReportButton } from "@/components/daily-report-button";
-import { DashboardPreventiveAgenda } from "@/components/dashboard-preventive-agenda";
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
+import { RecentHandoversCard } from "@/components/recent-handovers-card";
 import { Badge } from "@/components/ui/badge";
 import { knowledgeShortcuts } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
@@ -61,6 +64,13 @@ type KpisData = {
   mttrByPriority?: { alta: number | null; media: number | null; baja: number | null };
   unassignedAgedCount?: number;
   topBuses?: { busId: string; ticketCount: number; operator: string | null; municipio: string | null }[];
+  /**
+   * Reparto de los tickets creados HOY entre los tres turnos del centro:
+   *   - M (Mañana) 06:00 – 14:00
+   *   - T (Tarde)  14:00 – 22:00
+   *   - N (Noche)  22:00 – 06:00
+   */
+  shiftLoadToday?: { M: number; T: number; N: number };
 };
 type TrendDay = { day: string; creados: number; resueltos: number };
 type TrendSummary = {
@@ -822,8 +832,26 @@ export function Dashboard() {
               </div>
             </article>
 
-            {/* Trend chart */}
-            <article className="ccmgc-card ccmgc-stagger-in ccmgc-stagger-in-5 flex min-h-[380px] flex-col p-5 lg:h-full lg:min-h-0">
+            {/* Columna derecha: Tendencia + Carga por turno apiladas. La
+             *  envolvemos en un flex-col para que ambas cards compartan la
+             *  segunda columna del grid, manteniendo cada una su altura
+             *  fija (la curva no se estira, la carga es compacta). */}
+            <div className="flex flex-col gap-4">
+            {/* Trend chart
+             *
+             *  La card antes tenía `lg:h-full lg:min-h-0` para alinear su alto
+             *  con el de "Incidencias activas" en la columna izquierda. El
+             *  problema es que cuando la columna izquierda crece (8 o más
+             *  incidencias visibles), la card de la derecha también crecía y
+             *  estiraba el AreaChart verticalmente hasta deformar la curva.
+             *
+             *  Necesitamos altura CONCRETA (no min/max) en el ancestro para
+             *  que `ResponsiveContainer` de Recharts (height="100%") y los
+             *  `flex-1` anidados puedan resolver. Por eso fijamos
+             *  `h-[380px]` en mobile y `lg:h-[460px]` en desktop: la curva
+             *  se ve siempre y no se estira con la columna vecina.
+             */}
+            <article className="ccmgc-card ccmgc-stagger-in ccmgc-stagger-in-5 flex h-[380px] flex-col p-5 lg:h-[460px]">
               <div className="mb-3 shrink-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2">
@@ -917,6 +945,9 @@ export function Dashboard() {
                 </div>
               </div>
             </article>
+
+            <ShiftLoadCard loading={loading} shiftLoadToday={kpis?.shiftLoadToday} />
+            </div>
           </div>
 
           {/* ── Bottom row ── */}
@@ -957,8 +988,10 @@ export function Dashboard() {
               </p>
             </Link>
 
-            {/* Preventive agenda */}
-            <DashboardPreventiveAgenda />
+            {/* Últimos pases de turno (M/T/N) — reemplaza a la antigua
+             *  "Agenda de hoy" (preventivo) ahora que inventario y preventivo
+             *  se gestionan exclusivamente en su propia sección. */}
+            <RecentHandoversCard />
 
             {/* Knowledge base */}
             <article className="ccmgc-card min-h-[220px] p-5">
@@ -1014,5 +1047,132 @@ export function Dashboard() {
         </section>
       )}
     </div>
+  );
+}
+
+// ─── ShiftLoadCard ─────────────────────────────────────────────────────────────
+//
+// Compacta tarjeta debajo de la curva de tendencia: reparte los tickets
+// creados HOY entre los tres turnos del centro (M / T / N) con su mini-barra
+// horizontal y el icono correspondiente (amanecer / sol / luna).
+//
+// Sirve al gestor de sala para detectar de un vistazo en qué franja se está
+// acumulando carga y decidir refuerzos. Los cortes (6/14/22) son los mismos
+// que usa el formulario de "Pase de turno" (/handover) para mantener
+// consistencia entre vistas.
+
+type ShiftKey = "M" | "T" | "N";
+
+const SHIFT_META: Record<
+  ShiftKey,
+  { label: string; range: string; Icon: typeof Sunrise; tone: string; bar: string }
+> = {
+  M: {
+    label: "Mañana",
+    range: "06:00 – 14:00",
+    Icon: Sunrise,
+    tone: "text-amber-300",
+    bar: "linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)",
+  },
+  T: {
+    label: "Tarde",
+    range: "14:00 – 22:00",
+    Icon: Sun,
+    tone: "text-sky-300",
+    bar: "linear-gradient(90deg, #0284c7 0%, #38bdf8 100%)",
+  },
+  N: {
+    label: "Noche",
+    range: "22:00 – 06:00",
+    Icon: Moon,
+    tone: "text-indigo-300",
+    bar: "linear-gradient(90deg, #4f46e5 0%, #818cf8 100%)",
+  },
+};
+
+function ShiftLoadCard({
+  loading,
+  shiftLoadToday,
+}: {
+  loading: boolean;
+  shiftLoadToday?: { M: number; T: number; N: number };
+}) {
+  const data = shiftLoadToday ?? { M: 0, T: 0, N: 0 };
+  const total = data.M + data.T + data.N;
+  const max = Math.max(data.M, data.T, data.N, 1);
+  const nowHour = new Date().getHours();
+  const currentShift: ShiftKey =
+    nowHour >= 6 && nowHour < 14 ? "M" : nowHour >= 14 && nowHour < 22 ? "T" : "N";
+
+  return (
+    <article className="ccmgc-card ccmgc-stagger-in ccmgc-stagger-in-5 flex flex-col p-5">
+      <header className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-[var(--color-text-1)]">Carga por turno</h3>
+          <p className="text-[11px] text-[var(--color-text-3)]">
+            Tickets creados hoy · {total} en total
+          </p>
+        </div>
+        <div className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-text-3)]">
+          Ahora · {SHIFT_META[currentShift].label}
+        </div>
+      </header>
+
+      <div className="flex flex-col gap-2.5">
+        {(["M", "T", "N"] as ShiftKey[]).map((k) => {
+          const meta = SHIFT_META[k];
+          const value = data[k];
+          const pct = total === 0 ? 0 : Math.round((value / max) * 100);
+          const isCurrent = k === currentShift;
+          return (
+            <div key={k} className="flex items-center gap-3">
+              <div
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-white/[0.04]",
+                  isCurrent ? "border-white/20" : "border-white/10",
+                )}
+              >
+                <meta.Icon size={14} strokeWidth={1.6} className={meta.tone} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-[12px]">
+                    <span
+                      className={cn(
+                        "font-medium",
+                        isCurrent ? "text-[var(--color-text-1)]" : "text-[var(--color-text-2)]",
+                      )}
+                    >
+                      {meta.label}
+                    </span>
+                    <span className="text-[10px] text-[var(--color-text-3)]">{meta.range}</span>
+                  </div>
+                  <span
+                    className={cn(
+                      "tabular-nums text-[13px] font-semibold",
+                      value === 0 ? "text-[var(--color-text-3)]" : "text-[var(--color-text-1)]",
+                    )}
+                  >
+                    {loading ? "—" : value}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className="h-full rounded-full transition-[width] duration-500 ease-out"
+                    style={{ width: `${loading ? 0 : pct}%`, background: meta.bar }}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {!loading && total === 0 ? (
+        <p className="mt-3 text-[11px] italic text-[var(--color-text-3)]">
+          Sin tickets creados aún hoy.
+        </p>
+      ) : null}
+    </article>
   );
 }

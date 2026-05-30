@@ -74,6 +74,12 @@ export function useTickets() {
    */
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /**
+   * Modal "Ticket rápido" (sugerencia OP03). Se abre con la tecla `Q`,
+   * con el botón "Rápido" del header o programáticamente. Reutiliza el
+   * mismo `handleCreateTicket` que el formulario completo.
+   */
+  const [quickTicketOpen, setQuickTicketOpen] = useState(false);
   const [actionMenuTicketId, setActionMenuTicketId] = useState<string | null>(null);
   const [actionMenuViewport, setActionMenuViewport] = useState<{ top: number; left: number } | null>(null);
   const [statusChangeTarget, setStatusChangeTarget] = useState<{ ticketId: string; nextStatus: TicketStatus } | null>(
@@ -165,6 +171,15 @@ export function useTickets() {
           const focusable = root?.querySelector<HTMLElement>("select, input, textarea, button");
           focusable?.focus();
         }, 280);
+      }
+
+      // Atajo "Q" — abre el modal de Ticket rápido. Lo dejamos solo si
+      // no estamos escribiendo en un input/textarea para no entorpecer.
+      if (e.key === "q" || e.key === "Q") {
+        if (inField) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        e.preventDefault();
+        setQuickTicketOpen((v) => !v);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -542,7 +557,17 @@ export function useTickets() {
 
   const handleCreateTicket = useCallback(
     async (payload: CreateTicketPayload) => {
-      const { form, stagedUploadFiles, selectedBus, selectedAsset, selectedTipologia, onTicketCreated } = payload;
+      const {
+        form,
+        stagedUploadFiles,
+        selectedBus,
+        selectedAsset,
+        selectedTipologia,
+        onTicketCreated,
+        assignToMe,
+        createAsResolved,
+        resolutionNote,
+      } = payload;
       if (!sessionUser) {
         setError("Debes iniciar sesión para crear tickets.");
         return;
@@ -604,6 +629,11 @@ export function useTickets() {
         ...(form.lineaLabel.trim() ? { lineaLabel: form.lineaLabel.trim() } : {}),
         ...(form.servicioLabel.trim() ? { servicioLabel: form.servicioLabel.trim() } : {}),
         ...(form.conductorLabel.trim() ? { conductorLabel: form.conductorLabel.trim() } : {}),
+        ...(assignToMe ? { assignToMe: true } : {}),
+        ...(createAsResolved ? { initialStatus: "resuelto" as const } : {}),
+        ...(createAsResolved && resolutionNote?.trim()
+          ? { resolutionNote: resolutionNote.trim() }
+          : {}),
         ...(latStr && lngStr
           ? {
               latitude: Number(latStr.replace(",", ".")),
@@ -679,9 +709,23 @@ export function useTickets() {
       }
 
       const resPayload = (await response.json()) as {
-        inventory?: { status: "reservado" | "sin_stock"; partCode: string; warehouseName?: string };
+        inventory?: {
+          status: "reservado" | "sin_stock" | "skipped";
+          partCode: string;
+          warehouseName?: string;
+        };
+        createdClosed?: boolean;
+        assignedToActor?: boolean;
       };
-      if (resPayload.inventory?.status === "reservado") {
+      if (resPayload.createdClosed) {
+        setNoticeTone("success");
+        setNoticePlacement("center");
+        setNotice(
+          resPayload.assignedToActor
+            ? "Ticket creado y cerrado en tu nombre."
+            : "Ticket creado directamente como resuelto.",
+        );
+      } else if (resPayload.inventory?.status === "reservado") {
         setNoticeTone("info");
         setNoticePlacement("center");
         setNotice(
@@ -1160,6 +1204,8 @@ export function useTickets() {
     handleTicketDeleted,
     shortcutsOpen,
     setShortcutsOpen,
+    quickTicketOpen,
+    setQuickTicketOpen,
     actionMenuTicketId,
     setActionMenuTicketId,
     actionMenuViewport,

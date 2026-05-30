@@ -15,7 +15,10 @@ export const dynamic = "force-dynamic";
 
 type ReportPayload = {
   days: number;
+  preset?: string;
+  label?: string;
   since: string;
+  until?: string;
   totals: { created: number; resolved: number; slaCompliancePercent: number | null; mttrMs: number | null };
   series: { day: string; creados: number; resueltos: number }[];
   byPriority: { priority: string; count: number }[];
@@ -43,12 +46,18 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const days = Math.min(180, Math.max(7, Number(searchParams.get("days") ?? 30)));
 
-    // Llamamos al endpoint JSON internamente para no duplicar lógica.
+    // Llamamos al endpoint JSON internamente para no duplicar la lógica de
+    // resolución de rango (today/yesterday/lastN/custom). Re-enviamos TODOS
+    // los parámetros de query relevantes.
     const url = new URL(request.url);
     url.pathname = "/api/reports/operational";
-    url.search = `?days=${days}`;
+    const forwarded = new URLSearchParams();
+    for (const key of ["range", "from", "to", "days"]) {
+      const v = searchParams.get(key);
+      if (v != null && v !== "") forwarded.set(key, v);
+    }
+    url.search = forwarded.toString() ? `?${forwarded.toString()}` : "";
     const headers = new Headers();
     const cookie = request.headers.get("cookie");
     if (cookie) headers.set("cookie", cookie);
@@ -73,8 +82,10 @@ export async function GET(request: Request) {
     ];
     resumen.getRow(1).font = { bold: true };
     resumen.addRows([
-      { k: "Ventana", v: `${data.days} días` },
+      { k: "Periodo", v: data.label ?? `${data.days} días` },
       { k: "Desde", v: data.since },
+      { k: "Hasta", v: data.until ?? "—" },
+      { k: "Días", v: data.days },
       { k: "Tickets creados", v: data.totals.created },
       { k: "Tickets resueltos", v: data.totals.resolved },
       { k: "SLA cumplido (%)", v: data.totals.slaCompliancePercent ?? "—" },
@@ -150,7 +161,11 @@ export async function GET(request: Request) {
     tec.addRows(data.topTechnicians);
 
     const buffer = await workbook.xlsx.writeBuffer();
-    const filename = `reporte_operativo_${data.days}d_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.xlsx`;
+    const fromTag = (data.since ?? "").slice(0, 10).replace(/-/g, "");
+    const toTag = (data.until ?? data.since ?? "").slice(0, 10).replace(/-/g, "");
+    const periodTag =
+      fromTag && toTag && fromTag !== toTag ? `${fromTag}_${toTag}` : `${data.days}d_${toTag}`;
+    const filename = `reporte_operativo_${periodTag}.xlsx`;
     return new NextResponse(buffer as ArrayBuffer, {
       status: 200,
       headers: {

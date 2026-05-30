@@ -5,7 +5,10 @@
  * dashboard analítico. Se ha priorizado el rendimiento usando `groupBy` /
  * `aggregate` de Prisma en vez de procesar las filas en Node.
  *
- * Filtros: `?days=30` (7-180).
+ * Filtros (en orden de prioridad):
+ *  - `?from=YYYY-MM-DD&to=YYYY-MM-DD` → rango personalizado.
+ *  - `?range=today|yesterday|last7|last30|last90|last180` → preset.
+ *  - `?days=N` (7-180) → compatibilidad histórica (equivalente a lastN).
  */
 
 import { NextResponse } from "next/server";
@@ -16,8 +19,97 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type RangePreset =
+  | "today"
+  | "yesterday"
+  | "last7"
+  | "last30"
+  | "last90"
+  | "last180"
+  | "custom";
+
 function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function startOfDayUtc(d: Date): Date {
+  const c = new Date(d);
+  c.setUTCHours(0, 0, 0, 0);
+  return c;
+}
+
+function endOfDayUtc(d: Date): Date {
+  const c = new Date(d);
+  c.setUTCHours(23, 59, 59, 999);
+  return c;
+}
+
+function parseDateOnly(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
+  if (!m) return null;
+  const dt = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00.000Z`);
+  return Number.isFinite(dt.getTime()) ? dt : null;
+}
+
+function resolveRange(searchParams: URLSearchParams): {
+  since: Date;
+  until: Date;
+  preset: RangePreset;
+  label: string;
+} {
+  const now = new Date();
+  const todayStart = startOfDayUtc(now);
+  const fromParam = parseDateOnly(searchParams.get("from"));
+  const toParam = parseDateOnly(searchParams.get("to"));
+  if (fromParam) {
+    const since = startOfDayUtc(fromParam);
+    const until = toParam ? endOfDayUtc(toParam) : endOfDayUtc(fromParam);
+    const label =
+      fromParam.getTime() === (toParam?.getTime() ?? fromParam.getTime())
+        ? `Día ${dayKey(fromParam)}`
+        : `${dayKey(fromParam)} → ${dayKey(toParam ?? fromParam)}`;
+    return { since, until, preset: "custom", label };
+  }
+
+  const range = (searchParams.get("range") ?? "").toLowerCase();
+  switch (range) {
+    case "today":
+      return { since: todayStart, until: endOfDayUtc(now), preset: "today", label: "Hoy" };
+    case "yesterday": {
+      const y = new Date(todayStart);
+      y.setUTCDate(y.getUTCDate() - 1);
+      return { since: y, until: endOfDayUtc(y), preset: "yesterday", label: "Ayer" };
+    }
+    case "last7":
+    case "last30":
+    case "last90":
+    case "last180": {
+      const map: Record<string, number> = { last7: 7, last30: 30, last90: 90, last180: 180 };
+      const n = map[range];
+      const since = new Date(todayStart);
+      since.setUTCDate(since.getUTCDate() - (n - 1));
+      return {
+        since,
+        until: endOfDayUtc(now),
+        preset: range as RangePreset,
+        label: `Últimos ${n} días`,
+      };
+    }
+  }
+
+  // Compat: ?days=N (asumimos ventana terminando hoy).
+  const daysParam = Number(searchParams.get("days") ?? 30);
+  const days = Math.min(180, Math.max(1, Number.isFinite(daysParam) ? daysParam : 30));
+  const since = new Date(todayStart);
+  since.setUTCDate(since.getUTCDate() - (days - 1));
+  const presetById: Record<number, RangePreset> = { 7: "last7", 30: "last30", 90: "last90", 180: "last180" };
+  return {
+    since,
+    until: endOfDayUtc(now),
+    preset: presetById[days] ?? "custom",
+    label: `Últimos ${days} días`,
+  };
 }
 
 export async function GET(request: Request) {
@@ -28,14 +120,16 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const days = Math.min(180, Math.max(7, Number(searchParams.get("days") ?? 30)));
-    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    since.setUTCHours(0, 0, 0, 0);
+    const { since, until, preset, label } = resolveRange(searchParams);
+    const days = Math.max(
+      1,
+      Math.round((endOfDayUtc(until).getTime() - startOfDayUtc(since).getTime() + 1) / (24 * 60 * 60 * 1000)),
+    );
 
     const [createdTickets, resolvedTickets, byPriority, byOperator, byTipo] =
       await Promise.all([
         prisma.ticket.findMany({
-          where: { createdAt: { gte: since } },
+          where: { createdAt: { gte: since, lte: until } },
           select: {
             createdAt: true,
             updatedAt: true,
@@ -48,7 +142,7 @@ export async function GET(request: Request) {
           },
         }),
         prisma.ticket.findMany({
-          where: { status: "resuelto", updatedAt: { gte: since } },
+          where: { status: "resuelto", updatedAt: { gte: since, lte: until } },
           select: {
             createdAt: true,
             updatedAt: true,
@@ -60,24 +154,24 @@ export async function GET(request: Request) {
         }),
         prisma.ticket.groupBy({
           by: ["priority"],
-          where: { createdAt: { gte: since } },
+          where: { createdAt: { gte: since, lte: until } },
           _count: { _all: true },
         }),
         prisma.ticket.groupBy({
           by: ["busId"],
-          where: { createdAt: { gte: since } },
+          where: { createdAt: { gte: since, lte: until } },
           _count: { _all: true },
         }),
         prisma.ticket.groupBy({
           by: ["tipo"],
-          where: { createdAt: { gte: since } },
+          where: { createdAt: { gte: since, lte: until } },
           _count: { _all: true },
         }),
       ]);
 
     // Serie temporal por día: creados vs resueltos.
     const seriesMap = new Map<string, { day: string; creados: number; resueltos: number }>();
-    for (let i = 0; i <= days; i++) {
+    for (let i = 0; i < days; i++) {
       const d = new Date(since);
       d.setUTCDate(since.getUTCDate() + i);
       const key = dayKey(d);
@@ -125,7 +219,6 @@ export async function GET(request: Request) {
       }),
     );
 
-    // SLA global y por prioridad.
     const totalResolved = resolvedTickets.length;
     const slaOk = resolvedTickets.filter((t) => t.updatedAt <= t.slaDeadline).length;
     const slaCompliancePercent =
@@ -139,19 +232,16 @@ export async function GET(request: Request) {
           )
         : null;
 
-    // Por tipo (top 10).
     const byTipoSorted = byTipo
       .map((g) => ({ tipo: g.tipo ?? "—", count: g._count._all }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    // Por prioridad ordenado.
     const byPrioritySorted = byPriority.map((g) => ({
       priority: g.priority,
       count: g._count._all,
     }));
 
-    // Top 10 buses.
     const topBusesRaw = byOperator.sort((a, b) => b._count._all - a._count._all).slice(0, 10);
     const busMeta = await prisma.bus.findMany({
       where: { id: { in: topBusesRaw.map((g) => g.busId) } },
@@ -165,14 +255,13 @@ export async function GET(request: Request) {
       municipio: metaById.get(g.busId)?.municipio ?? null,
     }));
 
-    // Top técnicos por resueltos (usando auditEvent → ticket.status_changed).
     const techGroups = await prisma.auditEvent.groupBy({
       by: ["userId"],
       where: {
         userId: { not: null },
         action: "ticket.status_changed",
         detail: { contains: "-> resuelto" },
-        createdAt: { gte: since },
+        createdAt: { gte: since, lte: until },
       },
       _count: { _all: true },
     });
@@ -198,7 +287,10 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       days,
+      preset,
+      label,
       since: since.toISOString(),
+      until: until.toISOString(),
       totals: {
         created: createdTickets.length,
         resolved: totalResolved,

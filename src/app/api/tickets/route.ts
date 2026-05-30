@@ -14,7 +14,7 @@ import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { ensureCatalogSeeded } from "@/lib/catalog";
 import { reservePartForAssetType } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
-import { canCreateTicket } from "@/lib/rbac";
+import { canAssignTicket, canCreateTicket, canUpdateTicketStatus } from "@/lib/rbac";
 import {
   TICKET_UPLOAD_MAX_FILES,
   TICKET_UPLOAD_MAX_IMAGE_BYTES,
@@ -76,6 +76,16 @@ const createTicketSchema = z.object({
     .transform((value) => (value === "" ? null : value))
     .nullable()
     .optional(),
+  // Auto-asignar al técnico que crea el ticket (sugerencia de Ibrahim 1b).
+  // Solo aplica si el actor tiene permiso para ser asignado (técnico o gestor).
+  // Si llega `true` y el actor es conductor, lo ignoramos en silencio.
+  assignToMe: z.boolean().optional().default(false),
+  // Crear ya cerrado (sugerencia de Ibrahim 1c): casos donde el técnico
+  // resuelve in situ y solo quiere dejar trazabilidad. Solo válido para
+  // técnicos/gestores; si llega de un conductor lo ignoramos.
+  initialStatus: z.enum(["abierto", "resuelto"]).optional().default("abierto"),
+  // Nota de cierre obligatoria si initialStatus === "resuelto".
+  resolutionNote: z.string().trim().max(2000).optional(),
 }).refine(
   (d) =>
     (d.latitude === undefined && d.longitude === undefined) ||
@@ -360,6 +370,9 @@ export async function POST(request: Request) {
       lineaLabel,
       servicioLabel,
       conductorLabel,
+      assignToMe,
+      initialStatus,
+      resolutionNote,
     } = parsed;
 
     // ====== Resolver bus + activo (creando al vuelo si no existen) ======
@@ -446,6 +459,29 @@ export async function POST(request: Request) {
         ? { create: photoNames.map((fileName) => ({ fileName })) }
         : undefined;
 
+    // ─── Sugerencias Ibrahim ──────────────────────────────────────────────
+    // 1b) Auto-asignar al técnico/gestor que crea el ticket si lo pide.
+    //     Los conductores no pueden ser asignados (no resuelven tickets).
+    const shouldAssignToActor = Boolean(assignToMe) && canAssignTicket(actor.role);
+    // 1c) Crear ya como resuelto si el técnico/gestor lo solicita. El
+    //     conductor NO puede cerrar tickets directamente (canUpdateTicketStatus).
+    const shouldCreateClosed =
+      initialStatus === "resuelto" && canUpdateTicketStatus(actor.role);
+    const now = new Date();
+
+    // Si nace cerrado, registramos comentario de cierre (a continuación del
+    // comentario inicial si lo hay) en vez del de "creación automática".
+    const commentEntries: { author: string; body: string }[] = [];
+    if (comment?.trim()) {
+      commentEntries.push({ author: actor.displayName, body: comment.trim() });
+    } else if (!shouldCreateClosed) {
+      commentEntries.push({ author: actor.displayName, body: "Ticket creado automáticamente." });
+    }
+    if (shouldCreateClosed) {
+      const note = resolutionNote?.trim() || "Resuelto directamente al crear el ticket.";
+      commentEntries.push({ author: actor.displayName, body: `[Resolución] ${note}` });
+    }
+
     const created = await prisma.ticket.create({
       data: {
         busId,
@@ -459,9 +495,11 @@ export async function POST(request: Request) {
         observaciones,
         title,
         description,
-        status: "abierto",
+        status: shouldCreateClosed ? "resuelto" : "abierto",
+        ...(shouldCreateClosed ? { resolvedAt: now } : {}),
+        ...(shouldAssignToActor ? { assignedToUserId: actor.userId } : {}),
         priority,
-        slaDeadline: new Date(addMinutesIso(new Date(), slaMinutes)),
+        slaDeadline: new Date(addMinutesIso(now, slaMinutes)),
         lineaLabel: lineaLabel ?? null,
         servicioLabel: servicioLabel ?? null,
         conductorLabel: conductorLabel ?? null,
@@ -472,12 +510,7 @@ export async function POST(request: Request) {
               ...(mapPlaceMunicipio?.trim() ? { mapPlaceMunicipio: mapPlaceMunicipio.trim() } : { mapPlaceMunicipio: null }),
             }
           : {}),
-        comments: {
-          create: {
-            author: actor.displayName,
-            body: comment?.trim() ? comment : "Ticket creado automáticamente.",
-          },
-        },
+        comments: { create: commentEntries },
         ...(attachmentCreates ? { attachments: attachmentCreates } : {}),
       },
     });
@@ -486,29 +519,45 @@ export async function POST(request: Request) {
       await saveTicketUploadFiles(created.id, uploadedFiles);
     }
 
-    const reservation = await reservePartForAssetType(asset.type, created.id);
-    if (!reservation.reserved) {
+    // Reserva de repuesto solo si el ticket no nace ya resuelto: si nace
+    // cerrado significa que no hay trabajo pendiente (no toca apartar pieza).
+    const reservation = shouldCreateClosed
+      ? null
+      : await reservePartForAssetType(asset.type, created.id);
+    if (reservation && !reservation.reserved) {
       await prisma.ticket.update({
         where: { id: created.id },
         data: { status: "esperando_repuesto" },
       });
     }
 
+    const auditDetailParts: string[] = [];
+    if (busWasCreated) auditDetailParts.push(`Bus '${busId}' creado al vuelo.`);
+    if (shouldAssignToActor) {
+      auditDetailParts.push(`Auto-asignado a ${actor.displayName}.`);
+    }
+    if (shouldCreateClosed) {
+      auditDetailParts.push("Creado directamente como RESUELTO.");
+    } else if (reservation?.reserved) {
+      auditDetailParts.push(`Reserva de ${reservation.partCode}.`);
+    } else {
+      auditDetailParts.push("Sin stock disponible.");
+    }
     await writeAuditEvent({
       userId: actor.userId,
       ticketId: created.id,
       action: "ticket.created",
-      detail:
-        (busWasCreated ? `Bus '${busId}' creado al vuelo. ` : "") +
-        (reservation.reserved
-          ? `Ticket creado con reserva de ${reservation.partCode}`
-          : "Ticket creado sin stock disponible"),
+      detail: auditDetailParts.join(" "),
     });
 
     publishTicketEvent("ticket_created", {
       id: created.id,
       busId: created.busId,
-      status: reservation.reserved ? created.status : "esperando_repuesto",
+      status: shouldCreateClosed
+        ? "resuelto"
+        : reservation?.reserved
+          ? created.status
+          : "esperando_repuesto",
       priority: created.priority,
       title: created.title,
       assignedToUserId: created.assignedToUserId,
@@ -518,18 +567,22 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ticketId: created.id,
-        inventory: reservation.reserved
-          ? {
-              status: "reservado",
-              partCode: reservation.partCode,
-              partName: reservation.partName,
-              warehouseName: reservation.warehouseName,
-            }
-          : {
-              status: "sin_stock",
-              reason: reservation.reason,
-              partCode: "N/A",
-            },
+        createdClosed: shouldCreateClosed,
+        assignedToActor: shouldAssignToActor,
+        inventory: reservation == null
+          ? { status: "skipped", reason: "ticket_created_closed", partCode: "N/A" }
+          : reservation.reserved
+            ? {
+                status: "reservado",
+                partCode: reservation.partCode,
+                partName: reservation.partName,
+                warehouseName: reservation.warehouseName,
+              }
+            : {
+                status: "sin_stock",
+                reason: reservation.reason,
+                partCode: "N/A",
+              },
       },
       { status: 201 },
     );

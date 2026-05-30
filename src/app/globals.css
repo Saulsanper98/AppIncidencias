@@ -971,3 +971,30 @@ body {
     0 0 0 4px rgba(16, 185, 129, 0.18),
     0 4px 12px rgba(0, 0, 0, 0.45);
 }
+
+/* Popover de selector de día del informe diario.
+ *
+ *  - Pequeña animación de entrada para que no aparezca de golpe.
+ *  - El icono del picker nativo en Chrome/Edge tiende a quedar oscuro
+ *    sobre el dark mode; con `filter: invert(...)` lo hacemos claro y
+ *    legible. En navegadores que no soportan el pseudo, simplemente se
+ *    ignora el bloque.
+ */
+@keyframes ccmgc-daily-pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.daily-report-popover {
+  animation: ccmgc-daily-pop-in 0.14s var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .daily-report-popover {
+    animation: none;
+  }
+}

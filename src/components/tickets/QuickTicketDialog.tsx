@@ -1,0 +1,489 @@
+"use client";
+
+/**
+ * Modo "Ticket rápido" (sugerencia de OP03).
+ *
+ * Objetivo: en partes recurrentes (p.ej. "Salto de viaje en línea X") el
+ * técnico solo debería teclear los datos que cambian: bus, servicio,
+ * conductor, CP. El resto (tipología, prioridad, líneas afectadas, plantilla
+ * de texto…) viene precargado por la plantilla elegida.
+ *
+ * Flujo:
+ *   1. Selecciona una plantilla (filtradas por tipología completa).
+ *   2. Rellena los campos variables que la plantilla NO fija.
+ *   3. Pulsa Enter o "Crear ticket".
+ *   4. Internamente reutilizamos el mismo `handleCreateTicket` que el form
+ *      grande, así que respeta validaciones, attachments, SSE, audit, etc.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, Sparkles, X, Zap } from "lucide-react";
+
+import type { TicketTemplate } from "@/components/tickets/TicketTemplatePicker";
+import { defaultForm } from "@/components/tickets/tickets-module-types";
+import type {
+  CatalogBus,
+  CreateTicketPayload,
+  FormState,
+} from "@/components/tickets/tickets-module-types";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
+import type { NivelImpacto, TipologiaItem } from "@/lib/tipologia";
+import type { SessionUser } from "@/lib/domain";
+import { cn } from "@/lib/utils";
+
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  catalog: CatalogBus[];
+  lineas: string[];
+  tipologias: TipologiaItem[];
+  sessionUser: SessionUser | null;
+  saving: boolean;
+  onCreateTicket: (payload: CreateTicketPayload) => Promise<void>;
+};
+
+export function QuickTicketDialog({
+  open,
+  onClose,
+  catalog,
+  lineas,
+  tipologias,
+  sessionUser,
+  saving,
+  onCreateTicket,
+}: Props) {
+  const [templates, setTemplates] = useState<TicketTemplate[] | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [busId, setBusId] = useState("");
+  const [lineaLabel, setLineaLabel] = useState("");
+  const [servicioLabel, setServicioLabel] = useState("");
+  const [conductorLabel, setConductorLabel] = useState("");
+  const [mapPlace, setMapPlace] = useState(""); // municipio/CP de referencia
+  const [extraNote, setExtraNote] = useState("");
+  const canActorAssumeTicket =
+    sessionUser?.role === "tecnico_campo" || sessionUser?.role === "gestor_centro_control";
+  const [assignToMe, setAssignToMe] = useState<boolean>(canActorAssumeTicket);
+  const [createAsResolved, setCreateAsResolved] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Recarga plantillas al abrir y resetea estado.
+  useEffect(() => {
+    if (!open) return;
+    setSubmitError(null);
+    setAssignToMe(canActorAssumeTicket);
+    if (templates === null && !loadingTemplates) {
+      void (async () => {
+        setLoadingTemplates(true);
+        setTemplateError(null);
+        try {
+          const res = await fetch("/api/tickets/templates", { cache: "no-store" });
+          if (!res.ok) {
+            setTemplateError("No se pudieron cargar las plantillas");
+            return;
+          }
+          const data = (await res.json()) as { templates: TicketTemplate[] };
+          setTemplates(data.templates ?? []);
+        } catch {
+          setTemplateError("No se pudieron cargar las plantillas");
+        } finally {
+          setLoadingTemplates(false);
+        }
+      })();
+    }
+  }, [open, templates, loadingTemplates, canActorAssumeTicket]);
+
+  // Cierre con Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !saving) onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, saving, onClose]);
+
+  /** Plantillas válidas para ticket rápido: tipología completa + título. */
+  const usableTemplates = useMemo(() => {
+    if (!templates) return [] as TicketTemplate[];
+    return templates
+      .filter((t) => t.tipo && t.subtipo && t.subsubtipo && t.title)
+      .sort((a, b) => {
+        // Globales primero, luego personales; dentro de cada grupo por nombre.
+        if (a.scope !== b.scope) return a.scope === "global" ? -1 : 1;
+        return a.name.localeCompare(b.name, "es");
+      });
+  }, [templates]);
+
+  const selectedTemplate = useMemo(
+    () => usableTemplates.find((t) => t.id === selectedTemplateId) ?? null,
+    [usableTemplates, selectedTemplateId],
+  );
+
+  /** Tipología resuelta para la plantilla elegida (o null si ya no existe). */
+  const resolvedTipologia = useMemo<TipologiaItem | null>(() => {
+    if (!selectedTemplate) return null;
+    return (
+      tipologias.find(
+        (t) =>
+          t.tipo === selectedTemplate.tipo &&
+          t.subtipo === selectedTemplate.subtipo &&
+          t.subsubtipo === selectedTemplate.subsubtipo,
+      ) ?? null
+    );
+  }, [selectedTemplate, tipologias]);
+
+  // Si la plantilla precarga línea o servicio, prerrellenamos los inputs
+  // (el usuario los puede sobreescribir si quiere).
+  useEffect(() => {
+    if (!selectedTemplate) return;
+    if (selectedTemplate.lineaLabel) setLineaLabel(selectedTemplate.lineaLabel);
+    if (selectedTemplate.servicioLabel) setServicioLabel(selectedTemplate.servicioLabel);
+  }, [selectedTemplate]);
+
+  const reset = useCallback(() => {
+    setSelectedTemplateId("");
+    setBusId("");
+    setLineaLabel("");
+    setServicioLabel("");
+    setConductorLabel("");
+    setMapPlace("");
+    setExtraNote("");
+    setCreateAsResolved(false);
+    setAssignToMe(canActorAssumeTicket);
+    setSubmitError(null);
+  }, [canActorAssumeTicket]);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSubmitError(null);
+    if (!selectedTemplate) {
+      setSubmitError("Selecciona una plantilla.");
+      return;
+    }
+    if (!resolvedTipologia) {
+      setSubmitError(
+        "La tipología de esta plantilla ya no existe. Edítala o usa el formulario completo.",
+      );
+      return;
+    }
+    if (!busId.trim()) {
+      setSubmitError("Indica el bus.");
+      return;
+    }
+
+    // Construimos el FormState completo combinando plantilla + variables.
+    const form: FormState = {
+      ...defaultForm(busId.trim()),
+      busId: busId.trim(),
+      tipo: resolvedTipologia.tipo,
+      subtipo: resolvedTipologia.subtipo,
+      subsubtipo: resolvedTipologia.subsubtipo,
+      dominio: resolvedTipologia.dominio,
+      nivelImpacto: resolvedTipologia.nivelImpacto as NivelImpacto,
+      origenTecnico: resolvedTipologia.origenTecnico,
+      observaciones: resolvedTipologia.observaciones,
+      title: selectedTemplate.title ?? "",
+      description: selectedTemplate.description ?? "",
+      impactedLines: selectedTemplate.impactedLines ?? 1,
+      serviceStopped: selectedTemplate.serviceStopped ?? false,
+      comment: [selectedTemplate.commentInitial, extraNote].filter(Boolean).join("\n").trim(),
+      lineaLabel: lineaLabel.trim(),
+      servicioLabel: servicioLabel.trim(),
+      conductorLabel: conductorLabel.trim(),
+      mapLatitude: "",
+      mapLongitude: "",
+      mapPlaceMunicipio: mapPlace.trim(),
+    };
+
+    if (form.title.length < 3) {
+      setSubmitError("La plantilla no aporta título suficiente; edítala antes.");
+      return;
+    }
+    if (form.description.length < 8) {
+      setSubmitError("La plantilla no aporta descripción suficiente; edítala antes.");
+      return;
+    }
+
+    const matchedBus = catalog.find((b) => b.id === form.busId) ?? null;
+
+    await onCreateTicket({
+      form,
+      stagedUploadFiles: [],
+      selectedBus: matchedBus,
+      selectedAsset: matchedBus?.assets?.[0] ?? null,
+      selectedTipologia: resolvedTipologia,
+      assignToMe: canActorAssumeTicket ? assignToMe : false,
+      createAsResolved: canActorAssumeTicket ? createAsResolved : false,
+      resolutionNote: "",
+      onTicketCreated: () => {
+        reset();
+        onClose();
+      },
+    });
+  };
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="quick-ticket-title"
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-lg overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
+      >
+        <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] bg-gradient-to-r from-[var(--color-accent-light)] to-transparent px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-accent)] text-white">
+              <Zap size={16} strokeWidth={1.8} aria-hidden />
+            </div>
+            <div>
+              <h2
+                id="quick-ticket-title"
+                className="text-[15px] font-semibold text-[var(--color-text-1)]"
+              >
+                Ticket rápido
+              </h2>
+              <p className="text-[11.5px] text-[var(--color-text-3)]">
+                Plantilla + datos variables. Atajo: <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1 font-mono text-[10px]">Q</kbd>
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              reset();
+              onClose();
+            }}
+            className="rounded p-1 text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
+            aria-label="Cerrar"
+          >
+            <X size={16} aria-hidden />
+          </button>
+        </header>
+
+        <div className="max-h-[70vh] space-y-3 overflow-y-auto p-4">
+          {/* Plantilla */}
+          <label className="block">
+            <span className="flex items-center gap-1.5 text-[11.5px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
+              <Sparkles size={11} aria-hidden />
+              Plantilla
+            </span>
+            {loadingTemplates ? (
+              <div className="mt-1 flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-[12.5px] text-[var(--color-text-3)]">
+                <Loader2 size={12} className="animate-spin" aria-hidden /> Cargando plantillas…
+              </div>
+            ) : templateError ? (
+              <p className="mt-1 text-[12px] text-[var(--color-error)]">{templateError}</p>
+            ) : usableTemplates.length === 0 ? (
+              <p className="mt-1 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 text-[12px] text-[var(--color-text-3)]">
+                Aún no hay plantillas reutilizables. Guarda una desde el formulario completo
+                marcando "Incluir variables operativas".
+              </p>
+            ) : (
+              <>
+                <Select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="mt-1"
+                >
+                  <option value="">— Elegir plantilla —</option>
+                  {usableTemplates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.scope === "global" ? "🌐 " : "👤 "}
+                      {tpl.name}
+                      {tpl.category ? ` · ${tpl.category}` : ""}
+                    </option>
+                  ))}
+                </Select>
+                {selectedTemplate ? (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10.5px]">
+                    <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[var(--color-text-2)]">
+                      {selectedTemplate.tipo} · {selectedTemplate.subtipo}
+                    </span>
+                    {selectedTemplate.impactedLines ? (
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-amber-300">
+                        {selectedTemplate.impactedLines} línea(s)
+                      </span>
+                    ) : null}
+                    {selectedTemplate.serviceStopped ? (
+                      <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-rose-300">
+                        Servicio detenido
+                      </span>
+                    ) : null}
+                    {selectedTemplate.lineaLabel ? (
+                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-emerald-300">
+                        Línea {selectedTemplate.lineaLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </label>
+
+          {/* Variables del parte */}
+          {selectedTemplate ? (
+            <>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-label">Bus *</span>
+                  <Input
+                    list="quick-ticket-bus-options"
+                    value={busId}
+                    onChange={(e) => setBusId(e.target.value)}
+                    placeholder="Teclea o selecciona…"
+                    autoComplete="off"
+                    spellCheck={false}
+                    required
+                  />
+                  <datalist id="quick-ticket-bus-options">
+                    {catalog.map((bus) => (
+                      <option key={bus.id} value={bus.id}>
+                        {bus.operator}
+                        {bus.municipio ? ` · ${bus.municipio}` : ""}
+                      </option>
+                    ))}
+                  </datalist>
+                </label>
+                <label className="block">
+                  <span className="text-label">Conductor</span>
+                  <Input
+                    value={conductorLabel}
+                    onChange={(e) => setConductorLabel(e.target.value)}
+                    placeholder="Ej: Juan Pérez"
+                    maxLength={120}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-label">
+                    Línea
+                    {selectedTemplate.lineaLabel ? (
+                      <span className="ml-1 text-[10px] text-[var(--color-text-3)]">(de la plantilla)</span>
+                    ) : null}
+                  </span>
+                  <Input
+                    list="quick-ticket-linea-options"
+                    value={lineaLabel}
+                    onChange={(e) => setLineaLabel(e.target.value)}
+                    placeholder="Ej: GL-1"
+                    maxLength={120}
+                  />
+                  <datalist id="quick-ticket-linea-options">
+                    {lineas.map((linea) => (
+                      <option key={linea} value={linea} />
+                    ))}
+                  </datalist>
+                </label>
+                <label className="block">
+                  <span className="text-label">
+                    Servicio
+                    {selectedTemplate.servicioLabel ? (
+                      <span className="ml-1 text-[10px] text-[var(--color-text-3)]">(de la plantilla)</span>
+                    ) : null}
+                  </span>
+                  <Input
+                    value={servicioLabel}
+                    onChange={(e) => setServicioLabel(e.target.value)}
+                    placeholder="Turno o código"
+                    maxLength={120}
+                  />
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="text-label">Lugar / CP / Municipio</span>
+                  <Input
+                    value={mapPlace}
+                    onChange={(e) => setMapPlace(e.target.value)}
+                    placeholder="Ej: Vecindario, Sardina, Telde…"
+                    maxLength={160}
+                  />
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="text-label">Nota adicional</span>
+                  <textarea
+                    value={extraNote}
+                    onChange={(e) => setExtraNote(e.target.value)}
+                    placeholder="(opcional) detalles específicos de este parte"
+                    rows={2}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[13px] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
+                  />
+                </label>
+              </div>
+
+              {canActorAssumeTicket ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-2">
+                    <input
+                      type="checkbox"
+                      checked={assignToMe}
+                      onChange={(e) => setAssignToMe(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]/40"
+                    />
+                    <span className="text-[12px] text-[var(--color-text-1)]">
+                      Asignármelo a mí
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-2">
+                    <input
+                      type="checkbox"
+                      checked={createAsResolved}
+                      onChange={(e) => setCreateAsResolved(e.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-emerald-500 focus:ring-emerald-400/40"
+                    />
+                    <span className="text-[12px] text-[var(--color-text-1)]">
+                      Crear ya como <span className="text-emerald-300">resuelto</span>
+                    </span>
+                  </label>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          {submitError ? (
+            <p className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300">
+              {submitError}
+            </p>
+          ) : null}
+        </div>
+
+        <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-4 py-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              reset();
+              onClose();
+            }}
+            disabled={saving}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            disabled={saving || !selectedTemplate || !busId.trim()}
+            className={cn(createAsResolved && "bg-emerald-600 hover:bg-emerald-700")}
+          >
+            {saving ? (
+              <span className="flex items-center gap-1">
+                <Loader2 size={12} className="animate-spin" aria-hidden /> Guardando…
+              </span>
+            ) : createAsResolved ? (
+              "Crear y cerrar"
+            ) : (
+              "Crear ticket"
+            )}
+          </Button>
+        </footer>
+      </form>
+    </div>
+  );
+}

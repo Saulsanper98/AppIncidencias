@@ -19,6 +19,7 @@ import {
   Timer,
   UserCheck,
   X,
+  Zap,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useMemo, useState } from "react";
@@ -27,6 +28,8 @@ import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton
 import { StatusChangeModal } from "@/components/status-change-modal";
 import { TicketActionMenu } from "@/components/tickets/TicketActionMenu";
 import { DeleteTicketDialog } from "@/components/tickets/DeleteTicketDialog";
+import { ExcelExportMenu } from "@/components/tickets/ExcelExportMenu";
+import { QuickTicketDialog } from "@/components/tickets/QuickTicketDialog";
 import { SavedViewsBar } from "@/components/tickets/SavedViewsBar";
 import { TicketCreateForm } from "@/components/tickets/TicketCreateForm";
 import { TicketsBandeja } from "@/components/tickets/TicketsBandeja";
@@ -809,10 +812,9 @@ export function TicketsModule() {
                 <Download size={12} aria-hidden />
                 CSV
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  // Construye la URL del export con los mismos filtros que ve el usuario.
+              <ExcelExportMenu
+                disabled={t.tickets.length === 0}
+                buildBaseQuery={() => {
                   const query = new URLSearchParams();
                   if (t.statusFilter !== "todos") query.set("status", t.statusFilter);
                   if (t.priorityFilter !== "todos") query.set("priority", t.priorityFilter);
@@ -820,17 +822,9 @@ export function TicketsModule() {
                   if (t.busFilter !== "todas") query.set("busId", t.busFilter);
                   if (t.partCodeFromQuery) query.set("partCode", t.partCodeFromQuery);
                   if (t.onlyMine) query.set("mine", "1");
-                  const qs = query.toString();
-                  const url = `/api/tickets/export${qs ? `?${qs}` : ""}`;
-                  window.location.assign(url);
+                  return query;
                 }}
-                disabled={t.tickets.length === 0}
-                title="Exportar la bandeja (con filtros) a un Excel (.xlsx)"
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-2)] transition-all duration-200 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0"
-              >
-                <Download size={12} aria-hidden />
-                Excel
-              </button>
+              />
               <button
                 type="button"
                 onClick={() => t.setBandejaCompacta((v) => !v)}
@@ -856,11 +850,23 @@ export function TicketsModule() {
             </div>
           </div>
 
-          <div className="mb-3 flex items-center justify-end">
+          <div className="mb-3 flex items-center justify-end gap-2">
+            {(t.role === "tecnico_campo" || t.role === "gestor_centro_control") ? (
+              <button
+                type="button"
+                onClick={() => t.setQuickTicketOpen(true)}
+                title="Crear un ticket rápido a partir de una plantilla (atajo: Q)"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] px-2 py-1 text-[11px] font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)] hover:text-white"
+              >
+                <Zap size={11} strokeWidth={1.8} aria-hidden />
+                Ticket rápido
+                <kbd className="ml-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-1)] px-1 font-mono text-[9px] text-[var(--color-text-3)]">Q</kbd>
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => t.setShortcutsOpen((v) => !v)}
-              title={"Atajos: / filtra estado \u00B7 N nuevo \u00B7 ? ayuda \u00B7 Esc cerrar"}
+              title={"Atajos: / filtra estado \u00B7 N nuevo \u00B7 Q r\u00E1pido \u00B7 ? ayuda \u00B7 Esc cerrar"}
               className={cn(
                 "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
                 t.shortcutsOpen
@@ -899,6 +905,10 @@ export function TicketsModule() {
                 <li>
                   <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-1)]">N</kbd>{" "}
                   Ir al formulario de nuevo ticket y enfocar el primer campo.
+                </li>
+                <li>
+                  <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-1)]">Q</kbd>{" "}
+                  Abrir el modal de <span className="font-medium">Ticket rápido</span> (plantilla + variables).
                 </li>
               </ul>
             </div>
@@ -1247,6 +1257,17 @@ export function TicketsModule() {
             document.body,
           )
         : null}
+
+      <QuickTicketDialog
+        open={t.quickTicketOpen}
+        onClose={() => t.setQuickTicketOpen(false)}
+        catalog={t.catalog}
+        lineas={t.lineas}
+        tipologias={t.tipologias}
+        sessionUser={t.sessionUser}
+        saving={t.saving}
+        onCreateTicket={t.handleCreateTicket}
+      />
 
       <StatusChangeModal
         open={Boolean(t.statusChangeTarget)}

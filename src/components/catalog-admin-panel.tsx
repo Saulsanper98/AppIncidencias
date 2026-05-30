@@ -2,6 +2,7 @@
 
 import {
   AlertCircle,
+  AlertTriangle,
   Boxes,
   Building2,
   CheckCircle2,
@@ -18,7 +19,13 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { cn } from "@/lib/utils";
+
+/** Pestañas internas del panel del catálogo (orden visual). */
+type CatalogTab = "buses" | "lineas" | "sla" | "anomalous";
 
 type ImportPreviewRow = {
   rowNumber: number;
@@ -104,6 +111,19 @@ export function CatalogAdminPanel() {
   const [slaDrafts, setSlaDrafts] = useState<Record<string, string>>({});
   const [busQuery, setBusQuery] = useState("");
   const [slaQuery, setSlaQuery] = useState("");
+  const [operatorFilter, setOperatorFilter] = useState<string | null>(null);
+  // Pestaña activa. Se persiste en sessionStorage para que recargar
+  // el catálogo no devuelva siempre a "Buses".
+  const [tab, setTab] = useState<CatalogTab>(() => {
+    if (typeof window === "undefined") return "buses";
+    const saved = window.sessionStorage.getItem("catalog:tab");
+    return (saved === "lineas" || saved === "sla" || saved === "anomalous"
+      ? (saved as CatalogTab)
+      : "buses");
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") window.sessionStorage.setItem("catalog:tab", tab);
+  }, [tab]);
 
   // ====== Estado del catalogo de Lineas (servicios) ======
   const [lineas, setLineas] = useState<string[]>([]);
@@ -137,6 +157,26 @@ export function CatalogAdminPanel() {
   });
   const [slaConfigSaving, setSlaConfigSaving] = useState(false);
 
+  // ====== Estado de la deteccion de buses anomalos ======
+  // El "windowDays" arranca en 12 (sugerencia de Ibrahim); zscore permite
+  // afinar la sensibilidad (1.5 = sensible, 2.5 = solo casos claros).
+  // `typeWeights` (fase 3): cada tipo de incidencia puede pesar mas o menos
+  // al calcular el score del bus. P. ej.: "Apertura/cierre puertas": 3 hace
+  // que un fallo de puerta valga por 3 tickets en el algoritmo. Sin entradas
+  // el algoritmo se comporta exactamente como antes (peso 1 para todo).
+  const [anomalousConfig, setAnomalousConfig] = useState<{
+    windowDays: number;
+    zscore: number;
+    typeWeights: Record<string, number>;
+  } | null>(null);
+  const [anomalousDrafts, setAnomalousDrafts] = useState<{ windowDays: string; zscore: string }>({
+    windowDays: "",
+    zscore: "",
+  });
+  const [anomalousSaving, setAnomalousSaving] = useState(false);
+  /** Edición de pesos (fase 3): lista de {tipo,peso} editable como arrays. */
+  const [weightDrafts, setWeightDrafts] = useState<{ tipo: string; peso: string }[]>([]);
+
   const load = useCallback(async () => {
     const response = await fetch("/api/catalog", { cache: "no-store" });
     const data = (await response.json()) as CatalogResponse;
@@ -169,6 +209,31 @@ export function CatalogAdminPanel() {
         media: String(data.sla.media),
         baja: String(data.sla.baja),
       });
+    }
+  }, []);
+
+  const loadAnomalousConfig = useCallback(async () => {
+    const response = await fetch("/api/anomalous-config", { cache: "no-store" });
+    if (!response.ok) return;
+    const data = (await response.json()) as {
+      config?: { windowDays: number; zscore: number; typeWeights: Record<string, number> };
+    };
+    if (data.config) {
+      setAnomalousConfig({
+        windowDays: data.config.windowDays,
+        zscore: data.config.zscore,
+        typeWeights: data.config.typeWeights ?? {},
+      });
+      setAnomalousDrafts({
+        windowDays: String(data.config.windowDays),
+        zscore: String(data.config.zscore),
+      });
+      setWeightDrafts(
+        Object.entries(data.config.typeWeights ?? {}).map(([tipo, peso]) => ({
+          tipo,
+          peso: String(peso),
+        })),
+      );
     }
   }, []);
 
@@ -250,12 +315,12 @@ export function CatalogAdminPanel() {
   useEffect(() => {
     void (async () => {
       try {
-        await Promise.all([load(), loadLineas(), loadSlaConfig()]);
+        await Promise.all([load(), loadLineas(), loadSlaConfig(), loadAnomalousConfig()]);
       } finally {
         setLoading(false);
       }
     })();
-  }, [load, loadLineas, loadSlaConfig]);
+  }, [load, loadLineas, loadSlaConfig, loadAnomalousConfig]);
 
   // Auto-clear de avisos
   useEffect(() => {
@@ -288,15 +353,33 @@ export function CatalogAdminPanel() {
 
   const filteredBuses = useMemo(() => {
     const q = busQuery.trim().toLowerCase();
-    if (!q) return buses;
-    return buses.filter(
-      (b) =>
-        b.id.toLowerCase().includes(q) ||
-        b.operator.toLowerCase().includes(q) ||
-        b.municipio.toLowerCase().includes(q) ||
-        b.lineas.some((l) => l.toLowerCase().includes(q)),
-    );
-  }, [buses, busQuery]);
+    let result = buses;
+    if (operatorFilter) {
+      result = result.filter((b) => b.operator === operatorFilter);
+    }
+    if (q) {
+      result = result.filter(
+        (b) =>
+          b.id.toLowerCase().includes(q) ||
+          b.operator.toLowerCase().includes(q) ||
+          b.municipio.toLowerCase().includes(q) ||
+          b.lineas.some((l) => l.toLowerCase().includes(q)),
+      );
+    }
+    return result;
+  }, [buses, busQuery, operatorFilter]);
+
+  /** Lista de operadoras únicas con su conteo (orden alfabético). */
+  const operatorOptions = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const b of buses) {
+      const key = b.operator || "Sin operadora";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [buses]);
 
   // ── KPIs en vivo (sobre `buses`) ──────────────────────────────────────────
   const kpis = useMemo(() => {
@@ -397,6 +480,57 @@ export function CatalogAdminPanel() {
       });
     } finally {
       setSlaConfigSaving(false);
+    }
+  };
+
+  const saveAnomalousConfig = async () => {
+    const windowDays = Number.parseInt(anomalousDrafts.windowDays, 10);
+    const zscore = Number.parseFloat(anomalousDrafts.zscore);
+    if (!Number.isFinite(windowDays) || windowDays < 7 || windowDays > 180) {
+      setNotice({ kind: "error", text: "La ventana debe estar entre 7 y 180 días." });
+      return;
+    }
+    if (!Number.isFinite(zscore) || zscore < 0.5 || zscore > 5) {
+      setNotice({ kind: "error", text: "El umbral (z-score) debe estar entre 0.5 y 5.0." });
+      return;
+    }
+    // Construye typeWeights desde los drafts, descartando filas vacías y
+    // duplicados (gana el último). Pesos válidos: 0 ≤ peso ≤ 10.
+    const typeWeights: Record<string, number> = {};
+    for (const { tipo, peso } of weightDrafts) {
+      const tipoClean = tipo.trim();
+      if (!tipoClean) continue;
+      const pesoNum = Number.parseFloat(peso);
+      if (!Number.isFinite(pesoNum) || pesoNum < 0 || pesoNum > 10) {
+        setNotice({
+          kind: "error",
+          text: `Peso inválido para "${tipoClean}". Debe estar entre 0 y 10.`,
+        });
+        return;
+      }
+      typeWeights[tipoClean] = Math.round(pesoNum * 10) / 10;
+    }
+    setAnomalousSaving(true);
+    try {
+      const response = await fetch("/api/anomalous-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ windowDays, zscore, typeWeights }),
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { message?: string };
+        setNotice({ kind: "error", text: data.message ?? "No se pudo guardar la configuración." });
+        return;
+      }
+      await loadAnomalousConfig();
+      setNotice({ kind: "success", text: "Detección de buses anómalos actualizada." });
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Error de red.",
+      });
+    } finally {
+      setAnomalousSaving(false);
     }
   };
 
@@ -689,7 +823,43 @@ export function CatalogAdminPanel() {
         </div>
       ) : null}
 
+      {/* ── BARRA DE PESTAÑAS INTERNAS ──────────────────────────────────── */}
+      <nav
+        role="tablist"
+        aria-label="Secciones del catálogo"
+        className="-mt-1 flex flex-wrap items-center gap-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 shadow-sm"
+      >
+        <CatalogTabButton
+          icon={Boxes}
+          label="Buses"
+          count={buses.length}
+          active={tab === "buses"}
+          onClick={() => setTab("buses")}
+        />
+        <CatalogTabButton
+          icon={Route}
+          label="Líneas"
+          count={lineas.length}
+          active={tab === "lineas"}
+          onClick={() => setTab("lineas")}
+        />
+        <CatalogTabButton
+          icon={Timer}
+          label="SLA"
+          active={tab === "sla"}
+          onClick={() => setTab("sla")}
+        />
+        <CatalogTabButton
+          icon={AlertTriangle}
+          label="Buses anómalos"
+          active={tab === "anomalous"}
+          tone="rose"
+          onClick={() => setTab("anomalous")}
+        />
+      </nav>
+
       {/* ── NUEVO BUS + IMPORTAR (grid 2 col en lg) ──────────────────────── */}
+      {tab === "buses" ? (
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Nuevo bus */}
         <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 lg:col-span-2">
@@ -774,7 +944,7 @@ export function CatalogAdminPanel() {
             </button>
           </header>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-4">
             <input
               ref={importFileInput}
               type="file"
@@ -782,32 +952,13 @@ export function CatalogAdminPanel() {
               className="hidden"
               onChange={(event) => onPickImportFile(event.target.files?.[0] ?? null)}
             />
-            <button
-              type="button"
-              onClick={() => importFileInput.current?.click()}
-              disabled={importLoading === "commit"}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-[13px] font-medium text-[var(--color-text-1)] hover:border-sky-400/50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Upload size={14} aria-hidden /> Seleccionar archivo
-            </button>
-            {importFile ? (
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-1.5 text-[11.5px] text-[var(--color-text-2)]">
-                <FileSpreadsheet size={12} aria-hidden /> {importFile.name}
-                <button
-                  type="button"
-                  onClick={resetImport}
-                  className="rounded p-0.5 text-[var(--color-text-3)] hover:text-[var(--color-text-1)]"
-                  aria-label="Quitar archivo"
-                >
-                  <X size={11} aria-hidden />
-                </button>
-              </span>
-            ) : null}
-            {importLoading === "preview" ? (
-              <span className="inline-flex items-center gap-1.5 text-[11.5px] text-[var(--color-text-3)]">
-                <Loader2 className="size-3 animate-spin" aria-hidden /> Analizando…
-              </span>
-            ) : null}
+            <BusImportDropzone
+              file={importFile}
+              loading={importLoading}
+              onPick={() => importFileInput.current?.click()}
+              onDropFile={(f) => onPickImportFile(f)}
+              onReset={resetImport}
+            />
           </div>
 
           {importError ? (
@@ -951,8 +1102,10 @@ export function CatalogAdminPanel() {
           ) : null}
         </section>
       </div>
+      ) : null}
 
       {/* ── BUSES ACTUALES ──────────────────────────────────────────────── */}
+      {tab === "buses" ? (
       <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -960,6 +1113,12 @@ export function CatalogAdminPanel() {
             <p className="text-[11.5px] text-[var(--color-text-3)]">
               {filteredBuses.length} de {buses.length} buses
               {kpis.totalAssets > 0 ? ` \u00B7 ${kpis.totalAssets} activos` : ""}
+              {operatorFilter ? (
+                <>
+                  {" · filtrado por "}
+                  <strong className="text-[var(--color-text-2)]">{operatorFilter}</strong>
+                </>
+              ) : null}
             </p>
           </div>
           <div className="relative w-full max-w-xs">
@@ -980,11 +1139,55 @@ export function CatalogAdminPanel() {
           </div>
         </header>
 
+        {/* Chips de filtro por operadora */}
+        {operatorOptions.length > 1 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+              Operadora
+            </span>
+            <button
+              type="button"
+              onClick={() => setOperatorFilter(null)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                operatorFilter === null
+                  ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                  : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+              )}
+            >
+              Todas
+              <span className="opacity-70">({buses.length})</span>
+            </button>
+            {operatorOptions.map((op) => {
+              const active = operatorFilter === op.name;
+              const tone = operatorTone(op.name);
+              return (
+                <button
+                  key={op.name}
+                  type="button"
+                  onClick={() => setOperatorFilter(active ? null : op.name)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                    active
+                      ? `${tone.chipActive} shadow-sm`
+                      : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+                  )}
+                  title={`Filtrar por ${op.name}`}
+                >
+                  <span className={cn("h-1.5 w-1.5 rounded-full", tone.dot)} aria-hidden />
+                  {op.name}
+                  <span className="opacity-70">({op.count})</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
         <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--color-border)]">
-          <table className="ccmgc-table w-full min-w-[640px] text-[13px]">
+          <table className="ccmgc-table w-full min-w-[680px] text-[13px]">
             <thead className="sticky top-0 z-[1] bg-[var(--color-surface-2)]/95 backdrop-blur">
               <tr className="text-left text-[10px] uppercase tracking-wide text-[var(--color-text-3)]">
-                <th className="px-3 py-2">ID</th>
+                <th className="px-3 py-2">Bus</th>
                 <th className="px-3 py-2">Operadora</th>
                 <th className="px-3 py-2">Municipio</th>
                 <th className="px-3 py-2">Líneas</th>
@@ -995,70 +1198,140 @@ export function CatalogAdminPanel() {
             <tbody>
               {filteredBuses.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-[12.5px] text-[var(--color-text-3)]">
-                    {busQuery ? `Sin resultados para "${busQuery}".` : "Aún no hay buses en el catálogo."}
+                  <td colSpan={6} className="px-3 py-10 text-center text-[12.5px] text-[var(--color-text-3)]">
+                    {busQuery
+                      ? `Sin resultados para "${busQuery}".`
+                      : operatorFilter
+                        ? `No hay buses de "${operatorFilter}" con esos filtros.`
+                        : "Aún no hay buses en el catálogo."}
                   </td>
                 </tr>
               ) : (
-                filteredBuses.map((bus, idx) => (
-                  <tr
-                    key={bus.id}
-                    className={`border-t border-[var(--color-border)]/80 transition-colors hover:bg-[var(--color-accent-light)]/30 ${
-                      idx % 2 ? "bg-[var(--color-surface-2)]/40" : ""
-                    }`}
-                  >
-                    <td className="px-3 py-2 font-mono text-[12.5px] font-medium">{bus.id}</td>
-                    <td className="px-3 py-2 text-[var(--color-text-2)]">{bus.operator || "\u2014"}</td>
-                    <td className="px-3 py-2 text-[var(--color-text-2)]">{bus.municipio || "\u2014"}</td>
-                    <td className="px-3 py-2">
-                      {bus.lineas.length === 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning-light)] px-2 py-0.5 text-[10.5px] font-medium text-[var(--color-warning)] ring-1 ring-[var(--color-warning)]/25">
-                          Sin líneas
-                        </span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {bus.lineas.slice(0, 6).map((l) => (
-                            <span
-                              key={l}
-                              className="num-tabular rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-text-2)]"
-                            >
-                              {l}
-                            </span>
-                          ))}
-                          {bus.lineas.length > 6 ? (
-                            <span
-                              className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-text-3)]"
-                              title={bus.lineas.slice(6).join(", ")}
-                            >
-                              +{bus.lineas.length - 6}
-                            </span>
-                          ) : null}
-                        </div>
+                filteredBuses.map((bus, idx) => {
+                  const tone = operatorTone(bus.operator);
+                  return (
+                    <tr
+                      key={bus.id}
+                      className={cn(
+                        "border-t border-[var(--color-border)]/80 transition-colors hover:bg-[var(--color-accent-light)]/25",
+                        idx % 2 ? "bg-[var(--color-surface-2)]/40" : "",
                       )}
-                    </td>
-                    <td className="px-3 py-2 num-tabular text-[12px] text-[var(--color-text-3)]">{bus.assets.length}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => void deleteBus(bus.id)}
-                          className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11.5px] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-error)]/40 hover:bg-[var(--color-error-light)] hover:text-[var(--color-error)]"
-                          aria-label={`Eliminar bus ${bus.id}`}
-                          title="Eliminar"
-                        >
-                          <Trash2 size={11} strokeWidth={1.7} aria-hidden />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                    >
+                      {/* Bus = avatar (iniciales operadora) + ID */}
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold tracking-wide ring-1",
+                              tone.avatar,
+                            )}
+                            title={bus.operator || "Sin operadora"}
+                          >
+                            {operatorInitials(bus.operator)}
+                          </span>
+                          <span className="font-mono text-[12.5px] font-medium text-[var(--color-text-1)]">
+                            {bus.id}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        {bus.operator ? (
+                          <button
+                            type="button"
+                            onClick={() => setOperatorFilter(bus.operator)}
+                            className="rounded text-[var(--color-text-2)] hover:text-[var(--color-text-1)] hover:underline"
+                            title="Filtrar por esta operadora"
+                          >
+                            {bus.operator}
+                          </button>
+                        ) : (
+                          <span className="text-[var(--color-text-3)]">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-[var(--color-text-2)]">
+                        {bus.municipio || <span className="text-[var(--color-text-3)]">—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {bus.lineas.length === 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-warning-light)] px-2 py-0.5 text-[10.5px] font-medium text-[var(--color-warning)] ring-1 ring-[var(--color-warning)]/25">
+                            <AlertCircle size={9} aria-hidden /> Sin líneas
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {bus.lineas.slice(0, 6).map((l) => (
+                              <span
+                                key={l}
+                                className="num-tabular rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-text-2)]"
+                              >
+                                {l}
+                              </span>
+                            ))}
+                            {bus.lineas.length > 6 ? (
+                              <span
+                                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-text-3)]"
+                                title={bus.lineas.slice(6).join(", ")}
+                              >
+                                +{bus.lineas.length - 6}
+                              </span>
+                            ) : null}
+                          </div>
+                        )}
+                      </td>
+                      {/* Mini chips por tipo de activo */}
+                      <td className="px-3 py-2">
+                        {bus.assets.length === 0 ? (
+                          <span className="text-[11px] text-[var(--color-text-3)]">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(
+                              bus.assets.reduce<Record<string, number>>((acc, a) => {
+                                acc[a.type] = (acc[a.type] ?? 0) + 1;
+                                return acc;
+                              }, {}),
+                            ).map(([type, count]) => {
+                              const aTone = assetTone(type);
+                              return (
+                                <span
+                                  key={type}
+                                  className={cn(
+                                    "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium ring-1",
+                                    aTone,
+                                  )}
+                                  title={`${count} × ${type}`}
+                                >
+                                  <span className="capitalize">{type}</span>
+                                  {count > 1 ? <span className="opacity-80">×{count}</span> : null}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => void deleteBus(bus.id)}
+                            className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11.5px] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-error)]/40 hover:bg-[var(--color-error-light)] hover:text-[var(--color-error)]"
+                            aria-label={`Eliminar bus ${bus.id}`}
+                            title="Eliminar"
+                          >
+                            <Trash2 size={11} strokeWidth={1.7} aria-hidden />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </section>
+      ) : null}
 
       {/* ── SLA POR PRIORIDAD (global) ──────────────────────────────────── */}
+      {tab === "sla" ? (
       <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -1150,9 +1423,178 @@ export function CatalogAdminPanel() {
           </button>
         </div>
       </section>
+      ) : null}
+
+      {/* ── BUSES ANÓMALOS ──────────────────────────────────────────────── */}
+      {tab === "anomalous" ? (
+      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/12 text-rose-300">
+              <AlertTriangle size={15} strokeWidth={1.8} aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-subheading">Buses anómalos</h2>
+              <p className="max-w-xl text-[11.5px] text-[var(--color-text-3)]">
+                Detección automática de buses con un volumen de incidencias inusualmente alto en la ventana
+                de tiempo configurada. El banner aparece en Preventivo y en Inventario.
+              </p>
+            </div>
+          </div>
+          {anomalousConfig ? (
+            <span className="rounded-full bg-[var(--color-surface-2)] px-3 py-1 text-[11.5px] text-[var(--color-text-2)] ring-1 ring-[var(--color-border)]">
+              Vigente: {anomalousConfig.windowDays}d · z≥{anomalousConfig.zscore}
+            </span>
+          ) : null}
+        </header>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/[0.06] p-3 text-rose-300 ring-1 ring-transparent">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold uppercase tracking-wide">Ventana de análisis</span>
+              <span className="text-[10px] opacity-70">7 a 180 días</span>
+            </div>
+            <div className="mt-2 flex items-center gap-1.5">
+              <input
+                type="number"
+                min={7}
+                max={180}
+                className="num-tabular w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-[14px] font-semibold text-[var(--color-text-1)] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
+                value={anomalousDrafts.windowDays}
+                onChange={(e) =>
+                  setAnomalousDrafts((d) => ({ ...d, windowDays: e.target.value }))
+                }
+                placeholder="12"
+              />
+              <span className="text-[11.5px] text-[var(--color-text-3)]">días</span>
+            </div>
+            <p className="mt-1.5 text-[10.5px] text-[var(--color-text-3)]">
+              Cuanto menor, antes detecta picos recientes. Habitual: 12–30 días.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-3 text-amber-300 ring-1 ring-transparent">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-semibold uppercase tracking-wide">Umbral (z-score)</span>
+              <span className="text-[10px] opacity-70">0.5 a 5.0</span>
+            </div>
+            <div className="mt-2 flex items-center gap-1.5">
+              <input
+                type="number"
+                min={0.5}
+                max={5}
+                step={0.1}
+                className="num-tabular w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-[14px] font-semibold text-[var(--color-text-1)] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
+                value={anomalousDrafts.zscore}
+                onChange={(e) =>
+                  setAnomalousDrafts((d) => ({ ...d, zscore: e.target.value }))
+                }
+                placeholder="1.5"
+              />
+              <span className="text-[11.5px] text-[var(--color-text-3)]">σ sobre la media</span>
+            </div>
+            <p className="mt-1.5 text-[10.5px] text-[var(--color-text-3)]">
+              1.5 = sensible. 2.0 = equilibrado. 2.5+ = solo casos extremos.
+            </p>
+          </div>
+        </div>
+
+        {/* Pesos por tipo (fase 3 sugerencia Ibrahim). Un peso > 1 hace que ese
+            tipo de incidencia cuente más al puntuar el bus; un peso < 1 lo
+            relativiza. Sin entradas, todo pesa 1. */}
+        <div className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[12.5px] font-semibold text-[var(--color-text-1)]">
+                Pesos por tipo de incidencia
+              </p>
+              <p className="text-[10.5px] text-[var(--color-text-3)]">
+                Una avería de puerta puede valer más que un parte de aire: ajusta el peso
+                para que el algoritmo lo refleje. Tipos sin entrada pesan 1.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWeightDrafts((rows) => [...rows, { tipo: "", peso: "1.5" }])}
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11px] font-medium text-[var(--color-text-2)] hover:border-[var(--color-accent)]/40 hover:text-[var(--color-text-1)]"
+            >
+              <Plus size={11} strokeWidth={2} aria-hidden /> Añadir tipo
+            </button>
+          </div>
+          {weightDrafts.length === 0 ? (
+            <p className="mt-2 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/30 px-3 py-2 text-[11.5px] text-[var(--color-text-3)]">
+              No hay pesos personalizados. Pulsa "Añadir tipo" para empezar
+              (ej. <code className="text-[var(--color-text-2)]">Apertura/cierre puertas</code> con peso{" "}
+              <code className="text-[var(--color-text-2)]">3</code>).
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-1.5">
+              {weightDrafts.map((row, idx) => (
+                <li key={idx} className="grid grid-cols-[1fr_88px_auto] items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={row.tipo}
+                    onChange={(e) =>
+                      setWeightDrafts((rows) =>
+                        rows.map((r, i) => (i === idx ? { ...r, tipo: e.target.value } : r)),
+                      )
+                    }
+                    placeholder="Tipo de incidencia (ej: Apertura/cierre puertas)"
+                    className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={0.1}
+                    value={row.peso}
+                    onChange={(e) =>
+                      setWeightDrafts((rows) =>
+                        rows.map((r, i) => (i === idx ? { ...r, peso: e.target.value } : r)),
+                      )
+                    }
+                    className="num-tabular rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-[12.5px] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setWeightDrafts((rows) => rows.filter((_, i) => i !== idx))}
+                    className="rounded-md p-1.5 text-[var(--color-text-3)] hover:bg-rose-500/15 hover:text-rose-300"
+                    aria-label="Quitar peso"
+                    title="Quitar peso"
+                  >
+                    <Trash2 size={12} aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] text-[var(--color-text-3)]">
+            Los cambios afectan al banner de <code className="rounded bg-[var(--color-surface-2)] px-1">Inventario</code>
+            {" "}en cuanto se refresca la página (caché de 30 s).
+          </p>
+          <button
+            type="button"
+            onClick={() => void saveAnomalousConfig()}
+            disabled={anomalousSaving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-[12.5px] font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {anomalousSaving ? (
+              <>
+                <Loader2 size={12} className="animate-spin" aria-hidden /> Guardando…
+              </>
+            ) : (
+              <>Guardar configuración</>
+            )}
+          </button>
+        </div>
+      </section>
+      ) : null}
 
       {/* ── SLA POR ACTIVO ──────────────────────────────────────────────── */}
-      {flatAssets.length > 0 ? (
+      {tab === "buses" && flatAssets.length > 0 ? (
         <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
           <header className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -1242,6 +1684,7 @@ export function CatalogAdminPanel() {
       ) : null}
 
       {/* ── CATÁLOGO DE LÍNEAS ──────────────────────────────────────────── */}
+      {tab === "lineas" ? (
       <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -1533,11 +1976,277 @@ export function CatalogAdminPanel() {
           )}
         </div>
       </section>
+      ) : null}
     </div>
   );
 }
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────
+
+/**
+ * Zona de subida con drag & drop para el importador de buses.
+ *
+ *  - Cuando no hay archivo: muestra una caja punteada grande con icono y texto
+ *    "Arrastra aquí o haz clic". Resalta visualmente al pasar por encima
+ *    con un fichero arrastrado.
+ *  - Cuando hay archivo: muestra una pill compacta con su nombre y opción
+ *    de quitarlo, y la barra "Analizando…" mientras se construye la preview.
+ */
+function BusImportDropzone({
+  file,
+  loading,
+  onPick,
+  onDropFile,
+  onReset,
+}: {
+  file: File | null;
+  loading: "preview" | "commit" | null;
+  onPick: () => void;
+  onDropFile: (file: File | null) => void;
+  onReset: () => void;
+}) {
+  const [isOver, setIsOver] = useState(false);
+  const disabled = loading === "commit";
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!disabled) setIsOver(true);
+  };
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOver(false);
+  };
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOver(false);
+    if (disabled) return;
+    const f = e.dataTransfer.files?.[0] ?? null;
+    if (!f) return;
+    const validExt = /\.(xlsx|xls|csv)$/i.test(f.name);
+    if (!validExt) {
+      onDropFile(null);
+      return;
+    }
+    onDropFile(f);
+  };
+
+  if (file) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-400/30 bg-sky-500/[0.06] px-3 py-2.5">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/30">
+          <FileSpreadsheet size={14} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12.5px] font-semibold text-[var(--color-text-1)]" title={file.name}>
+            {file.name}
+          </p>
+          <p className="text-[10.5px] text-[var(--color-text-3)]">{prettyBytes(file.size)}</p>
+        </div>
+        {loading === "preview" ? (
+          <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-text-3)]">
+            <Loader2 className="size-3 animate-spin" aria-hidden /> Analizando…
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onPick}
+          disabled={disabled}
+          className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:border-sky-400/40 hover:text-[var(--color-text-1)] disabled:cursor-not-allowed disabled:opacity-60"
+          title="Reemplazar archivo"
+        >
+          Reemplazar
+        </button>
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={disabled}
+          className="rounded p-1 text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-error)] disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Quitar archivo"
+        >
+          <X size={12} aria-hidden />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onClick={disabled ? undefined : onPick}
+      role="button"
+      tabIndex={0}
+      aria-disabled={disabled || undefined}
+      onKeyDown={(e) => {
+        if ((e.key === "Enter" || e.key === " ") && !disabled) {
+          e.preventDefault();
+          onPick();
+        }
+      }}
+      className={cn(
+        "group relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-7 text-center transition-all",
+        isOver
+          ? "border-sky-400/70 bg-sky-500/[0.08] shadow-[inset_0_0_0_2px_rgba(56,189,248,0.15)]"
+          : "border-[var(--color-border)] bg-[var(--color-surface-2)]/40 hover:border-sky-400/40 hover:bg-[var(--color-surface-2)]/70",
+        disabled && "cursor-not-allowed opacity-60",
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-12 w-12 items-center justify-center rounded-2xl ring-1 transition-all",
+          isOver
+            ? "bg-sky-500/20 text-sky-200 ring-sky-400/40 scale-110"
+            : "bg-sky-500/12 text-sky-300 ring-sky-400/25",
+        )}
+      >
+        <Upload size={20} strokeWidth={1.7} aria-hidden />
+      </div>
+      <div>
+        <p className="text-[13px] font-semibold text-[var(--color-text-1)]">
+          {isOver ? "Suelta el archivo aquí" : "Arrastra el archivo o haz clic"}
+        </p>
+        <p className="mt-0.5 text-[11px] text-[var(--color-text-3)]">
+          Formatos admitidos: <span className="font-mono">.xlsx</span>,{" "}
+          <span className="font-mono">.xls</span>, <span className="font-mono">.csv</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Formatea bytes a unidad humana (KB, MB). */
+function prettyBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
+
+/** Iniciales operadora (1–3 letras MAYÚSCULAS). */
+function operatorInitials(operator: string): string {
+  if (!operator) return "?";
+  const words = operator
+    .replace(/[.,\-_/]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0] + (words[2]?.[0] ?? "")).toUpperCase().slice(0, 3);
+}
+
+/** Paleta determinista por nombre de operadora (hash → tono). */
+function operatorTone(operator: string): {
+  avatar: string;
+  dot: string;
+  chipActive: string;
+} {
+  const palette = [
+    {
+      avatar: "bg-sky-500/15 text-sky-300 ring-sky-400/30",
+      dot: "bg-sky-400",
+      chipActive: "border-sky-400/40 bg-sky-500/15 text-sky-200",
+    },
+    {
+      avatar: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
+      dot: "bg-emerald-400",
+      chipActive: "border-emerald-400/40 bg-emerald-500/15 text-emerald-200",
+    },
+    {
+      avatar: "bg-violet-500/15 text-violet-300 ring-violet-400/30",
+      dot: "bg-violet-400",
+      chipActive: "border-violet-400/40 bg-violet-500/15 text-violet-200",
+    },
+    {
+      avatar: "bg-amber-500/15 text-amber-300 ring-amber-400/30",
+      dot: "bg-amber-400",
+      chipActive: "border-amber-400/40 bg-amber-500/15 text-amber-200",
+    },
+    {
+      avatar: "bg-rose-500/15 text-rose-300 ring-rose-400/30",
+      dot: "bg-rose-400",
+      chipActive: "border-rose-400/40 bg-rose-500/15 text-rose-200",
+    },
+    {
+      avatar: "bg-cyan-500/15 text-cyan-300 ring-cyan-400/30",
+      dot: "bg-cyan-400",
+      chipActive: "border-cyan-400/40 bg-cyan-500/15 text-cyan-200",
+    },
+  ];
+  if (!operator) {
+    return {
+      avatar: "bg-[var(--color-surface-2)] text-[var(--color-text-3)] ring-[var(--color-border)]",
+      dot: "bg-[var(--color-text-3)]",
+      chipActive: "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)]",
+    };
+  }
+  let hash = 0;
+  for (let i = 0; i < operator.length; i++) hash = (hash * 31 + operator.charCodeAt(i)) | 0;
+  return palette[Math.abs(hash) % palette.length];
+}
+
+/** Tono visual para el tipo de activo (validadora/sae/router/pantalla/…). */
+function assetTone(type: string): string {
+  const t = type.toLowerCase();
+  if (t.includes("valid")) return "bg-sky-500/12 text-sky-300 ring-sky-400/25";
+  if (t.includes("sae")) return "bg-violet-500/12 text-violet-300 ring-violet-400/25";
+  if (t.includes("router")) return "bg-emerald-500/12 text-emerald-300 ring-emerald-400/25";
+  if (t.includes("pantalla")) return "bg-amber-500/12 text-amber-300 ring-amber-400/25";
+  return "bg-[var(--color-surface-2)] text-[var(--color-text-2)] ring-[var(--color-border)]";
+}
+
+function CatalogTabButton({
+  icon: Icon,
+  label,
+  count,
+  active,
+  tone = "accent",
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  count?: number;
+  active: boolean;
+  tone?: "accent" | "rose";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "group inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12.5px] font-medium transition-all",
+        active
+          ? tone === "rose"
+            ? "bg-rose-500/12 text-rose-300 shadow-sm ring-1 ring-rose-400/30"
+            : "bg-[var(--color-accent-light)] text-[var(--color-accent)] shadow-sm ring-1 ring-[var(--color-accent)]/30"
+          : "text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+      )}
+    >
+      <Icon size={13} strokeWidth={1.8} aria-hidden />
+      {label}
+      {count !== undefined ? (
+        <span
+          className={cn(
+            "rounded-full px-1.5 text-[10px] font-bold tabular-nums",
+            active
+              ? tone === "rose"
+                ? "bg-rose-500/20 text-rose-200"
+                : "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+              : "bg-[var(--color-surface-2)] text-[var(--color-text-3)]",
+          )}
+        >
+          {count}
+        </span>
+      ) : null}
+    </button>
+  );
+}
 
 type KpiTone = "neutral" | "warning" | "success";
 

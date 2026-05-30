@@ -19,6 +19,13 @@ export async function GET(request: Request) {
     // más de 30 minutos sin tocar.
     const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
 
+    // Ventana del día de calendario actual: usado para el reparto de carga
+    // por turno (M / T / N) que pinta la card "Carga por turno hoy".
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
     const [
       ticketsAbiertos,
       allBuses,
@@ -27,6 +34,7 @@ export async function GET(request: Request) {
       statusGroups,
       ticketsCreatedRecent,
       unassignedAged,
+      ticketsCreatedToday,
     ] = await Promise.all([
       prisma.ticket.count({ where: { status: "abierto" } }),
       prisma.bus.findMany({ select: { id: true } }),
@@ -57,7 +65,24 @@ export async function GET(request: Request) {
           createdAt: { lte: thirtyMinutesAgo },
         },
       }),
+      // Tickets creados HOY (entre 00:00 y 23:59), solo `createdAt` para
+      // poder repartir por hora en el cálculo del turno (M/T/N).
+      prisma.ticket.findMany({
+        where: { createdAt: { gte: todayStart, lt: tomorrowStart } },
+        select: { createdAt: true },
+      }),
     ]);
+
+    // Carga por turno: M = 6h–14h, T = 14h–22h, N = 22h–6h.
+    // Coincide con el cálculo de `currentShiftFromHour` que usa el
+    // formulario de "Pase de turno" en /handover, así los números cuadran.
+    const shiftLoadToday = { M: 0, T: 0, N: 0 };
+    for (const t of ticketsCreatedToday) {
+      const h = t.createdAt.getHours();
+      if (h >= 6 && h < 14) shiftLoadToday.M += 1;
+      else if (h >= 14 && h < 22) shiftLoadToday.T += 1;
+      else shiftLoadToday.N += 1;
+    }
 
     const statusCounts: Record<string, number> = {
       abierto: 0,
@@ -172,6 +197,7 @@ export async function GET(request: Request) {
       })),
       municipioStats,
       statusCounts,
+      shiftLoadToday,
     });
   } catch (error) {
     console.error("Error loading dashboard KPIs:", error);

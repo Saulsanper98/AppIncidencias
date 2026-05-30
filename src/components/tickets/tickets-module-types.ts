@@ -74,6 +74,17 @@ export type CreateTicketPayload = {
    */
   selectedAsset: CatalogBus["assets"][number] | null;
   selectedTipologia: TipologiaItem;
+  /**
+   * Sugerencias del campo (Ibrahim):
+   *  - `assignToMe`: el técnico/gestor que crea el ticket se asigna a sí
+   *    mismo (default `true` para técnicos/gestores).
+   *  - `createAsResolved`: nace ya cerrado (caso resuelto in situ).
+   *  - `resolutionNote`: nota de cierre opcional (solo si createAsResolved).
+   * El backend ignora estos flags si el rol no tiene permiso para ellos.
+   */
+  assignToMe?: boolean;
+  createAsResolved?: boolean;
+  resolutionNote?: string;
   /** Limpia borrador local y secciones tras crear con éxito. */
   onTicketCreated?: () => void;
 };

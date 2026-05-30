@@ -133,6 +133,20 @@ model Linea {
   updatedAt DateTime @default(now()) @updatedAt
 }
 
+/// Configuracion generica clave/valor de la app. Cada feature que necesita
+/// un parametro editable desde el panel de admin lo guarda aqui usando un
+/// prefijo coherente en `key` (p. ej. "anomalous.window_days",
+/// "anomalous.type_weights"). Evita proliferar tablas de 1 sola fila.
+///
+/// `value` siempre se almacena como string; cada lector decide como
+/// interpretar (numero, JSON, bool serializado como "true"/"false"...).
+model AppSetting {
+  key           String   @id
+  value         String
+  updatedByName String?
+  updatedAt     DateTime @default(now()) @updatedAt
+}
+
 /// Configuracion editable del SLA por prioridad de ticket. Una fila por
 /// prioridad ("alta" | "media" | "baja"). Sustituye los valores hardcoded
 /// 30/120/240 minutos que vivian en `src/lib/ticketing.ts`. Si una prioridad
@@ -600,6 +614,18 @@ model TicketTemplate {
   subsubtipo  String?
   priority    TicketPriority?
   category    String?
+  /// Líneas afectadas precargadas (1..10). Cuando la plantilla representa
+  /// un patrón concreto (ej. "Salto de viaje en GL-1") tiene sentido fijar
+  /// este valor para que el ticket rápido nazca con la prioridad correcta.
+  impactedLines  Int?
+  /// Si la incidencia detiene el servicio (afecta al cálculo de prioridad).
+  serviceStopped Boolean?
+  /// Etiquetas libres prellenadas (línea, servicio, conductor) y comentario
+  /// inicial. Útil cuando un técnico repite el mismo tipo de parte en
+  /// idénticas condiciones (sugerencia de OP03 "Salto de viaje").
+  lineaLabel     String?
+  servicioLabel  String?
+  commentInitial String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   owner       User?           @relation("TicketTemplateOwner", fields: [ownerId], references: [id], onDelete: SetNull)

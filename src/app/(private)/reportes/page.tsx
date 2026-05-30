@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  CalendarRange,
   ClipboardList,
   Clock3,
   Download,
@@ -22,17 +23,18 @@ import { cn } from "@/lib/utils";
  * Página de reportes analíticos.
  *
  * Pinta múltiples cards con gráficos minimal (SVG inline, sin librería
- * externa). Permite cambiar la ventana (7/30/90/180d) y exportar tanto a
- * XLSX (endpoint server) como a PDF (window.print con un CSS de impresión
- * básico — la propia hoja ya es razonablemente sobria).
- *
- * El acceso está protegido por middleware (todas las páginas `(private)`).
+ * externa). Permite elegir periodo (presets rápidos, día único o rango
+ * personalizado) y exportar tanto a XLSX (endpoint server) como a PDF
+ * (window.print con un CSS de impresión básico).
  */
 
 type Series = { day: string; creados: number; resueltos: number };
 type ReportPayload = {
   days: number;
+  preset?: string;
+  label?: string;
   since: string;
+  until?: string;
   totals: {
     created: number;
     resolved: number;
@@ -48,6 +50,17 @@ type ReportPayload = {
   topTechnicians: { userId: string; name: string; role: string; resolved: number }[];
 };
 
+type RangePreset = "today" | "yesterday" | "last7" | "last30" | "last90" | "last180" | "custom";
+
+const PRESET_BUTTONS: { id: RangePreset; label: string }[] = [
+  { id: "today", label: "Hoy" },
+  { id: "yesterday", label: "Ayer" },
+  { id: "last7", label: "7d" },
+  { id: "last30", label: "30d" },
+  { id: "last90", label: "90d" },
+  { id: "last180", label: "180d" },
+];
+
 function formatMs(ms: number | null): string {
   if (ms == null) return "—";
   const minutes = Math.round(ms / 60000);
@@ -57,17 +70,35 @@ function formatMs(ms: number | null): string {
   return `${hours}h ${rem.toString().padStart(2, "0")}m`;
 }
 
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function ReportesPage() {
-  const [days, setDays] = useState<7 | 30 | 90 | 180>(30);
+  const [preset, setPreset] = useState<RangePreset>("last30");
+  const [customOpen, setCustomOpen] = useState(false);
+  const [from, setFrom] = useState<string>(todayIso());
+  const [to, setTo] = useState<string>(todayIso());
   const [data, setData] = useState<ReportPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Query string para el endpoint y para el botón de Excel.
+  const reportQuery = useMemo(() => {
+    if (preset === "custom") {
+      const params = new URLSearchParams();
+      params.set("from", from);
+      if (to && to !== from) params.set("to", to);
+      return params.toString();
+    }
+    return `range=${preset}`;
+  }, [preset, from, to]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/reports/operational?days=${days}`, { cache: "no-store" });
+      const res = await fetch(`/api/reports/operational?${reportQuery}`, { cache: "no-store" });
       if (!res.ok) {
         setError("No se pudo cargar el reporte.");
         return;
@@ -78,11 +109,18 @@ export default function ReportesPage() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [reportQuery]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const handlePickSingleDay = useCallback((iso: string) => {
+    setFrom(iso);
+    setTo(iso);
+    setPreset("custom");
+    setCustomOpen(true);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -97,23 +135,48 @@ export default function ReportesPage() {
             <FeedbackTargetButton id="reportes/operativo" label="Reportes operativos" />
           </div>
           <div className="flex flex-wrap items-center gap-2 print:hidden">
-            <div role="tablist" aria-label="Ventana del reporte" className="inline-flex rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5">
-              {([7, 30, 90, 180] as const).map((d) => (
+            <div
+              role="tablist"
+              aria-label="Periodo del reporte"
+              className="inline-flex rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5"
+            >
+              {PRESET_BUTTONS.map((p) => (
                 <button
-                  key={d}
+                  key={p.id}
                   type="button"
-                  onClick={() => setDays(d)}
-                  aria-pressed={days === d}
+                  onClick={() => {
+                    setPreset(p.id);
+                    setCustomOpen(false);
+                  }}
+                  aria-pressed={preset === p.id}
                   className={cn(
                     "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
-                    days === d
+                    preset === p.id
                       ? "bg-[var(--color-accent)] text-white shadow"
                       : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
                   )}
                 >
-                  {d}d
+                  {p.label}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setPreset("custom");
+                  setCustomOpen((v) => !v || preset !== "custom");
+                }}
+                aria-pressed={preset === "custom"}
+                className={cn(
+                  "ml-0.5 inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                  preset === "custom"
+                    ? "bg-[var(--color-accent)] text-white shadow"
+                    : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
+                )}
+                title="Elegir día o rango personalizado"
+              >
+                <CalendarRange size={12} aria-hidden />
+                Otra fecha…
+              </button>
             </div>
             <button
               type="button"
@@ -126,7 +189,7 @@ export default function ReportesPage() {
               Recargar
             </button>
             <a
-              href={`/api/reports/operational/export?days=${days}`}
+              href={`/api/reports/operational/export?${reportQuery}`}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 text-xs font-medium text-[var(--color-text-2)] transition-colors hover:bg-[var(--color-surface-2)]"
               title="Descargar como Excel (.xlsx)"
             >
@@ -144,8 +207,85 @@ export default function ReportesPage() {
             </button>
           </div>
         </div>
+
+        {customOpen ? (
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 print:hidden">
+            <div className="flex flex-col">
+              <label className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Desde
+              </label>
+              <input
+                type="date"
+                value={from}
+                max={to || undefined}
+                onChange={(e) => {
+                  const v = e.target.value || todayIso();
+                  setFrom(v);
+                  if (to && v > to) setTo(v);
+                  setPreset("custom");
+                }}
+                className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-xs text-[var(--color-text-1)]"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Hasta
+              </label>
+              <input
+                type="date"
+                value={to}
+                min={from || undefined}
+                max={todayIso()}
+                onChange={(e) => {
+                  setTo(e.target.value || from);
+                  setPreset("custom");
+                }}
+                className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-xs text-[var(--color-text-1)]"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handlePickSingleDay(todayIso())}
+                className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-[11px] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]"
+              >
+                Hoy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setUTCDate(d.getUTCDate() - 1);
+                  handlePickSingleDay(d.toISOString().slice(0, 10));
+                }}
+                className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-[11px] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]"
+              >
+                Ayer
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!from) return;
+                  setTo(from);
+                  setPreset("custom");
+                }}
+                className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-[11px] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]"
+                title="Acota el rango a un único día (el de Desde)"
+              >
+                Solo este día
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <p className="text-xs text-[var(--color-text-3)]">
-          Ventana: últimos {days} días. Recuerda exportar antes de cambiar la ventana si necesitas adjuntar.
+          Periodo: <strong>{data?.label ?? "—"}</strong>{" "}
+          {data?.since && data?.until ? (
+            <span className="text-[var(--color-text-3)]">
+              ({data.since.slice(0, 10)} → {data.until.slice(0, 10)} · {data.days} día
+              {data.days === 1 ? "" : "s"})
+            </span>
+          ) : null}
         </p>
       </header>
 

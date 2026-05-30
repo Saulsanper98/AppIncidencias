@@ -23,12 +23,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Debes iniciar sesion" }, { status: 401 });
     }
 
+    // Aceptamos un { date: "YYYY-MM-DD" } opcional en el body para generar
+    // el informe de un dia distinto a "hoy". Si no llega body, mantenemos
+    // el comportamiento clasico (informe de hoy en la TZ del servidor).
+    let requestedDate: string | null = null;
+    try {
+      const body = (await request.json()) as { date?: unknown } | null;
+      if (body && typeof body.date === "string" && isValidIsoDate(body.date)) {
+        requestedDate = body.date;
+      }
+    } catch {
+      // Body vacio o no-JSON: usamos hoy.
+    }
+
     const now = new Date();
-    const { startOfDay, endOfDay } = computeDayBounds(now);
-    const reportDateIso = formatLocalIsoDate(now);
+    const targetDay = requestedDate ? parseLocalIsoDate(requestedDate) : now;
+    const { startOfDay, endOfDay } = computeDayBounds(targetDay);
+    const reportDateIso = formatLocalIsoDate(targetDay);
 
     // Recogemos los tickets creados en el dia. Es el criterio que usan
-    // actualmente los companeros: cuantas incidencias reportadas hoy.
+    // actualmente los companeros: cuantas incidencias reportadas en ese dia.
     const tickets = await prisma.ticket.findMany({
       where: {
         createdAt: { gte: startOfDay, lte: endOfDay },
@@ -66,7 +80,7 @@ export async function POST(request: Request) {
     });
 
     const buffer = await buildDailyReportXlsx(rows, {
-      reportDate: now,
+      reportDate: targetDay,
       generatedAt: now,
       generatedByName: user?.name ?? "Usuario desconocido",
       generatedByEmail: user?.email ?? "",
@@ -122,6 +136,18 @@ function formatLocalIsoDate(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function isValidIsoDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = parseLocalIsoDate(s);
+  return !Number.isNaN(d.getTime());
+}
+
+/** Construye una fecha en la TZ local del proceso a partir de YYYY-MM-DD. */
+function parseLocalIsoDate(s: string): Date {
+  const [y, m, d] = s.split("-").map((n) => Number(n));
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
 }
 
 function buildTipoLabel(

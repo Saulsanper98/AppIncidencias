@@ -25,7 +25,6 @@ import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton
 import { AnomalousBusesBanner } from "@/components/inventory/AnomalousBusesBanner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SectionTabs } from "@/components/ui/section-tabs";
 import type { AssetType } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -563,10 +562,6 @@ export default function InventoryPage() {
     <div className={cn("inventory-print-root space-y-6", controlRoom && "max-w-none")}>
       <div aria-live="polite" className="sr-only">
         {itemsCriticos > 0 ? inv.live.critical(itemsCriticos, itemsBajos, itemsAgotados) : inv.live.ok}
-      </div>
-
-      <div className="print:hidden">
-        <SectionTabs preset="inventory" />
       </div>
 
       <AnomalousBusesBanner />

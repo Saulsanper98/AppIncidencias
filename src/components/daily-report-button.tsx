@@ -1,10 +1,19 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  FileSpreadsheet,
+  Loader2,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { toast } from "@/components/toast-host";
+import { InlineCalendar } from "@/components/ui/inline-calendar";
 import { cn } from "@/lib/utils";
 
 type ReportEntry = {
@@ -24,41 +33,87 @@ type ReportStatus = {
 };
 
 /**
- * Boton "Generar informe diario" que:
- *  1) Consulta al montar si ya se genero hoy y cambia su apariencia para avisar.
- *  2) Al hacer click, si ya existe por otro companero abre un modal de aviso.
- *     El usuario puede cancelar o continuar y generar igualmente.
- *  3) Hace POST al endpoint, descarga el XLSX, refresca el estado.
+ * Boton "Generar informe diario" con selector de dia.
  *
- * No bloquea nunca la generacion: el aviso es solo informativo.
+ *  1) Click en la mitad principal -> descarga el informe del DIA SELECCIONADO
+ *     (por defecto hoy).
+ *  2) Click en la flechita -> abre un popover con `<input type="date">` para
+ *     elegir otro dia (p. ej. ayer si se olvido sacarlo).
+ *  3) Si ya existe alguna generacion para ese dia hecha por otra persona,
+ *     pide confirmacion antes de generar.
+ *
+ * Nunca bloquea la generacion: el aviso es informativo.
  */
 export function DailyReportButton() {
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso());
   const [status, setStatus] = useState<ReportStatus | null>(null);
   const [warningOpen, setWarningOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [monthDots, setMonthDots] = useState<Record<string, number>>({});
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+
+  const loadMonthDots = useCallback(async (ym: string) => {
+    try {
+      const res = await fetch(`/api/reports/daily/month?ym=${encodeURIComponent(ym)}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { ym: string; days: Record<string, number> };
+      setMonthDots(data.days ?? {});
+    } catch {
+      // El calendario sigue funcionando aunque no se carguen los puntitos.
+    }
+  }, []);
 
   const refreshStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/reports/daily/today", { credentials: "include" });
+      const res = await fetch(`/api/reports/daily/today?date=${encodeURIComponent(selectedDate)}`, {
+        credentials: "include",
+      });
       if (!res.ok) return;
       const data = (await res.json()) as ReportStatus;
       setStatus(data);
     } catch (error) {
       console.warn("No se pudo comprobar informe diario:", error);
     }
-  }, []);
+  }, [selectedDate]);
 
   useEffect(() => {
     void refreshStatus();
+    // Solo refrescamos automaticamente cuando es el dia de hoy (estado vivo);
+    // para dias pasados es un dato historico estable.
+    if (selectedDate !== todayIso()) return;
     const t = setInterval(() => void refreshStatus(), 60_000);
     return () => clearInterval(t);
-  }, [refreshStatus]);
+  }, [refreshStatus, selectedDate]);
 
-  // Generaciones de OTROS companeros hoy (no las propias del usuario actual).
+  // Cierra el popover al hacer click fuera o pulsar Escape.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDown = (event: MouseEvent) => {
+      if (!pickerRef.current) return;
+      if (!pickerRef.current.contains(event.target as Node)) setPickerOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPickerOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [pickerOpen]);
+
+  // Generaciones de OTRAS personas para el dia seleccionado.
   const generatedByOthers = useMemo(() => {
     if (!status) return [];
     return status.reports.filter((r) => !r.wasMine);
   }, [status]);
+
+  const isToday = selectedDate === todayIso();
 
   const generateNow = useCallback(async () => {
     if (generating) return;
@@ -68,6 +123,8 @@ export function DailyReportButton() {
       const res = await fetch("/api/reports/daily", {
         method: "POST",
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: selectedDate }),
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -79,7 +136,7 @@ export function DailyReportButton() {
       const blob = await res.blob();
       const disposition = res.headers.get("Content-Disposition") ?? "";
       const match = /filename="?([^";]+)"?/i.exec(disposition);
-      const filename = match?.[1] ?? `informe-incidencias-${todayIso()}.xlsx`;
+      const filename = match?.[1] ?? `informe-incidencias-${selectedDate}.xlsx`;
       triggerDownload(blob, filename);
       toast.success("Informe generado", {
         description: `Descargando ${filename}`,
@@ -93,7 +150,7 @@ export function DailyReportButton() {
     } finally {
       setGenerating(false);
     }
-  }, [generating, refreshStatus]);
+  }, [generating, refreshStatus, selectedDate]);
 
   const handleClick = useCallback(() => {
     if (generatedByOthers.length > 0) {
@@ -103,52 +160,219 @@ export function DailyReportButton() {
     void generateNow();
   }, [generatedByOthers, generateNow]);
 
-  const alreadyToday = (status?.count ?? 0) > 0;
+  const alreadyGenerated = (status?.count ?? 0) > 0;
+
+  const title = isToday
+    ? alreadyGenerated
+      ? `Informe ya generado hoy (${status?.count} ${status?.count === 1 ? "vez" : "veces"})`
+      : "Generar informe diario para Jefatura"
+    : alreadyGenerated
+      ? `Informe del ${formatHumanDate(selectedDate)} ya generado (${status?.count} ${status?.count === 1 ? "vez" : "veces"})`
+      : `Generar informe del ${formatHumanDate(selectedDate)}`;
 
   return (
     <>
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={generating}
-        title={
-          alreadyToday
-            ? `Informe ya generado hoy (${status?.count} ${status?.count === 1 ? "vez" : "veces"})`
-            : "Generar informe diario para Jefatura"
-        }
-        className={cn(
-          "inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all duration-150",
-          alreadyToday
-            ? "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:border-amber-400/60 hover:bg-amber-500/15"
-            : "border-[var(--color-accent)]/35 bg-[var(--color-accent-light)] text-[var(--color-accent)] hover:border-[var(--color-accent)]/55 hover:bg-[var(--color-accent-light)]/80",
-          generating && "opacity-70",
-        )}
-      >
-        {generating ? (
-          <Loader2 size={13} className="animate-spin" aria-hidden />
-        ) : alreadyToday ? (
-          <AlertTriangle size={13} aria-hidden />
-        ) : (
-          <FileSpreadsheet size={13} aria-hidden />
-        )}
-        <span className="hidden sm:inline">
-          {generating ? "Generando..." : "Informe diario"}
-        </span>
-        <span className="sm:hidden">Informe</span>
-        {alreadyToday && !generating && (
-          <span
-            className="ml-0.5 inline-flex h-4 min-w-[18px] items-center justify-center rounded-full bg-amber-500/30 px-1 text-[10px] font-semibold text-amber-100"
-            aria-label={`Ya generado ${status?.count ?? 0} veces hoy`}
+      <div ref={pickerRef} className="relative inline-flex items-stretch">
+        <div
+          className={cn(
+            "inline-flex items-stretch overflow-hidden rounded-xl border transition-all duration-150",
+            alreadyGenerated
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+              : "border-[var(--color-accent)]/35 bg-[var(--color-accent-light)] text-[var(--color-accent)]",
+          )}
+        >
+          <button
+            type="button"
+            onClick={handleClick}
+            disabled={generating}
+            title={title}
+            className={cn(
+              "inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium transition-colors",
+              alreadyGenerated
+                ? "hover:bg-amber-500/15"
+                : "hover:bg-[var(--color-accent-light)]/80",
+              generating && "opacity-70",
+            )}
           >
-            {status?.count ?? 0}
-          </span>
-        )}
-      </button>
+            {generating ? (
+              <Loader2 size={13} className="animate-spin" aria-hidden />
+            ) : alreadyGenerated ? (
+              <AlertTriangle size={13} aria-hidden />
+            ) : (
+              <FileSpreadsheet size={13} aria-hidden />
+            )}
+            <span className="hidden sm:inline">
+              {generating
+                ? "Generando..."
+                : isToday
+                  ? "Informe diario"
+                  : `Informe ${formatChipDate(selectedDate)}`}
+            </span>
+            <span className="sm:hidden">Informe</span>
+            {alreadyGenerated && !generating && (
+              <span
+                className="ml-0.5 inline-flex h-4 min-w-[18px] items-center justify-center rounded-full bg-amber-500/30 px-1 text-[10px] font-semibold text-amber-100"
+                aria-label={`Ya generado ${status?.count ?? 0} veces`}
+              >
+                {status?.count ?? 0}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPickerOpen((v) => !v)}
+            disabled={generating}
+            aria-expanded={pickerOpen}
+            aria-haspopup="dialog"
+            title="Cambiar el día del informe"
+            className={cn(
+              "inline-flex items-center gap-1 border-l px-2 text-xs transition-colors",
+              alreadyGenerated
+                ? "border-amber-500/30 hover:bg-amber-500/15"
+                : "border-[var(--color-accent)]/25 hover:bg-[var(--color-accent-light)]/80",
+            )}
+          >
+            <CalendarDays size={12} aria-hidden />
+            <ChevronDown
+              size={11}
+              aria-hidden
+              className={cn("transition-transform", pickerOpen && "rotate-180")}
+            />
+          </button>
+        </div>
+
+        {pickerOpen ? (
+          <div
+            role="dialog"
+            aria-label="Elegir día del informe"
+            className="daily-report-popover absolute right-0 top-full z-[60] mt-2 w-[280px] origin-top-right overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-1)] shadow-[0_24px_64px_-20px_rgba(0,0,0,0.65)]"
+          >
+            <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] bg-gradient-to-b from-[var(--color-surface-2)]/60 to-[var(--color-surface)] px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                  Día del informe
+                </p>
+                <p className="mt-0.5 text-[11.5px] capitalize text-[var(--color-text-3)]">
+                  {formatWeekday(selectedDate)}
+                </p>
+                <p className="text-[15px] font-semibold leading-tight text-[var(--color-text-1)]">
+                  {formatHumanDate(selectedDate)}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                  isToday
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "bg-[var(--color-surface-3)] text-[var(--color-text-2)]",
+                )}
+              >
+                {isToday ? "Hoy" : daysAgoLabel(selectedDate)}
+              </span>
+            </header>
+
+            <div className="px-4 py-3">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Accesos rápidos
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: "Hoy", iso: todayIso() },
+                  { label: "Ayer", iso: yesterdayIso() },
+                  { label: "−2 d", iso: daysAgoIso(2) },
+                  { label: "−7 d", iso: daysAgoIso(7) },
+                ].map((p) => {
+                  const active = selectedDate === p.iso;
+                  return (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setSelectedDate(p.iso)}
+                      aria-pressed={active}
+                      className={cn(
+                        "h-7 rounded-full border px-2.5 text-[11px] font-medium transition-colors",
+                        active
+                          ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white shadow-sm"
+                          : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)] hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface-3)]",
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Otro día
+              </p>
+              <InlineCalendar
+                value={selectedDate}
+                onChange={(iso) => setSelectedDate(iso)}
+                maxIso={todayIso()}
+                dotsMap={monthDots}
+                dotColor="amber"
+                onMonthChange={loadMonthDots}
+              />
+
+              <div
+                className={cn(
+                  "mt-3 flex items-start gap-2 rounded-lg border px-2.5 py-2 text-[11.5px]",
+                  alreadyGenerated
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                    : "border-[var(--color-border)] bg-[var(--color-surface-2)]/60 text-[var(--color-text-3)]",
+                )}
+              >
+                {alreadyGenerated ? (
+                  <>
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
+                    <span>
+                      Ya hay{" "}
+                      <strong className="font-semibold">
+                        {status?.count ?? 0} generaci{(status?.count ?? 0) === 1 ? "ón" : "ones"}
+                      </strong>{" "}
+                      registradas para este día.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-emerald-300/80" aria-hidden />
+                    <span>Sin informes generados todavía para este día.</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <footer className="flex items-center justify-end gap-1.5 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2.5">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(false)}
+                className="rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPickerOpen(false);
+                  handleClick();
+                }}
+                disabled={generating}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition-all hover:shadow-md hover:brightness-110 disabled:opacity-60"
+              >
+                <FileSpreadsheet size={13} aria-hidden />
+                {generating ? "Generando..." : "Generar XLSX"}
+              </button>
+            </footer>
+          </div>
+        ) : null}
+      </div>
 
       {warningOpen && typeof document !== "undefined"
         ? createPortal(
             <DuplicateWarningDialog
               reports={generatedByOthers}
+              reportDate={selectedDate}
               onCancel={() => setWarningOpen(false)}
               onContinue={() => void generateNow()}
             />,
@@ -161,10 +385,12 @@ export function DailyReportButton() {
 
 function DuplicateWarningDialog({
   reports,
+  reportDate,
   onCancel,
   onContinue,
 }: {
   reports: ReportEntry[];
+  reportDate: string;
   onCancel: () => void;
   onContinue: () => void;
 }) {
@@ -175,6 +401,8 @@ function DuplicateWarningDialog({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onCancel]);
+
+  const isToday = reportDate === todayIso();
 
   return (
     <div
@@ -193,12 +421,14 @@ function DuplicateWarningDialog({
           </span>
           <div className="min-w-0 flex-1">
             <h2 id="daily-report-warning-title" className="text-sm font-semibold text-[var(--color-text-1)]">
-              El informe ya se gener{"\u00f3"} hoy
+              {isToday
+                ? "El informe ya se generó hoy"
+                : `El informe del ${formatHumanDate(reportDate)} ya se generó`}
             </h2>
             <p className="mt-0.5 text-[12px] text-[var(--color-text-3)]">
               {reports.length === 1
-                ? `Un compa\u00f1ero ya gener\u00f3 el informe diario.`
-                : `Ya hay ${reports.length} generaciones del informe de hoy.`}{" "}
+                ? "Un compañero ya generó este informe."
+                : `Ya hay ${reports.length} generaciones de este informe.`}{" "}
               Puedes generarlo de nuevo si lo necesitas.
             </p>
           </div>
@@ -261,6 +491,48 @@ function DuplicateWarningDialog({
 function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function yesterdayIso(): string {
+  return daysAgoIso(1);
+}
+
+function daysAgoIso(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function daysBetween(iso: string): number {
+  const a = new Date(`${iso}T00:00:00`);
+  const b = new Date();
+  b.setHours(0, 0, 0, 0);
+  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
+}
+
+function daysAgoLabel(iso: string): string {
+  const n = daysBetween(iso);
+  if (n <= 0) return "Hoy";
+  if (n === 1) return "Ayer";
+  if (n < 7) return `Hace ${n} días`;
+  if (n < 30) return `Hace ${Math.round(n / 7)} sem.`;
+  return `Hace ${Math.round(n / 30)} mes${Math.round(n / 30) === 1 ? "" : "es"}`;
+}
+
+function formatChipDate(iso: string): string {
+  // dd/mm  -> compacto para el pill del boton
+  const [, mm, dd] = iso.split("-");
+  return `${dd}/${mm}`;
+}
+
+function formatWeekday(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("es-ES", { weekday: "long" });
+}
+
+function formatHumanDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" });
 }
 
 function triggerDownload(blob: Blob, filename: string) {

@@ -51,6 +51,11 @@ export async function GET(request: Request) {
       subsubtipo: true,
       priority: true,
       category: true,
+      impactedLines: true,
+      serviceStopped: true,
+      lineaLabel: true,
+      servicioLabel: true,
+      commentInitial: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -101,6 +106,18 @@ export async function POST(request: Request) {
       ? (priorityRaw as TicketPriority)
       : null;
 
+  // Campos extra para "ticket rápido": si la plantilla representa siempre el
+  // mismo patrón ("Salto de viaje en GL-1, sin servicio detenido…") conviene
+  // memorizar también las variables que afectan a la prioridad y al
+  // comentario inicial.
+  const impactedLinesRaw = body.impactedLines;
+  const impactedLines =
+    typeof impactedLinesRaw === "number" && Number.isFinite(impactedLinesRaw)
+      ? Math.min(10, Math.max(1, Math.floor(impactedLinesRaw)))
+      : null;
+  const serviceStopped =
+    typeof body.serviceStopped === "boolean" ? body.serviceStopped : null;
+
   const created = await prisma.ticketTemplate.create({
     data: {
       name,
@@ -113,6 +130,11 @@ export async function POST(request: Request) {
       subsubtipo: sanitize(body.subsubtipo, 80),
       priority,
       category: sanitize(body.category, 80),
+      impactedLines,
+      serviceStopped,
+      lineaLabel: sanitize(body.lineaLabel, 120),
+      servicioLabel: sanitize(body.servicioLabel, 120),
+      commentInitial: sanitize(body.commentInitial, 2000),
     },
   });
 
