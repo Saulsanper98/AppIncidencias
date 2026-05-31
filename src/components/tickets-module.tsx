@@ -213,9 +213,17 @@ function AuditPanel({ events }: { events: AuditEventView[] }) {
 
 function MaintenanceAlertsPanel({
   alerts,
+  windowDays,
   onCreateTask,
 }: {
   alerts: MaintenanceAlertView[];
+  /**
+   * Ventana real en días con la que el backend agrupó los fallos. Antes
+   * estaba hardcoded a 30 en los textos; ahora viene de la config
+   * (Admin → Buses anómalos) para que el texto del panel coincida con la
+   * realidad ("X fallos en N días").
+   */
+  windowDays: number;
   onCreateTask: (alert: MaintenanceAlertView) => void;
 }) {
   if (alerts.length === 0) {
@@ -223,7 +231,9 @@ function MaintenanceAlertsPanel({
       <div className={cn(TICKETS_EMPTY_SHELL, "py-8")}>
         <CheckCircle2 size={36} className="mb-3 text-[var(--color-success)]" />
         <p className="text-subheading text-[var(--color-text-2)]">Todos los activos en buen estado</p>
-        <p className="mx-auto mt-1 max-w-[260px] text-caption text-[var(--color-text-3)]">Sin tendencias de fallo en 30 días en el conjunto monitorizado.</p>
+        <p className="mx-auto mt-1 max-w-[260px] text-caption text-[var(--color-text-3)]">
+          Sin tendencias de fallo en {windowDays} días en el conjunto monitorizado.
+        </p>
       </div>
     );
   }
@@ -248,7 +258,7 @@ function MaintenanceAlertsPanel({
             </Badge>
           </div>
           <p className="mb-2 text-[var(--color-text-2)]">
-            {alert.failuresLast30Days} fallos en 30 días · {alert.municipio}
+            {alert.failuresInWindow} fallos en {windowDays} días · {alert.municipio}
           </p>
           {alert.hasOpenPreventiveTask ? (
             <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-accent)]">
@@ -970,7 +980,11 @@ export function TicketsModule() {
                 ) : null}
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
-                <MaintenanceAlertsPanel alerts={t.maintenanceAlerts} onCreateTask={t.handleCreatePreventiveTask} />
+                <MaintenanceAlertsPanel
+                  alerts={t.maintenanceAlerts}
+                  windowDays={t.maintenanceWindowDays}
+                  onCreateTask={t.handleCreatePreventiveTask}
+                />
               </div>
             </div>
 

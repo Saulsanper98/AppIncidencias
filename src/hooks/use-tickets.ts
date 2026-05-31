@@ -60,6 +60,10 @@ export function useTickets() {
   const [inventorySummary, setInventorySummary] = useState<InventorySummaryItem[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEventView[]>([]);
   const [maintenanceAlerts, setMaintenanceAlerts] = useState<MaintenanceAlertView[]>([]);
+  // Ventana en días con la que el backend está agrupando los fallos para las
+  // "Alertas preventivas". Se obtiene de `Admin → Buses anómalos` (default 12,
+  // antes era 30 hardcoded). El módulo lo pinta en los textos del panel.
+  const [maintenanceWindowDays, setMaintenanceWindowDays] = useState<number>(12);
   const [preventiveTasks, setPreventiveTasks] = useState<PreventiveTaskView[]>([]);
   const [taskPlans, setTaskPlans] = useState<Record<string, { assignedToUserId: string; scheduledAt: string }>>({});
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
@@ -421,8 +425,13 @@ export function useTickets() {
     if (!response.ok) {
       throw new Error(text || "Error al cargar alertas preventivas");
     }
-    const data = JSON.parse(text) as { alerts: MaintenanceAlertView[] };
+    const data = JSON.parse(text) as { alerts: MaintenanceAlertView[]; windowDays?: number };
     setMaintenanceAlerts(data.alerts);
+    // Antes el endpoint no devolvía `windowDays` y el texto del panel
+    // estaba hardcoded a "30 días". Ahora respetamos el valor configurado.
+    if (typeof data.windowDays === "number" && Number.isFinite(data.windowDays)) {
+      setMaintenanceWindowDays(data.windowDays);
+    }
   }, []);
 
   const fetchPreventiveTasks = useCallback(async () => {
@@ -832,7 +841,7 @@ export function useTickets() {
         body: JSON.stringify({
           busId: alert.busId,
           assetType: alert.assetType,
-          reason: `${alert.failuresLast30Days} fallos de ${alert.assetType} en 30 días`,
+          reason: `${alert.failuresInWindow} fallos de ${alert.assetType} en ${maintenanceWindowDays} días`,
         }),
       });
 
@@ -849,7 +858,7 @@ export function useTickets() {
       await fetchAuditEvents();
       await fetchPreventiveTasks();
     },
-    [sessionUser, role, currentUserId, fetchMaintenanceAlerts, fetchAuditEvents, fetchPreventiveTasks],
+    [sessionUser, role, currentUserId, maintenanceWindowDays, fetchMaintenanceAlerts, fetchAuditEvents, fetchPreventiveTasks],
   );
 
   const handleUpdatePreventiveTaskStatus = useCallback(
@@ -1186,6 +1195,7 @@ export function useTickets() {
     inventorySummary,
     auditEvents,
     maintenanceAlerts,
+    maintenanceWindowDays,
     preventiveTasks,
     taskPlans,
     setTaskPlans,

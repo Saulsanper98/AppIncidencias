@@ -122,7 +122,12 @@ export type MaintenanceAlertView = {
   assetType: AssetType;
   operator: string;
   municipio: string;
-  failuresLast30Days: number;
+  /**
+   * Número de fallos en la ventana configurada por administración
+   * (`windowDays` en la respuesta del endpoint). Antes era fijo a 30 días;
+   * ahora se respeta la config de `Admin → Buses anómalos`.
+   */
+  failuresInWindow: number;
   severity: "warning" | "critical";
   hasOpenPreventiveTask: boolean;
   preventiveTaskId: string | null;

@@ -1,13 +1,40 @@
+/**
+ * Alertas preventivas que se muestran en el módulo Tickets ("Alertas
+ * preventivas" en la columna derecha) y en banners auxiliares.
+ *
+ * El criterio histórico era hardcoded a 30 días + umbrales 3/5. A petición
+ * del equipo de campo lo migramos a la MISMA configuración que usa
+ * `/api/buses/anomalous`: la ventana en días la edita el gestor desde
+ * Admin → Buses anómalos y queda guardada en `AppSetting`.
+ *
+ * Devolvemos también `windowDays` en la respuesta para que el frontend
+ * pueda mostrar "X fallos en N días" con el valor real (no '30' hardcoded).
+ */
+
 import { NextResponse } from "next/server";
 
+import { ANOMALOUS_DEFAULTS } from "@/app/api/anomalous-config/route";
+import { APP_SETTING_KEYS, getAppSettingNumber } from "@/lib/app-settings";
 import { ensureCatalogSeeded } from "@/lib/catalog";
 import { prisma } from "@/lib/prisma";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     await ensureCatalogSeeded();
+
+    // Ventana configurable (default 12 d, rango 7-180). Coincide con
+    // la usada por /api/buses/anomalous para que la UX sea coherente.
+    const windowDays = await getAppSettingNumber(
+      APP_SETTING_KEYS.ANOMALOUS_WINDOW_DAYS,
+      ANOMALOUS_DEFAULTS.windowDays,
+      { min: 7, max: 180 },
+    );
+
     const fromDate = new Date();
-    fromDate.setDate(fromDate.getDate() - 30);
+    fromDate.setDate(fromDate.getDate() - windowDays);
 
     const recentTickets = await prisma.ticket.findMany({
       where: {
@@ -24,7 +51,10 @@ export async function GET() {
       },
     });
 
-    const grouped = new Map<string, { busId: string; assetType: string; operator: string; municipio: string; count: number }>();
+    const grouped = new Map<
+      string,
+      { busId: string; assetType: string; operator: string; municipio: string; count: number }
+    >();
     for (const ticket of recentTickets) {
       const key = `${ticket.busId}::${ticket.asset.type}`;
       const previous = grouped.get(key);
@@ -48,10 +78,10 @@ export async function GET() {
         assetType: item.assetType,
         operator: item.operator,
         municipio: item.municipio,
-        failuresLast30Days: item.count,
+        failuresInWindow: item.count,
         severity: item.count >= 5 ? "critical" : "warning",
       }))
-      .sort((a, b) => b.failuresLast30Days - a.failuresLast30Days);
+      .sort((a, b) => b.failuresInWindow - a.failuresInWindow);
 
     const openTasks = await prisma.preventiveTask.findMany({
       where: {
@@ -72,6 +102,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
+      windowDays,
       alerts: alerts.map((alert) => {
         const taskId = openMap.get(`${alert.busId}::${alert.assetType}`);
         return {
