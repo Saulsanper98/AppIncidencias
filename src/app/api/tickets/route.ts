@@ -28,6 +28,7 @@ import { getSlaMinutesForPriority } from "@/lib/sla-config";
 import { publishTicketEvent } from "@/lib/tickets-events";
 import { addMinutesIso, calculatePriority } from "@/lib/ticketing";
 import type { NivelImpacto } from "@/lib/tipologia";
+import { trackServerUxEvent } from "@/lib/ux-server";
 
 const createTicketSchema = z.object({
   // El usuario puede teclear un bus que no esté en el catálogo: lo crearemos al
@@ -496,7 +497,10 @@ export async function POST(request: Request) {
         title,
         description,
         status: shouldCreateClosed ? "resuelto" : "abierto",
-        ...(shouldCreateClosed ? { resolvedAt: now } : {}),
+        // Nota: el modelo Ticket no tiene un campo `resolvedAt` propio. El
+        // estado `resuelto` + `updatedAt` (que Prisma toca al crear) ya marca
+        // el momento de resolución. El frontend cae a `updatedAt` cuando lee
+        // tickets resueltos (ver tickets-module.tsx).
         ...(shouldAssignToActor ? { assignedToUserId: actor.userId } : {}),
         priority,
         slaDeadline: new Date(addMinutesIso(now, slaMinutes)),
@@ -548,6 +552,25 @@ export async function POST(request: Request) {
       ticketId: created.id,
       action: "ticket.created",
       detail: auditDetailParts.join(" "),
+    });
+
+    // Métrica server-side: complementa al evento de cliente `ticket_create_complete`.
+    // El de cliente mide tiempo en formulario; éste cuenta CREATEs efectivos
+    // (incluye los que entran por API directa, p.ej. /api/tickets/from-email).
+    void trackServerUxEvent({
+      eventName: "ticket_created",
+      actor: { userId: actor.userId, role: actor.role },
+      request,
+      path: "/tickets",
+      props: {
+        priority: created.priority,
+        tipo: created.tipo ?? null,
+        bus_created_on_fly: busWasCreated,
+        created_closed: shouldCreateClosed,
+        self_assigned: shouldAssignToActor,
+        had_reservation: !!reservation?.reserved,
+        attachments_count: uploadedFiles.length,
+      },
     });
 
     publishTicketEvent("ticket_created", {

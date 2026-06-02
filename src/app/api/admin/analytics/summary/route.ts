@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { resolveRequestActor } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { canManageUsers } from "@/lib/rbac";
+import { excludedUsersSqlFilter } from "@/lib/ux-exclusions";
 
 /**
  * GET /api/admin/analytics/summary?days=7
@@ -58,6 +59,7 @@ type SummaryRow = {
   ranking: {
     userId: string;
     name: string;
+    role: string | null;
     tickets_created: number;
     tickets_resolved: number;
     page_visits: number;
@@ -70,6 +72,41 @@ type SummaryRow = {
   totals: {
     events: number;
     sessions: number;
+    // Deltas respecto al periodo anterior del mismo tamaño.
+    events_prev?: number;
+    sessions_prev?: number;
+  };
+  // ── Nuevas secciones ───────────────────────────────────────────────────
+  /**
+   * Matriz 7 (días, 0=Dom .. 6=Sáb) × 24 (horas). Valor = nº de eventos.
+   * Útil para detectar picos horarios y días flojos.
+   */
+  heatmap: number[][];
+  /** Serie temporal: eventos por día en el rango (rellena días vacíos). */
+  timeseries: { date: string; events: number; visits: number; creates: number }[];
+  /** Errores de API agregados por endpoint+status. */
+  api_errors: { path: string; status: number; n: number; avg_ms: number; last_at: string }[];
+  /** Segmentación por rol (de los UxEvent). */
+  by_role: { role: string; events: number; users: number }[];
+  /** Métricas reales de tickets (datos de Ticket, no telemetría). */
+  tickets: {
+    created: number;
+    resolved: number;
+    open: number;
+    sla_breached: number;
+    sla_total: number;
+    /** Mean Time To Resolution en minutos. */
+    mttr_minutes: number;
+    median_resolution_minutes: number;
+    by_priority: { priority: string; n: number; resolved: number }[];
+    top_buses: { busId: string; n: number }[];
+  };
+  /** Resumen de delta vs periodo anterior para mostrar tendencias. */
+  trends: {
+    events: { value: number; prev: number; delta_pct: number | null };
+    sessions: { value: number; prev: number; delta_pct: number | null };
+    tickets_resolved: { value: number; prev: number; delta_pct: number | null };
+    tickets_created: { value: number; prev: number; delta_pct: number | null };
   };
 };
 
@@ -93,7 +130,23 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const daysRaw = Number(searchParams.get("days") ?? "7");
     const days = [1, 7, 30, 90].includes(daysRaw) ? daysRaw : 7;
-    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const now = Date.now();
+    const since = new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+    /**
+     * Periodo anterior del mismo tamaño, para calcular deltas. Si los días
+     * son 7, comparamos esos 7 días vs los 7 anteriores; permite ver
+     * tendencias sin requerir UI extra al usuario.
+     */
+    const prevSince = new Date(now - 2 * days * 24 * 60 * 60 * 1000).toISOString();
+    const prevUntil = since;
+
+    // Filtro común para excluir cuentas dueño/dev de TODAS las agregaciones.
+    // Se construye una sola vez por request (caché 60s en getMetricsExcludedUserIds).
+    const exclUx = await excludedUsersSqlFilter("userId");
+    // Para sub-SELECT contra User (tabla ranking) usamos `u.id` directamente.
+    const exclUser = await excludedUsersSqlFilter("u.id");
+    // Para tickets resueltos filtramos por assignedToUserId.
+    const exclAssign = await excludedUsersSqlFilter("assignedToUserId");
 
     // ─── Visitas por sección ───────────────────────────────────────────────
     // Sumamos duración por path. Normalizamos sub-rutas al primer segmento
@@ -116,7 +169,7 @@ export async function GET(request: Request) {
            END AS root,
            durationMs
          FROM "UxEvent"
-         WHERE eventName = 'page_visit' AND createdAt >= ?
+         WHERE eventName = 'page_visit' AND createdAt >= ? ${exclUx}
        )
        GROUP BY root
        ORDER BY total_ms DESC
@@ -134,7 +187,7 @@ export async function GET(request: Request) {
          COUNT(*) AS n,
          AVG(CAST(json_extract(props, '$.n_results') AS INTEGER)) AS avg_results
        FROM "UxEvent"
-       WHERE eventName = 'search_query' AND createdAt >= ?
+       WHERE eventName = 'search_query' AND createdAt >= ? ${exclUx}
        GROUP BY query
        ORDER BY n DESC
        LIMIT 15`,
@@ -150,7 +203,7 @@ export async function GET(request: Request) {
          COUNT(*) AS n,
          MAX(createdAt) AS last_at
        FROM "UxEvent"
-       WHERE eventName = 'client_error' AND createdAt >= ?
+       WHERE eventName = 'client_error' AND createdAt >= ? ${exclUx}
        GROUP BY message
        ORDER BY n DESC
        LIMIT 20`,
@@ -181,6 +234,7 @@ export async function GET(request: Request) {
          FROM "UxEvent"
          WHERE createdAt >= ?
            AND (eventName LIKE '%_open' OR eventName LIKE '%_complete' OR eventName LIKE '%_abandon')
+           ${exclUx}
        )
        SELECT
          flow,
@@ -206,6 +260,7 @@ export async function GET(request: Request) {
        WHERE e.eventName = 'ticket_create_complete'
          AND e.createdAt >= ?
          AND e.durationMs IS NOT NULL
+         ${exclUx.replace(/\buserId\b/g, "e.userId")}
        GROUP BY u.id, u.name
        ORDER BY COUNT(*) DESC
        LIMIT 30`,
@@ -233,7 +288,7 @@ export async function GET(request: Request) {
          SUM(CASE WHEN eventName = 'page_visit' THEN 1 ELSE 0 END) AS visits,
          SUM(CASE WHEN eventName = 'ticket_create_complete' THEN 1 ELSE 0 END) AS creates
        FROM "UxEvent"
-       WHERE createdAt >= ?
+       WHERE createdAt >= ? ${exclUx}
        GROUP BY shift
        ORDER BY CASE shift WHEN 'M' THEN 1 WHEN 'T' THEN 2 WHEN 'N' THEN 3 ELSE 4 END`,
       since,
@@ -251,6 +306,7 @@ export async function GET(request: Request) {
       {
         userId: string;
         name: string;
+        role: string | null;
         tickets_created: bigint;
         page_visits: bigint;
         active_seconds: number | null;
@@ -259,11 +315,12 @@ export async function GET(request: Request) {
       `SELECT
          u.id AS userId,
          u.name AS name,
+         u.role AS role,
          (SELECT COUNT(*) FROM "UxEvent" WHERE userId = u.id AND eventName = 'ticket_create_complete' AND createdAt >= ?) AS tickets_created,
          (SELECT COUNT(*) FROM "UxEvent" WHERE userId = u.id AND eventName = 'page_visit' AND createdAt >= ?) AS page_visits,
          (SELECT COALESCE(SUM(durationMs), 0)/1000.0 FROM "UxEvent" WHERE userId = u.id AND eventName = 'page_visit' AND createdAt >= ?) AS active_seconds
        FROM "User" u
-       WHERE u.isActive = 1
+       WHERE u.isActive = 1 ${exclUser}
        ORDER BY tickets_created DESC, page_visits DESC
        LIMIT 25`,
       since,
@@ -276,7 +333,7 @@ export async function GET(request: Request) {
     >(
       `SELECT assignedToUserId AS userId, COUNT(*) AS n
        FROM "Ticket"
-       WHERE status = 'resuelto' AND updatedAt >= ?
+       WHERE status = 'resuelto' AND updatedAt >= ? ${exclAssign}
        GROUP BY assignedToUserId`,
       since,
     );
@@ -288,6 +345,7 @@ export async function GET(request: Request) {
       .map((r) => ({
         userId: r.userId,
         name: r.name,
+        role: r.role,
         tickets_created: Number(r.tickets_created),
         tickets_resolved: resolvedByUser.get(r.userId) ?? 0,
         page_visits: Number(r.page_visits),
@@ -305,11 +363,11 @@ export async function GET(request: Request) {
     today.setHours(0, 0, 0, 0);
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const todayRow = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
-      `SELECT COUNT(DISTINCT userId) AS n FROM "UxEvent" WHERE createdAt >= ? AND userId IS NOT NULL`,
+      `SELECT COUNT(DISTINCT userId) AS n FROM "UxEvent" WHERE createdAt >= ? AND userId IS NOT NULL ${exclUx}`,
       today.toISOString(),
     );
     const weekRow = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
-      `SELECT COUNT(DISTINCT userId) AS n FROM "UxEvent" WHERE createdAt >= ? AND userId IS NOT NULL`,
+      `SELECT COUNT(DISTINCT userId) AS n FROM "UxEvent" WHERE createdAt >= ? AND userId IS NOT NULL ${exclUx}`,
       weekAgo.toISOString(),
     );
 
@@ -319,9 +377,214 @@ export async function GET(request: Request) {
     >(
       `SELECT COUNT(*) AS events, COUNT(DISTINCT sessionId) AS sessions
        FROM "UxEvent"
-       WHERE createdAt >= ?`,
+       WHERE createdAt >= ? ${exclUx}`,
       since,
     );
+
+    // ─── Periodo anterior (deltas) ─────────────────────────────────────────
+    // Se calculan solo unas pocas magnitudes "headline" para el hero.
+    const [prevTotalsRow] = await prisma.$queryRawUnsafe<
+      { events: bigint; sessions: bigint }[]
+    >(
+      `SELECT COUNT(*) AS events, COUNT(DISTINCT sessionId) AS sessions
+       FROM "UxEvent"
+       WHERE createdAt >= ? AND createdAt < ? ${exclUx}`,
+      prevSince,
+      prevUntil,
+    );
+    const [prevTicketsRow] = await prisma.$queryRawUnsafe<
+      { resolved: bigint; created: bigint }[]
+    >(
+      `SELECT
+         SUM(CASE WHEN status='resuelto' AND updatedAt >= ? AND updatedAt < ? THEN 1 ELSE 0 END) AS resolved,
+         SUM(CASE WHEN createdAt >= ? AND createdAt < ? THEN 1 ELSE 0 END) AS created
+       FROM "Ticket"
+       WHERE createdAt >= ? OR updatedAt >= ?`,
+      prevSince,
+      prevUntil,
+      prevSince,
+      prevUntil,
+      prevSince,
+      prevSince,
+    );
+    const currentTicketsRow = await prisma.$queryRawUnsafe<
+      { resolved: bigint; created: bigint; open: bigint }[]
+    >(
+      `SELECT
+         SUM(CASE WHEN status='resuelto' AND updatedAt >= ? THEN 1 ELSE 0 END) AS resolved,
+         SUM(CASE WHEN createdAt >= ? THEN 1 ELSE 0 END) AS created,
+         SUM(CASE WHEN status IN ('abierto','en_proceso','esperando_repuesto') THEN 1 ELSE 0 END) AS open
+       FROM "Ticket"
+       WHERE createdAt >= ? OR status IN ('abierto','en_proceso','esperando_repuesto')`,
+      since,
+      since,
+      since,
+    );
+
+    // ─── Heatmap día × hora ────────────────────────────────────────────────
+    // SQLite: strftime('%w', ...) = 0..6 (Dom..Sáb), '%H' = 00..23.
+    const heatmapRows = await prisma.$queryRawUnsafe<
+      { dow: string | null; hour: string | null; n: bigint }[]
+    >(
+      `SELECT strftime('%w', createdAt) AS dow,
+              strftime('%H', createdAt) AS hour,
+              COUNT(*) AS n
+       FROM "UxEvent"
+       WHERE createdAt >= ? ${exclUx}
+       GROUP BY dow, hour`,
+      since,
+    );
+    const heatmap: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
+    for (const r of heatmapRows) {
+      const d = Number(r.dow ?? 0);
+      const h = Number(r.hour ?? 0);
+      if (d >= 0 && d < 7 && h >= 0 && h < 24) {
+        heatmap[d][h] = Number(r.n);
+      }
+    }
+
+    // ─── Timeseries (eventos por día) ──────────────────────────────────────
+    const tsRows = await prisma.$queryRawUnsafe<
+      { day: string; events: bigint; visits: bigint; creates: bigint }[]
+    >(
+      `SELECT
+         date(createdAt) AS day,
+         COUNT(*) AS events,
+         SUM(CASE WHEN eventName = 'page_visit' THEN 1 ELSE 0 END) AS visits,
+         SUM(CASE WHEN eventName IN ('ticket_create_complete','ticket_created') THEN 1 ELSE 0 END) AS creates
+       FROM "UxEvent"
+       WHERE createdAt >= ? ${exclUx}
+       GROUP BY day
+       ORDER BY day`,
+      since,
+    );
+    const tsMap = new Map<string, { events: number; visits: number; creates: number }>();
+    for (const r of tsRows) {
+      tsMap.set(r.day, {
+        events: Number(r.events),
+        visits: Number(r.visits),
+        creates: Number(r.creates),
+      });
+    }
+    // Rellena los días sin eventos para tener la serie continua.
+    const timeseries: SummaryRow["timeseries"] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now - i * 24 * 60 * 60 * 1000);
+      const key = d.toISOString().slice(0, 10);
+      const entry = tsMap.get(key);
+      timeseries.push({
+        date: key,
+        events: entry?.events ?? 0,
+        visits: entry?.visits ?? 0,
+        creates: entry?.creates ?? 0,
+      });
+    }
+
+    // ─── Errores de API agregados ──────────────────────────────────────────
+    const apiErrorRows = await prisma.$queryRawUnsafe<
+      {
+        path: string | null;
+        status: number | null;
+        n: bigint;
+        avg_ms: number | null;
+        last_at: string;
+      }[]
+    >(
+      `SELECT
+         json_extract(props, '$.path') AS path,
+         CAST(json_extract(props, '$.status') AS INTEGER) AS status,
+         COUNT(*) AS n,
+         AVG(durationMs) AS avg_ms,
+         MAX(createdAt) AS last_at
+       FROM "UxEvent"
+       WHERE eventName = 'api_error' AND createdAt >= ? ${exclUx}
+       GROUP BY path, status
+       ORDER BY n DESC
+       LIMIT 25`,
+      since,
+    );
+
+    // ─── Segmentación por rol ──────────────────────────────────────────────
+    const byRoleRows = await prisma.$queryRawUnsafe<
+      { role: string | null; events: bigint; users: bigint }[]
+    >(
+      `SELECT
+         COALESCE(userRole, '(sin rol)') AS role,
+         COUNT(*) AS events,
+         COUNT(DISTINCT userId) AS users
+       FROM "UxEvent"
+       WHERE createdAt >= ? ${exclUx}
+       GROUP BY userRole
+       ORDER BY events DESC`,
+      since,
+    );
+
+    // ─── Métricas REALES de tickets (no telemetría) ────────────────────────
+    // MTTR (mean / median) y % SLA cumplido. Se calcula sobre los tickets
+    // RESUELTOS en el rango. Sin tablas extra, datos directos de Ticket.
+    const ticketResolutionRows = await prisma.$queryRawUnsafe<
+      { duration_min: number; sla_met: number }[]
+    >(
+      `SELECT
+         CAST((julianday(updatedAt) - julianday(createdAt)) * 24 * 60 AS INTEGER) AS duration_min,
+         CASE WHEN updatedAt <= slaDeadline THEN 1 ELSE 0 END AS sla_met
+       FROM "Ticket"
+       WHERE status = 'resuelto' AND updatedAt >= ?`,
+      since,
+    );
+    const durations = ticketResolutionRows
+      .map((r) => Number(r.duration_min))
+      .filter((n) => Number.isFinite(n) && n >= 0);
+    const mttrMinutes = durations.length
+      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      : 0;
+    const medianResolutionMinutes = median(durations);
+    const slaMet = ticketResolutionRows.reduce((acc, r) => acc + Number(r.sla_met), 0);
+    const slaTotal = ticketResolutionRows.length;
+    const slaBreached = slaTotal - slaMet;
+
+    // Tickets por prioridad (creados / resueltos)
+    const byPriorityRows = await prisma.$queryRawUnsafe<
+      { priority: string; n: bigint; resolved: bigint }[]
+    >(
+      `SELECT
+         priority,
+         COUNT(*) AS n,
+         SUM(CASE WHEN status='resuelto' THEN 1 ELSE 0 END) AS resolved
+       FROM "Ticket"
+       WHERE createdAt >= ?
+       GROUP BY priority
+       ORDER BY n DESC`,
+      since,
+    );
+
+    // Top buses con más tickets en el rango
+    const topBusesRows = await prisma.$queryRawUnsafe<{ busId: string; n: bigint }[]>(
+      `SELECT busId, COUNT(*) AS n
+       FROM "Ticket"
+       WHERE createdAt >= ?
+       GROUP BY busId
+       ORDER BY n DESC
+       LIMIT 10`,
+      since,
+    );
+
+    // Helper para calcular delta porcentual.
+    const pctDelta = (now_: number, prev: number): number | null => {
+      if (prev === 0 && now_ === 0) return 0;
+      if (prev === 0) return null; // "nuevo" — no se puede calcular %
+      return Math.round(((now_ - prev) / prev) * 1000) / 10; // 1 decimal
+    };
+
+    const currentEvents = Number(totalsRow[0]?.events ?? 0);
+    const currentSessions = Number(totalsRow[0]?.sessions ?? 0);
+    const prevEvents = Number(prevTotalsRow?.events ?? 0);
+    const prevSessions = Number(prevTotalsRow?.sessions ?? 0);
+    const currentResolved = Number(currentTicketsRow[0]?.resolved ?? 0);
+    const currentCreated = Number(currentTicketsRow[0]?.created ?? 0);
+    const currentOpen = Number(currentTicketsRow[0]?.open ?? 0);
+    const prevResolved = Number(prevTicketsRow?.resolved ?? 0);
+    const prevCreated = Number(prevTicketsRow?.created ?? 0);
 
     const summary: SummaryRow = {
       page_visits: pageRows.map((r) => ({
@@ -360,8 +623,48 @@ export async function GET(request: Request) {
         week: Number(weekRow[0]?.n ?? 0),
       },
       totals: {
-        events: Number(totalsRow[0]?.events ?? 0),
-        sessions: Number(totalsRow[0]?.sessions ?? 0),
+        events: currentEvents,
+        sessions: currentSessions,
+        events_prev: prevEvents,
+        sessions_prev: prevSessions,
+      },
+      heatmap,
+      timeseries,
+      api_errors: apiErrorRows.map((r) => ({
+        path: r.path ?? "(desconocido)",
+        status: Number(r.status ?? 0),
+        n: Number(r.n),
+        avg_ms: Math.round(Number(r.avg_ms ?? 0)),
+        last_at: r.last_at,
+      })),
+      by_role: byRoleRows.map((r) => ({
+        role: r.role ?? "(sin rol)",
+        events: Number(r.events),
+        users: Number(r.users),
+      })),
+      tickets: {
+        created: currentCreated,
+        resolved: currentResolved,
+        open: currentOpen,
+        sla_breached: slaBreached,
+        sla_total: slaTotal,
+        mttr_minutes: mttrMinutes,
+        median_resolution_minutes: medianResolutionMinutes,
+        by_priority: byPriorityRows.map((r) => ({
+          priority: r.priority,
+          n: Number(r.n),
+          resolved: Number(r.resolved),
+        })),
+        top_buses: topBusesRows.map((r) => ({
+          busId: r.busId,
+          n: Number(r.n),
+        })),
+      },
+      trends: {
+        events: { value: currentEvents, prev: prevEvents, delta_pct: pctDelta(currentEvents, prevEvents) },
+        sessions: { value: currentSessions, prev: prevSessions, delta_pct: pctDelta(currentSessions, prevSessions) },
+        tickets_resolved: { value: currentResolved, prev: prevResolved, delta_pct: pctDelta(currentResolved, prevResolved) },
+        tickets_created: { value: currentCreated, prev: prevCreated, delta_pct: pctDelta(currentCreated, prevCreated) },
       },
     };
 

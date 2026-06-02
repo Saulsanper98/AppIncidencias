@@ -15,24 +15,34 @@
  * Es solo lectura: no hay acciones destructivas.
  */
 
+import { motion } from "framer-motion";
 import {
   Activity,
   AlertOctagon,
-  ArrowDownRight,
-  ArrowUpRight,
+  AlertTriangle,
   BarChart3,
+  Bus,
+  CalendarDays,
+  CheckCircle2,
   Clock,
   Eye,
   Filter,
+  Flame,
+  Gauge,
   Hourglass,
   Layers,
   Loader2,
+  Minus,
   Moon,
   RefreshCw,
   Search,
+  ShieldCheck,
   Sparkles,
   Sun,
   Sunrise,
+  Timer,
+  TrendingDown,
+  TrendingUp,
   Trophy,
   Users,
   Zap,
@@ -40,6 +50,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
+
+type Trend = { value: number; prev: number; delta_pct: number | null };
 
 type Summary = {
   page_visits: { path: string | null; visits: number; total_ms: number; avg_ms: number }[];
@@ -63,13 +75,35 @@ type Summary = {
   ranking: {
     userId: string;
     name: string;
+    role: string | null;
     tickets_created: number;
     tickets_resolved: number;
     page_visits: number;
     active_minutes: number;
   }[];
   active_users: { today: number; week: number };
-  totals: { events: number; sessions: number };
+  totals: { events: number; sessions: number; events_prev?: number; sessions_prev?: number };
+  heatmap: number[][];
+  timeseries: { date: string; events: number; visits: number; creates: number }[];
+  api_errors: { path: string; status: number; n: number; avg_ms: number; last_at: string }[];
+  by_role: { role: string; events: number; users: number }[];
+  tickets: {
+    created: number;
+    resolved: number;
+    open: number;
+    sla_breached: number;
+    sla_total: number;
+    mttr_minutes: number;
+    median_resolution_minutes: number;
+    by_priority: { priority: string; n: number; resolved: number }[];
+    top_buses: { busId: string; n: number }[];
+  };
+  trends: {
+    events: Trend;
+    sessions: Trend;
+    tickets_resolved: Trend;
+    tickets_created: Trend;
+  };
 };
 
 type Range = 1 | 7 | 30 | 90;
@@ -133,10 +167,11 @@ const SECTION_META: Record<string, { Icon: typeof Sun; tone: string }> = {
 export function AnalyticsBoard() {
   const [range, setRange] = useState<Range>(7);
   const [data, setData] = useState<Summary | null>(null);
-  const [prevData, setPrevData] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  /** Filtro por rol para la sección de ranking. */
+  const [roleFilter, setRoleFilter] = useState<"all" | string>("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,7 +182,6 @@ export function AnalyticsBoard() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as { summary: Summary };
-      setPrevData(data);
       setData(json.summary);
       setLastFetch(new Date());
     } catch (e) {
@@ -156,9 +190,6 @@ export function AnalyticsBoard() {
     } finally {
       setLoading(false);
     }
-    // Deliberadamente no incluimos `data` en deps: solo se usa para conservar
-    // el snapshot previo antes de pisarlo y mostrar deltas.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
 
   useEffect(() => {
@@ -173,12 +204,15 @@ export function AnalyticsBoard() {
     return () => window.clearInterval(id);
   }, [load]);
 
-  const deltaEvents = useMemo(() => {
-    if (!data || !prevData) return null;
-    const diff = data.totals.events - prevData.totals.events;
-    if (diff === 0) return null;
-    return diff;
-  }, [data, prevData]);
+  // Etiqueta dinámica del periodo de comparación.
+  const compareLabel =
+    range === 1 ? "vs ayer" : range === 7 ? "vs 7 días previos" : `vs ${range} días previos`;
+
+  const filteredRanking = useMemo(() => {
+    if (!data) return [];
+    if (roleFilter === "all") return data.ranking;
+    return data.ranking.filter((r) => r.role === roleFilter);
+  }, [data, roleFilter]);
 
   return (
     <div className="space-y-6">
@@ -257,38 +291,60 @@ export function AnalyticsBoard() {
             </div>
           </div>
 
-          {/* Fila de KPIs grandes inline */}
+          {/* Fila de KPIs grandes inline (con tendencia vs periodo anterior) */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <HeroStat
               label="Eventos capturados"
               value={data?.totals.events ?? 0}
-              delta={deltaEvents}
+              trend={data?.trends.events ?? null}
+              compareLabel={compareLabel}
               Icon={Activity}
               tone="sky"
               loading={loading && !data}
             />
             <HeroStat
-              label="Sesiones"
+              label="Sesiones únicas"
               value={data?.totals.sessions ?? 0}
+              trend={data?.trends.sessions ?? null}
+              compareLabel={compareLabel}
               Icon={Sparkles}
               tone="violet"
               loading={loading && !data}
             />
             <HeroStat
-              label="Activos hoy"
-              value={data?.active_users.today ?? 0}
-              Icon={Users}
+              label="Tickets resueltos"
+              value={data?.trends.tickets_resolved.value ?? 0}
+              trend={data?.trends.tickets_resolved ?? null}
+              compareLabel={compareLabel}
+              Icon={CheckCircle2}
               tone="emerald"
               loading={loading && !data}
             />
             <HeroStat
-              label={`Activos · ${range}d`}
-              value={data?.active_users.week ?? 0}
-              Icon={Users}
+              label="Tickets creados"
+              value={data?.trends.tickets_created.value ?? 0}
+              trend={data?.trends.tickets_created ?? null}
+              compareLabel={compareLabel}
+              Icon={Flame}
               tone="amber"
               loading={loading && !data}
             />
           </div>
+
+          {/* Mini sparkline de actividad diaria */}
+          {data?.timeseries?.length ? (
+            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 px-4 py-3 backdrop-blur">
+              <div className="mb-2 flex items-center justify-between text-[11px]">
+                <span className="font-semibold uppercase tracking-wider text-[var(--color-text-3)]">
+                  Actividad diaria · {range} día{range === 1 ? "" : "s"}
+                </span>
+                <span className="font-mono text-[var(--color-text-2)]">
+                  Pico: {Math.max(...data.timeseries.map((d) => d.events))} ev/día
+                </span>
+              </div>
+              <SparkLine data={data.timeseries.map((d) => d.events)} />
+            </div>
+          ) : null}
 
           {lastFetch ? (
             <div className="flex items-center gap-2 text-[10.5px] text-[var(--color-text-3)]">
@@ -523,11 +579,47 @@ export function AnalyticsBoard() {
           <EmptyHint text="Sin actividad de usuarios en este rango." />
         ) : (
           <div className="space-y-4">
-            {/* Podio Top 3 */}
-            {data.ranking.length >= 1 ? <Podium top={data.ranking.slice(0, 3)} /> : null}
+            {/* Filtro por rol */}
+            <div className="-mx-1 flex flex-wrap items-center gap-1 overflow-x-auto px-1 pb-1">
+              <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Filtrar:
+              </span>
+              {(() => {
+                const roles = Array.from(
+                  new Set(data.ranking.map((r) => r.role).filter(Boolean)),
+                ) as string[];
+                const opts: { v: "all" | string; label: string }[] = [
+                  { v: "all", label: `Todos · ${data.ranking.length}` },
+                  ...roles.map((rl) => ({
+                    v: rl,
+                    label: `${formatRole(rl)} · ${data.ranking.filter((r) => r.role === rl).length}`,
+                  })),
+                ];
+                return opts.map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setRoleFilter(opt.v)}
+                    className={cn(
+                      "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all",
+                      roleFilter === opt.v
+                        ? "bg-gradient-to-br from-[var(--color-accent)] to-violet-600 text-white shadow-sm"
+                        : "border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ));
+              })()}
+            </div>
+
+            {/* Podio Top 3 (del filtrado) */}
+            {filteredRanking.length >= 1 ? <Podium top={filteredRanking.slice(0, 3)} /> : (
+              <EmptyHint text="No hay usuarios con este rol en el rango." />
+            )}
 
             {/* Resto */}
-            {data.ranking.length > 3 ? (
+            {filteredRanking.length > 3 ? (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-[12.5px]">
                   <thead className="text-left text-[10.5px] uppercase tracking-widest text-[var(--color-text-3)]">
@@ -541,7 +633,7 @@ export function AnalyticsBoard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.ranking.slice(3).map((r, i) => (
+                    {filteredRanking.slice(3).map((r, i) => (
                       <tr
                         key={r.userId}
                         className="border-b border-[var(--color-border)]/60 transition-colors hover:bg-[var(--color-surface-2)]/40"
@@ -550,7 +642,14 @@ export function AnalyticsBoard() {
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-2">
                             <Avatar name={r.name} small />
-                            <span className="font-medium text-[var(--color-text-1)]">{r.name}</span>
+                            <div className="flex flex-col">
+                              <span className="font-medium text-[var(--color-text-1)]">{r.name}</span>
+                              {r.role ? (
+                                <span className="text-[9.5px] uppercase tracking-wider text-[var(--color-text-3)]">
+                                  {formatRole(r.role)}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </td>
                         <td className="px-3 py-2 text-right font-mono tabular-nums">
@@ -655,8 +754,352 @@ export function AnalyticsBoard() {
           )}
         </Card>
       </div>
+
+      {/* ───── BLOQUE NUEVO: SLA / MTTR ───── */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card
+          title="Cumplimiento de SLA"
+          Icon={ShieldCheck}
+          subtitle="Tickets resueltos a tiempo en el rango"
+        >
+          {data ? (
+            <SlaPanel tickets={data.tickets} />
+          ) : (
+            <EmptyHint text="Cargando…" />
+          )}
+        </Card>
+
+        <Card
+          title="Tiempo de resolución (MTTR)"
+          Icon={Timer}
+          subtitle="Datos reales de tickets, no telemetría"
+        >
+          {data ? (
+            <MttrPanel tickets={data.tickets} />
+          ) : (
+            <EmptyHint text="Cargando…" />
+          )}
+        </Card>
+
+        <Card
+          title="Buses con más incidencias"
+          Icon={Bus}
+          subtitle="Top 10 del rango"
+        >
+          {!data || data.tickets.top_buses.length === 0 ? (
+            <EmptyHint text="Sin tickets en este rango." />
+          ) : (
+            <ul className="space-y-1.5">
+              {data.tickets.top_buses.map((b, i) => {
+                const max = data.tickets.top_buses[0]?.n ?? 1;
+                const pct = Math.round((b.n / max) * 100);
+                return (
+                  <li key={b.busId} className="flex items-center gap-2 text-[12px]">
+                    <span className="w-5 text-right font-mono text-[10.5px] text-[var(--color-text-3)]">
+                      #{i + 1}
+                    </span>
+                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--color-surface-2)] text-[var(--color-text-2)]">
+                      <Bus size={11} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="truncate font-mono font-semibold text-[var(--color-text-1)]">
+                          {b.busId}
+                        </span>
+                        <span className="shrink-0 font-mono tabular-nums text-[var(--color-text-2)]">
+                          {b.n}
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-orange-500 to-rose-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      {/* ───── BLOQUE NUEVO: HEATMAP DÍA × HORA ───── */}
+      <Card
+        title="Actividad por día y hora"
+        Icon={CalendarDays}
+        subtitle="Cuándo se usa la app — útil para detectar horas pico"
+      >
+        {data && data.heatmap.length === 7 ? (
+          <HeatmapDayHour matrix={data.heatmap} />
+        ) : (
+          <EmptyHint text="Sin datos suficientes." />
+        )}
+      </Card>
+
+      {/* ───── BLOQUE NUEVO: PRIORIDAD + API ERRORS + ROLES ───── */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card
+          title="Tickets por prioridad"
+          Icon={Gauge}
+          subtitle="Creados vs resueltos en el rango"
+        >
+          {!data || data.tickets.by_priority.length === 0 ? (
+            <EmptyHint text="Sin tickets en este rango." />
+          ) : (
+            <ul className="space-y-2">
+              {data.tickets.by_priority.map((p) => {
+                const pct = p.n > 0 ? Math.round((p.resolved / p.n) * 100) : 0;
+                const priorityColor = getPriorityColor(p.priority);
+                return (
+                  <li
+                    key={p.priority}
+                    className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2"
+                  >
+                    <div className="flex items-center justify-between text-[12.5px]">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn("h-2.5 w-2.5 rounded-full", priorityColor.dot)}
+                        />
+                        <span className={cn("font-bold uppercase tracking-wider", priorityColor.text)}>
+                          {p.priority}
+                        </span>
+                      </div>
+                      <span className="font-mono text-[var(--color-text-2)]">
+                        {p.resolved} / {p.n} · {pct}%
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
+                      <div
+                        className={cn("h-full rounded-full", priorityColor.bar)}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+
+        <Card
+          title="Errores de API"
+          Icon={AlertTriangle}
+          subtitle="Endpoints con más fallos · capturados en cliente"
+          tone="error"
+        >
+          {!data || data.api_errors.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-4 text-center text-[12px] text-emerald-300">
+              <CheckCircle2 size={28} />
+              <span>Sin errores en este rango.</span>
+            </div>
+          ) : (
+            <ul className="space-y-1.5">
+              {data.api_errors.slice(0, 10).map((e, i) => (
+                <li
+                  key={`${e.path}-${e.status}-${i}`}
+                  className="flex items-start gap-2 rounded-lg border border-[var(--color-error)]/15 bg-[var(--color-error)]/5 px-2.5 py-1.5"
+                >
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10px] font-bold",
+                      e.status >= 500
+                        ? "bg-[var(--color-error)]/25 text-[var(--color-error)]"
+                        : "bg-amber-500/20 text-amber-300",
+                    )}
+                  >
+                    {e.status}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-mono text-[11.5px] text-[var(--color-text-1)]">
+                      {e.path}
+                    </p>
+                    <p className="text-[10px] text-[var(--color-text-3)]">
+                      {e.n}× · ~{e.avg_ms} ms · {timeAgo(new Date(e.last_at))}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card
+          title="Eventos por rol"
+          Icon={Users}
+          subtitle="Quién usa más la app"
+        >
+          {!data || data.by_role.length === 0 ? (
+            <EmptyHint text="Sin datos." />
+          ) : (
+            <ul className="space-y-2">
+              {data.by_role.map((r) => {
+                const max = Math.max(...data.by_role.map((x) => x.events), 1);
+                const pct = Math.round((r.events / max) * 100);
+                return (
+                  <li key={r.role} className="space-y-1">
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className="font-semibold capitalize text-[var(--color-text-1)]">
+                        {formatRole(r.role)}
+                      </span>
+                      <span className="font-mono text-[var(--color-text-3)]">
+                        {r.events.toLocaleString("es-ES")} · {r.users} u.
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-violet-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      </div>
     </div>
   );
+}
+
+// ─── Sub-componentes ampliados ───────────────────────────────────────────────
+
+function SlaPanel({ tickets }: { tickets: Summary["tickets"] }) {
+  const pct = tickets.sla_total > 0
+    ? Math.round(((tickets.sla_total - tickets.sla_breached) / tickets.sla_total) * 100)
+    : 0;
+  const tone =
+    pct >= 90
+      ? { ring: "ring-emerald-500/40", text: "text-emerald-300", bg: "bg-emerald-500/15" }
+      : pct >= 70
+        ? { ring: "ring-amber-500/40", text: "text-amber-300", bg: "bg-amber-500/15" }
+        : { ring: "ring-[var(--color-error)]/40", text: "text-[var(--color-error)]", bg: "bg-[var(--color-error)]/10" };
+  const r = 38;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - pct / 100);
+  return (
+    <div className="flex flex-col items-center gap-3 text-center">
+      <div className="relative">
+        <svg width="100" height="100" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r={r} className="fill-none stroke-[var(--color-surface-3)]" strokeWidth="9" />
+          <circle
+            cx="50"
+            cy="50"
+            r={r}
+            className={cn("fill-none", tone.text)}
+            stroke="currentColor"
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={offset}
+            transform="rotate(-90 50 50)"
+            style={{ transition: "stroke-dashoffset 0.8s ease" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className={cn("font-mono text-2xl font-bold tabular-nums", tone.text)}>
+            {pct}%
+          </span>
+        </div>
+      </div>
+      <div className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset", tone.ring, tone.bg, tone.text)}>
+        <ShieldCheck size={11} />
+        {tickets.sla_total - tickets.sla_breached} de {tickets.sla_total} dentro de SLA
+      </div>
+      {tickets.sla_breached > 0 ? (
+        <p className="text-[11px] text-[var(--color-text-3)]">
+          <AlertOctagon size={10} className="-mt-0.5 mr-1 inline text-[var(--color-error)]" />
+          {tickets.sla_breached} ticket{tickets.sla_breached === 1 ? "" : "s"} fuera de plazo
+        </p>
+      ) : (
+        <p className="text-[11px] text-emerald-300">Sin SLA vencidos. ¡Bien!</p>
+      )}
+    </div>
+  );
+}
+
+function MttrPanel({ tickets }: { tickets: Summary["tickets"] }) {
+  const fmt = (mins: number) => {
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h < 24) return `${h}h ${m}m`;
+    const d = Math.floor(h / 24);
+    const hr = h % 24;
+    return `${d}d ${hr}h`;
+  };
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+            Mediana
+          </p>
+          <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-emerald-300">
+            {tickets.median_resolution_minutes > 0 ? fmt(tickets.median_resolution_minutes) : "—"}
+          </p>
+        </div>
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+            Media
+          </p>
+          <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-sky-300">
+            {tickets.mttr_minutes > 0 ? fmt(tickets.mttr_minutes) : "—"}
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-lg bg-emerald-500/10 px-2 py-1.5">
+          <p className="text-[10px] uppercase tracking-wider text-emerald-200/80">Resueltos</p>
+          <p className="font-mono text-base font-bold text-emerald-300">{tickets.resolved}</p>
+        </div>
+        <div className="rounded-lg bg-amber-500/10 px-2 py-1.5">
+          <p className="text-[10px] uppercase tracking-wider text-amber-200/80">Creados</p>
+          <p className="font-mono text-base font-bold text-amber-300">{tickets.created}</p>
+        </div>
+        <div className="rounded-lg bg-rose-500/10 px-2 py-1.5">
+          <p className="text-[10px] uppercase tracking-wider text-rose-200/80">Abiertos</p>
+          <p className="font-mono text-base font-bold text-rose-300">{tickets.open}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getPriorityColor(p: string) {
+  switch (p) {
+    case "critica":
+      return { dot: "bg-rose-500", text: "text-rose-300", bar: "bg-gradient-to-r from-rose-500 to-rose-400" };
+    case "alta":
+      return { dot: "bg-orange-500", text: "text-orange-300", bar: "bg-gradient-to-r from-orange-500 to-amber-400" };
+    case "media":
+      return { dot: "bg-amber-500", text: "text-amber-300", bar: "bg-gradient-to-r from-amber-500 to-yellow-400" };
+    case "baja":
+      return { dot: "bg-emerald-500", text: "text-emerald-300", bar: "bg-gradient-to-r from-emerald-500 to-emerald-400" };
+    default:
+      return { dot: "bg-slate-500", text: "text-slate-300", bar: "bg-gradient-to-r from-slate-500 to-slate-400" };
+  }
+}
+
+function formatRole(role: string): string {
+  switch (role) {
+    case "responsable_taller":
+      return "Resp. taller";
+    case "tecnico_campo":
+      return "Técnico campo";
+    case "responsable_inventario":
+      return "Resp. inventario";
+    case "gestor_movilidad":
+      return "Gestor movilidad";
+    case "conductor":
+      return "Conductor";
+    case "(sin rol)":
+      return "Sin rol";
+    default:
+      return role;
+  }
 }
 
 // ─── Sub-componentes ─────────────────────────────────────────────────────────
@@ -711,14 +1154,16 @@ function Card({
 function HeroStat({
   label,
   value,
-  delta,
+  trend,
+  compareLabel,
   Icon,
   tone,
   loading,
 }: {
   label: string;
   value: number;
-  delta?: number | null;
+  trend?: Trend | null;
+  compareLabel?: string;
   Icon: typeof Clock;
   tone: "sky" | "violet" | "emerald" | "amber";
   loading?: boolean;
@@ -730,30 +1175,59 @@ function HeroStat({
       "from-emerald-500/15 via-emerald-500/5 to-transparent ring-emerald-500/25 text-emerald-300",
     amber: "from-amber-500/15 via-amber-500/5 to-transparent ring-amber-500/25 text-amber-300",
   }[tone];
+
+  const trendDelta = trend?.delta_pct ?? null;
+  /** "Bueno" subir o bajar depende del KPI (no implementado: asumimos subir = bueno). */
+  const trendDirection =
+    trendDelta === null
+      ? "neutral"
+      : trendDelta > 0
+        ? "up"
+        : trendDelta < 0
+          ? "down"
+          : "flat";
+
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
       className={cn(
         "relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br p-3.5 ring-1 ring-inset transition-transform hover:-translate-y-0.5",
         toneCls,
       )}
     >
+      {/* Glow decorativo de fondo */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-current opacity-[0.07] blur-2xl"
+      />
       <div className="flex items-start justify-between">
         <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-widest opacity-90">
           <Icon size={12} />
           {label}
         </span>
-        {delta != null ? (
+        {trendDirection !== "neutral" && trendDelta !== null ? (
           <span
             className={cn(
-              "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9.5px] font-bold",
-              delta > 0
+              "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+              trendDirection === "up"
                 ? "bg-emerald-500/20 text-emerald-300"
-                : "bg-[var(--color-error)]/20 text-[var(--color-error)]",
+                : trendDirection === "down"
+                  ? "bg-[var(--color-error)]/20 text-[var(--color-error)]"
+                  : "bg-[var(--color-surface-2)] text-[var(--color-text-3)]",
             )}
+            title={compareLabel}
           >
-            {delta > 0 ? <ArrowUpRight size={9} /> : <ArrowDownRight size={9} />}
-            {delta > 0 ? "+" : ""}
-            {delta}
+            {trendDirection === "up" ? (
+              <TrendingUp size={10} />
+            ) : trendDirection === "down" ? (
+              <TrendingDown size={10} />
+            ) : (
+              <Minus size={10} />
+            )}
+            {trendDelta > 0 ? "+" : ""}
+            {trendDelta}%
           </span>
         ) : null}
       </div>
@@ -765,7 +1239,136 @@ function HeroStat({
       >
         {value.toLocaleString("es-ES")}
       </p>
+      {trend && trend.prev > 0 ? (
+        <p className="mt-0.5 text-[10px] text-[var(--color-text-3)]">
+          antes {trend.prev.toLocaleString("es-ES")} · {compareLabel}
+        </p>
+      ) : trend ? (
+        <p className="mt-0.5 text-[10px] text-[var(--color-text-3)]">{compareLabel} · sin datos previos</p>
+      ) : null}
+    </motion.div>
+  );
+}
+
+/**
+ * Línea sparkline simple en SVG. Sin librerías externas: renderiza un
+ * polyline con un área degradada debajo. Pensado para hero compacto.
+ */
+function SparkLine({ data, height = 56 }: { data: number[]; height?: number }) {
+  if (data.length === 0) return null;
+  const w = 800;
+  const max = Math.max(1, ...data);
+  const stepX = data.length > 1 ? w / (data.length - 1) : w;
+  const points = data.map((v, i) => {
+    const x = i * stepX;
+    const y = height - 4 - (v / max) * (height - 12);
+    return [x, y];
+  });
+  const path =
+    `M ${points[0][0]},${points[0][1]} ` +
+    points
+      .slice(1)
+      .map((p, i) => {
+        const prev = points[i];
+        const mx = (prev[0] + p[0]) / 2;
+        return `Q ${prev[0]},${prev[1]} ${mx},${(prev[1] + p[1]) / 2} T ${p[0]},${p[1]}`;
+      })
+      .join(" ");
+  const area = `${path} L ${w},${height} L 0,${height} Z`;
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} className="h-14 w-full" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="spark-fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#spark-fill)" />
+      <path d={path} stroke="var(--color-accent)" strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+      {points.map((p, i) => (
+        <circle
+          key={i}
+          cx={p[0]}
+          cy={p[1]}
+          r={i === points.length - 1 ? 4 : 0}
+          fill="var(--color-accent)"
+        />
+      ))}
+    </svg>
+  );
+}
+
+/**
+ * Heatmap día×hora. Cada celda es una intensidad de actividad.
+ * Útil para detectar horas pico y "valles" donde nadie usa la app.
+ */
+function HeatmapDayHour({ matrix }: { matrix: number[][] }) {
+  const flat = matrix.flat();
+  const max = Math.max(1, ...flat);
+  const dayLabels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  return (
+    <div className="overflow-x-auto">
+      <div className="inline-grid min-w-full gap-px" style={{ gridTemplateColumns: "auto repeat(24, minmax(14px, 1fr))" }}>
+        <div />
+        {Array.from({ length: 24 }).map((_, h) => (
+          <div
+            key={h}
+            className="text-center text-[8.5px] font-medium text-[var(--color-text-3)]"
+          >
+            {h % 3 === 0 ? h.toString().padStart(2, "0") : ""}
+          </div>
+        ))}
+        {matrix.map((row, d) => (
+          <FragmentRow key={d} d={d} dayLabels={dayLabels} row={row} max={max} />
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-[var(--color-text-3)]">
+        <span>Menos</span>
+        {[0.1, 0.25, 0.5, 0.75, 1].map((v, i) => (
+          <span
+            key={i}
+            className="inline-block h-3 w-5 rounded-sm"
+            style={{ background: `rgba(99,102,241,${0.1 + v * 0.8})` }}
+          />
+        ))}
+        <span>Más</span>
+      </div>
     </div>
+  );
+}
+
+function FragmentRow({
+  d,
+  dayLabels,
+  row,
+  max,
+}: {
+  d: number;
+  dayLabels: string[];
+  row: number[];
+  max: number;
+}) {
+  return (
+    <>
+      <div className="pr-2 text-right text-[10.5px] font-semibold text-[var(--color-text-3)]">
+        {dayLabels[d]}
+      </div>
+      {row.map((v, h) => {
+        const intensity = v / max;
+        return (
+          <div
+            key={h}
+            className="aspect-square rounded-sm transition-transform hover:scale-110"
+            style={{
+              background: v === 0
+                ? "var(--color-surface-2)"
+                : `rgba(99,102,241,${0.08 + intensity * 0.85})`,
+            }}
+            title={`${dayLabels[d]} ${h.toString().padStart(2, "0")}:00 — ${v} ev`}
+          />
+        );
+      })}
+    </>
   );
 }
 

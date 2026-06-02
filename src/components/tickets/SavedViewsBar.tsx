@@ -5,6 +5,7 @@ import { BookmarkPlus, Loader2, Star, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { trackUxEvent } from "@/lib/ux-telemetry";
 import { cn } from "@/lib/utils";
 
 /**
@@ -146,7 +147,13 @@ export function SavedViewsBar({ currentQuery, onApply }: Props) {
         >
           <button
             type="button"
-            onClick={() => onApply(v.query)}
+            onClick={() => {
+              trackUxEvent("ticket_view_applied", {
+                view_id: v.id,
+                view_name: v.name,
+              });
+              onApply(v.query);
+            }}
             className="font-medium"
             title="Aplicar esta vista"
           >

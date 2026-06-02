@@ -7,6 +7,7 @@ import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { canAssignTicket } from "@/lib/rbac";
 import { publishTicketEvent } from "@/lib/tickets-events";
+import { trackServerUxEvent } from "@/lib/ux-server";
 
 const assignSchema = z.object({
   assignedToUserId: z.string().min(1).nullable(),
@@ -114,6 +115,22 @@ export async function PATCH(request: Request, context: { params: Promise<{ ticke
       assignedToUserId: ticket.assignedToUserId,
       assignedToUserName: ticket.assignedTo?.name ?? null,
       by: actor.displayName,
+    });
+
+    void trackServerUxEvent({
+      eventName: parsed.data.assignedToUserId === null
+        ? "ticket_unassigned"
+        : parsed.data.assignedToUserId === actor.userId
+          ? "ticket_self_assigned"
+          : "ticket_assigned",
+      actor: { userId: actor.userId, role: actor.role },
+      request,
+      path: `/tickets/${ticket.id}`,
+      props: {
+        priority: ticket.priority,
+        status: ticket.status,
+        target: parsed.data.assignedToUserId,
+      },
     });
 
     return NextResponse.json({

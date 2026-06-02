@@ -9,6 +9,7 @@ import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { canUpdateTicketStatus, getAllowedTransitions } from "@/lib/rbac";
 import { publishTicketEvent } from "@/lib/tickets-events";
+import { trackServerUxEvent } from "@/lib/ux-server";
 
 const statusUpdateSchema = z.object({
   nextStatus: z.enum(["abierto", "en_proceso", "esperando_repuesto", "resuelto"]),
@@ -44,6 +45,9 @@ export async function PATCH(
         title: true,
         priority: true,
         assignedToUserId: true,
+        createdAt: true,
+        slaDeadline: true,
+        tipo: true,
       },
     });
     if (!ticket) {
@@ -126,6 +130,42 @@ export async function PATCH(
         subject,
         html,
         dedupeKey: `status:${ticket.id}:${parsed.data.nextStatus}:${actor.userId}`,
+      });
+    }
+
+    // ── Telemetría UX (servidor) ─────────────────────────────────────────
+    // Cada cambio de estado lo registramos. Para `resuelto`, además calculamos
+    // el MTTR (tiempo desde apertura hasta resolución) y el cumplimiento SLA.
+    const now = new Date();
+    if (parsed.data.nextStatus === "resuelto") {
+      const mttrMs = now.getTime() - ticket.createdAt.getTime();
+      const slaMet = now.getTime() <= ticket.slaDeadline.getTime();
+      void trackServerUxEvent({
+        eventName: "ticket_resolved",
+        actor: { userId: actor.userId, role: actor.role },
+        request,
+        path: `/tickets/${ticket.id}`,
+        durationMs: mttrMs,
+        props: {
+          priority: ticket.priority,
+          tipo: ticket.tipo ?? null,
+          previous_status: ticket.status,
+          sla_met: slaMet,
+          assigned: !!ticket.assignedToUserId,
+          consumed_reservations: consumedCount,
+        },
+      });
+    } else {
+      void trackServerUxEvent({
+        eventName: "ticket_status_change",
+        actor: { userId: actor.userId, role: actor.role },
+        request,
+        path: `/tickets/${ticket.id}`,
+        props: {
+          from: ticket.status,
+          to: parsed.data.nextStatus,
+          priority: ticket.priority,
+        },
       });
     }
 
