@@ -121,6 +121,8 @@ export type SessionUser = {
   bannerUrl?: string | null;
   /** Puesto/departamento mostrado bajo el nombre (ej. "Centro de control"). */
   position?: string | null;
+  /** Cuenta de solo lectura: cliente oculta acciones y servidor rechaza mutaciones. */
+  isReadOnly?: boolean;
 };
 
 export type AuditEvent = {
@@ -139,6 +141,14 @@ export type FeedbackCategory = "interfaz" | "funcionalidad" | "rendimiento" | "d
 export type FeedbackUrgency = "baja" | "media" | "alta";
 export type FeedbackStatus = "pendiente" | "en_revision" | "planificado" | "implementado" | "descartado";
 
+export type FeedbackAttachment = {
+  id: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  url: string;
+};
+
 export type UserFeedback = {
   id: string;
   type: FeedbackType;
@@ -156,6 +166,7 @@ export type UserFeedback = {
   adminNotes: string | null;
   createdAt: string;
   updatedAt: string;
+  attachments?: FeedbackAttachment[];
 };
 
 export type PreventiveTask = {

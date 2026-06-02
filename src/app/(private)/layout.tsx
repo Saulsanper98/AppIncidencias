@@ -2,7 +2,7 @@
 
 import { ChevronRight, Search } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
 
 import { AnnouncementsBanner } from "@/components/novedades/AnnouncementsBanner";
@@ -11,6 +11,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ClockChip } from "@/components/clock-chip";
 import { DensityToggle } from "@/components/density-toggle";
 import { DesvioNotificationsListener } from "@/components/desvios/DesvioNotificationsListener";
+import { FeedbackFAB } from "@/components/feedback/FeedbackFAB";
 import { FeedbackModal } from "@/components/feedback/FeedbackModal";
 import { GlobalShortcuts } from "@/components/global-shortcuts";
 import { HeaderUserMenu } from "@/components/header-user-menu";
@@ -19,6 +20,8 @@ import { OfflineQueueIndicator } from "@/components/OfflineQueueIndicator";
 import { QuickSearch } from "@/components/quick-search";
 import { ToastHost } from "@/components/toast-host";
 import type { SessionUser } from "@/lib/domain";
+import { useTrackPageVisits } from "@/lib/ux-telemetry";
+import { ClientErrorBoundary } from "@/components/ux/ClientErrorBoundary";
 import type { FeedbackPrefillTarget } from "@/components/feedback/FeedbackForm";
 
 function MapaMuroUrlSync({ setMapaMuro }: { setMapaMuro: (value: boolean) => void }) {
@@ -37,11 +40,16 @@ export default function PrivateLayout({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
+  const router = useRouter();
+  // Telemetría: cada cambio de path dispara un page_visit con duración.
+  // El primer hook abajo se llama incondicionalmente para no romper orden de hooks.
+  useTrackPageVisits(pathname);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [ticketCrumbTitle, setTicketCrumbTitle] = useState<string | null>(null);
   const [inventoryControlRoom, setInventoryControlRoom] = useState(false);
   const [mapaMuro, setMapaMuro] = useState(false);
   const [feedbackTarget, setFeedbackTarget] = useState<FeedbackPrefillTarget | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   useEffect(() => {
     const loadSession = async () => {
       try {
@@ -58,6 +66,17 @@ export default function PrivateLayout({
     loadSession();
   }, []);
 
+  // Cuentas de SOLO LECTURA: confinarlas a /lectura. Si entran a cualquier
+  // otra URL privada (por bookmark, link compartido o teclear a mano) las
+  // mandamos al modo de lectura, que es lo único que pueden hacer aquí.
+  // /account se permite para poder cambiar la contraseña o cerrar sesión.
+  useEffect(() => {
+    if (!sessionUser?.isReadOnly) return;
+    if (pathname.startsWith("/lectura")) return;
+    if (pathname.startsWith("/account")) return;
+    router.replace("/lectura");
+  }, [sessionUser?.isReadOnly, pathname, router]);
+
   useEffect(() => {
     const onInvSurface = (e: Event) => {
       const ce = e as CustomEvent<{ active?: boolean }>;
@@ -68,11 +87,20 @@ export default function PrivateLayout({
   }, []);
 
   useEffect(() => {
+    // Evento global "ccmgc-open-feedback": tres modos de uso.
+    //  - Con detail { id, label } → modal con target prefijado (modales
+    //    contextuales: "Reportar" desde un ticket o un bus).
+    //  - Sin detail / detail vacío → modal global del FAB / atajo
+    //    Ctrl+Shift+F (sin contexto preestablecido, el usuario decide qué
+    //    reportar desde el formulario).
     const onOpenFeedback = (e: Event) => {
-      const ce = e as CustomEvent<FeedbackPrefillTarget>;
+      const ce = e as CustomEvent<FeedbackPrefillTarget | undefined>;
       if (ce.detail?.id && ce.detail?.label) {
         setFeedbackTarget({ id: ce.detail.id, label: ce.detail.label });
+      } else {
+        setFeedbackTarget(null);
       }
+      setFeedbackOpen(true);
     };
     window.addEventListener("ccmgc-open-feedback", onOpenFeedback as EventListener);
     return () => window.removeEventListener("ccmgc-open-feedback", onOpenFeedback as EventListener);
@@ -277,12 +305,16 @@ export default function PrivateLayout({
                 : "flex-1 overflow-auto px-6 pb-6 pt-4"
           }
         >
-          {children}
+          <ClientErrorBoundary>{children}</ClientErrorBoundary>
         </main>
       </div>
       <FeedbackModal
+        open={feedbackOpen}
         target={feedbackTarget}
-        onClose={() => setFeedbackTarget(null)}
+        onClose={() => {
+          setFeedbackOpen(false);
+          setFeedbackTarget(null);
+        }}
       />
       <QuickSearch />
       <ToastHost />
@@ -290,6 +322,8 @@ export default function PrivateLayout({
       <DesvioNotificationsListener />
       <AnnouncementsToastListener />
       <OfflineQueueIndicator />
+      {/* El FAB de feedback no aplica a cuentas de solo lectura: no pueden enviar nada. */}
+      {sessionUser?.isReadOnly ? null : <FeedbackFAB />}
     </div>
   );
 }

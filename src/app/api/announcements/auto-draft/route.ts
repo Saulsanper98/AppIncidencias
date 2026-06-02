@@ -5,9 +5,12 @@
  * solo devuelve un draft que el cliente abrirá en el editor para revisar.
  *
  *   GET /api/announcements/auto-draft
- *     [?days=N]   → fuerza la ventana a los últimos N días (override del
- *                   cálculo automático basado en el último announcement
- *                   "novedad" publicado).
+ *     [?days=N]   → ventana de los últimos N días (1–90).
+ *
+ *   Si no llega `days`, el default es "HOY" (commits desde las 00:00 del
+ *   día actual). Antes leía desde el último Announcement publicado, pero
+ *   eso producía borradores demasiado largos cuando llevaba varios días
+ *   sin publicar (cambio solicitado por el dueño de la app).
  *
  *   Respuesta: { title, bodyMd, commits, since, repoCwd }
  */
@@ -43,20 +46,19 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const daysParam = url.searchParams.get("days");
-    let since: Date | null = null;
+    let since: Date;
 
     if (daysParam) {
-      const days = Math.max(1, Math.min(90, Number(daysParam) || 14));
+      // Ventana arbitraria solicitada por el usuario (1-90 días).
+      const days = Math.max(1, Math.min(90, Number(daysParam) || 1));
       since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     } else {
-      // Por defecto: desde el createdAt del último Announcement kind=novedad
-      // publicado. Si no hay ninguno, el helper usará 14 días.
-      const last = await prisma.announcement.findFirst({
-        where: { kind: "novedad", status: "publicado" },
-        orderBy: { createdAt: "desc" },
-        select: { createdAt: true },
-      });
-      if (last) since = last.createdAt;
+      // Default: HOY → desde las 00:00 del día actual. Si el usuario no
+      // ha tocado nada hoy, el borrador saldrá vacío (lo cual es la señal
+      // correcta), y podrá pedir 7/14/30 días desde el selector de la UI.
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      since = todayStart;
     }
 
     const draft = await buildChangelogDraftFromGit({ since });

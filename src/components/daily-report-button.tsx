@@ -2,10 +2,12 @@
 
 import {
   AlertTriangle,
+  Bus,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
   FileSpreadsheet,
+  Info,
   Loader2,
   X,
 } from "lucide-react";
@@ -32,17 +34,27 @@ type ReportStatus = {
   reports: ReportEntry[];
 };
 
+/** Clave en sessionStorage donde guardamos el último valor de "vehículos
+ *  activos" introducido. Sirve para pre-rellenar el popup en la siguiente
+ *  generación del día (no se persiste entre sesiones). */
+const ACTIVE_BUSES_STORAGE_KEY = "ccmgc:daily-report:active-buses";
+
 /**
  * Boton "Generar informe diario" con selector de dia.
  *
- *  1) Click en la mitad principal -> descarga el informe del DIA SELECCIONADO
+ *  1) Click en la mitad principal -> abre popup pidiendo "Vehículos activos
+ *     en el turno". Tras confirmar, descarga el informe del DIA SELECCIONADO
  *     (por defecto hoy).
  *  2) Click en la flechita -> abre un popover con `<input type="date">` para
  *     elegir otro dia (p. ej. ayer si se olvido sacarlo).
  *  3) Si ya existe alguna generacion para ese dia hecha por otra persona,
- *     pide confirmacion antes de generar.
+ *     pide confirmacion antes de seguir.
  *
- * Nunca bloquea la generacion: el aviso es informativo.
+ * Nunca bloquea la generacion: los avisos son informativos.
+ *
+ * El nº de vehículos activos lo introduce el operador en cada generación
+ * (no se calcula automáticamente). Es una foto del estado de la flota en
+ * ese turno y NO se suma entre informes del mismo día.
  */
 export function DailyReportButton() {
   const [selectedDate, setSelectedDate] = useState<string>(todayIso());
@@ -51,6 +63,8 @@ export function DailyReportButton() {
   const [generating, setGenerating] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [monthDots, setMonthDots] = useState<Record<string, number>>({});
+  // Modal de "vehículos activos": se muestra antes de generar.
+  const [activeBusesOpen, setActiveBusesOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const loadMonthDots = useCallback(async (ym: string) => {
@@ -115,50 +129,72 @@ export function DailyReportButton() {
 
   const isToday = selectedDate === todayIso();
 
-  const generateNow = useCallback(async () => {
-    if (generating) return;
-    setGenerating(true);
-    setWarningOpen(false);
-    try {
-      const res = await fetch("/api/reports/daily", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selectedDate }),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        toast.error("No se pudo generar el informe", {
-          description: txt || `Error ${res.status}`,
+  /**
+   * Lanza el POST al backend con el nº de vehículos activos introducido
+   * por el operador. Nunca se llama directamente desde el botón: siempre
+   * pasa antes por el popup `ActiveBusesDialog` que captura el número.
+   */
+  const generateNow = useCallback(
+    async (activeBusesCount: number) => {
+      if (generating) return;
+      setGenerating(true);
+      setActiveBusesOpen(false);
+      setWarningOpen(false);
+      try {
+        const res = await fetch("/api/reports/daily", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: selectedDate, activeBusesCount }),
         });
-        return;
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          toast.error("No se pudo generar el informe", {
+            description: txt || `Error ${res.status}`,
+          });
+          return;
+        }
+        const blob = await res.blob();
+        const disposition = res.headers.get("Content-Disposition") ?? "";
+        const match = /filename="?([^";]+)"?/i.exec(disposition);
+        const filename = match?.[1] ?? `informe-incidencias-${selectedDate}.xlsx`;
+        triggerDownload(blob, filename);
+        toast.success("Informe generado", {
+          description: `Descargando ${filename}`,
+        });
+        // Persistimos el último valor en sessionStorage para pre-rellenar
+        // el popup la próxima vez del día.
+        try {
+          sessionStorage.setItem(ACTIVE_BUSES_STORAGE_KEY, String(activeBusesCount));
+        } catch {
+          // sessionStorage puede fallar en modo privado: no es crítico.
+        }
+        await refreshStatus();
+      } catch (error) {
+        console.error("Error generando informe:", error);
+        toast.error("Error de red", {
+          description: "No se pudo contactar con el servidor.",
+        });
+      } finally {
+        setGenerating(false);
       }
-      const blob = await res.blob();
-      const disposition = res.headers.get("Content-Disposition") ?? "";
-      const match = /filename="?([^";]+)"?/i.exec(disposition);
-      const filename = match?.[1] ?? `informe-incidencias-${selectedDate}.xlsx`;
-      triggerDownload(blob, filename);
-      toast.success("Informe generado", {
-        description: `Descargando ${filename}`,
-      });
-      await refreshStatus();
-    } catch (error) {
-      console.error("Error generando informe:", error);
-      toast.error("Error de red", {
-        description: "No se pudo contactar con el servidor.",
-      });
-    } finally {
-      setGenerating(false);
-    }
-  }, [generating, refreshStatus, selectedDate]);
+    },
+    [generating, refreshStatus, selectedDate],
+  );
 
+  /**
+   * Flujo del botón "Generar":
+   *   1. Si otros ya generaron hoy → mostrar advertencia primero.
+   *   2. Si confirma (o no había duplicados) → abrir popup de vehículos.
+   *   3. El popup llama a generateNow(count) al confirmar.
+   */
   const handleClick = useCallback(() => {
     if (generatedByOthers.length > 0) {
       setWarningOpen(true);
       return;
     }
-    void generateNow();
-  }, [generatedByOthers, generateNow]);
+    setActiveBusesOpen(true);
+  }, [generatedByOthers]);
 
   const alreadyGenerated = (status?.count ?? 0) > 0;
 
@@ -374,7 +410,25 @@ export function DailyReportButton() {
               reports={generatedByOthers}
               reportDate={selectedDate}
               onCancel={() => setWarningOpen(false)}
-              onContinue={() => void generateNow()}
+              onContinue={() => {
+                // Tras confirmar el aviso de duplicado, pedimos los
+                // vehículos activos antes de generar (no saltarse el popup).
+                setWarningOpen(false);
+                setActiveBusesOpen(true);
+              }}
+            />,
+            document.body,
+          )
+        : null}
+
+      {activeBusesOpen && typeof document !== "undefined"
+        ? createPortal(
+            <ActiveBusesDialog
+              reportDate={selectedDate}
+              isToday={isToday}
+              generating={generating}
+              onCancel={() => setActiveBusesOpen(false)}
+              onConfirm={(count) => void generateNow(count)}
             />,
             document.body,
           )
@@ -479,6 +533,173 @@ function DuplicateWarningDialog({
           >
             <FileSpreadsheet size={14} aria-hidden />
             Generar igualmente
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Popup que pide al operador cuántos vehículos hay ACTIVOS en el turno
+ * antes de generar el informe. El dato sale en el Excel como una mini-card
+ * de KPI ("VEHÍCULOS ACTIVOS") y NO se acumula entre generaciones del
+ * mismo día — cada informe lleva su propia foto.
+ */
+function ActiveBusesDialog({
+  reportDate,
+  isToday,
+  generating,
+  onCancel,
+  onConfirm,
+}: {
+  reportDate: string;
+  isToday: boolean;
+  generating: boolean;
+  onCancel: () => void;
+  onConfirm: (count: number) => void;
+}) {
+  // Pre-rellenamos con el último valor introducido en la sesión (si lo hay).
+  const [value, setValue] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem(ACTIVE_BUSES_STORAGE_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [touched, setTouched] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    // Foco al abrir + ESC cierra.
+    inputRef.current?.focus();
+    inputRef.current?.select();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const parsed = Number(value);
+  const isValid = Number.isFinite(parsed) && parsed >= 1 && parsed <= 9999 && Number.isInteger(parsed);
+  const showError = touched && !isValid;
+
+  const handleSubmit = () => {
+    setTouched(true);
+    if (!isValid) {
+      inputRef.current?.focus();
+      return;
+    }
+    onConfirm(parsed);
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="active-buses-title"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[0_24px_64px_-20px_rgba(0,0,0,0.6)]">
+        <header className="flex items-start gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent-light)]/40 px-5 py-4">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent-light)] text-[var(--color-accent)]">
+            <Bus size={18} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 id="active-buses-title" className="text-sm font-semibold text-[var(--color-text-1)]">
+              Vehículos activos en el turno
+            </h2>
+            <p className="mt-0.5 text-[12px] text-[var(--color-text-3)]">
+              {isToday
+                ? "Confirma cuántos vehículos hay operando ahora mismo."
+                : `Foto de la flota el ${formatHumanDate(reportDate)}.`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Cerrar"
+            className="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
+          >
+            <X size={16} aria-hidden />
+          </button>
+        </header>
+
+        <div className="px-5 py-4">
+          <label htmlFor="active-buses-input" className="text-label text-[var(--color-text-2)]">
+            Nº de vehículos activos
+          </label>
+          <input
+            id="active-buses-input"
+            ref={inputRef}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={9999}
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              if (touched) setTouched(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+            placeholder="Ej. 142"
+            className={cn(
+              "mt-2 w-full rounded-lg border bg-[var(--color-surface-2)] px-3 py-2.5 text-base font-semibold text-[var(--color-text-1)] tabular-nums placeholder:font-normal placeholder:text-[var(--color-text-3)] transition-colors focus:outline-none",
+              showError
+                ? "border-[var(--color-error)] focus:border-[var(--color-error)]"
+                : "border-[var(--color-border)] focus:border-[var(--color-accent)]",
+            )}
+          />
+          {showError ? (
+            <p className="mt-1.5 text-[11.5px] text-[var(--color-error)]">
+              Introduce un número entre 1 y 9999.
+            </p>
+          ) : null}
+
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 px-2.5 py-2 text-[11.5px] text-[var(--color-text-3)]">
+            <Info size={12} className="mt-0.5 shrink-0" aria-hidden />
+            <span>
+              Es una <strong className="font-semibold text-[var(--color-text-2)]">foto del estado actual de la flota</strong>:
+              si generas varios informes hoy, cada uno lleva su propio número y no se suman entre sí.
+            </span>
+          </div>
+        </div>
+
+        <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-5 py-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={generating}
+            className="rounded-md border border-[var(--color-border)] bg-transparent px-3 py-1.5 text-[12.5px] font-medium text-[var(--color-text-2)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)] disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={generating}
+            className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-[12.5px] font-semibold text-white transition-all hover:opacity-90 disabled:opacity-60"
+          >
+            {generating ? (
+              <>
+                <Loader2 size={13} className="animate-spin" aria-hidden />
+                Generando…
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet size={13} aria-hidden />
+                Generar XLSX
+              </>
+            )}
           </button>
         </footer>
       </div>

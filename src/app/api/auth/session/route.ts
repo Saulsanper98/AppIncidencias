@@ -45,22 +45,29 @@ export async function GET() {
       return NextResponse.json({ authenticated: false });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        isActive: true,
-        preferredDashboardId: true,
-        mustChangePassword: true,
-        avatarUrl: true,
-        bannerUrl: true,
-        position: true,
-      },
-    });
-    if (!user || !user.isActive) {
+    // Usamos $queryRaw para tolerar el desfase de prisma generate respecto
+    // al campo nuevo `isReadOnly` (mismo patrón que auth-context).
+    type SessionRow = {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+      isActive: number | boolean;
+      preferredDashboardId: string | null;
+      mustChangePassword: number | boolean;
+      avatarUrl: string | null;
+      bannerUrl: string | null;
+      position: string | null;
+      isReadOnly: number | boolean | null;
+    };
+    const rows = await prisma.$queryRawUnsafe<SessionRow[]>(
+      `SELECT id, name, email, role, isActive, preferredDashboardId,
+              mustChangePassword, avatarUrl, bannerUrl, position, isReadOnly
+         FROM "User" WHERE id = ? LIMIT 1`,
+      userId,
+    );
+    const user = rows[0];
+    if (!user || (user.isActive !== true && user.isActive !== 1)) {
       cookieStore.delete(SESSION_COOKIE_NAME);
       return NextResponse.json({ authenticated: false });
     }
@@ -73,10 +80,11 @@ export async function GET() {
         email: user.email,
         role: user.role,
         preferredDashboardId: user.preferredDashboardId,
-        mustChangePassword: user.mustChangePassword,
+        mustChangePassword: user.mustChangePassword === true || user.mustChangePassword === 1,
         avatarUrl: user.avatarUrl,
         bannerUrl: user.bannerUrl,
         position: user.position,
+        isReadOnly: user.isReadOnly === true || user.isReadOnly === 1,
       },
     });
     // Renovamos la firma (sliding session). Mismo userId pero refresca maxAge.
@@ -151,6 +159,15 @@ async function loginByUserIdWithPassword(userId: string, plainPassword: string) 
       position: true,
     },
   });
+  // Cargamos isReadOnly por raw (puede no estar en el cliente Prisma todavía).
+  const readOnlyRows = user
+    ? await prisma.$queryRawUnsafe<{ isReadOnly: number | boolean | null }[]>(
+        `SELECT isReadOnly FROM "User" WHERE id = ? LIMIT 1`,
+        user.id,
+      )
+    : [];
+  const isReadOnly =
+    readOnlyRows[0]?.isReadOnly === true || readOnlyRows[0]?.isReadOnly === 1;
 
   // Mensajes genéricos: no diferenciamos "no existe" de "contraseña mala".
   if (!user || !user.isActive || !user.passwordHash) {
@@ -189,6 +206,7 @@ async function loginByUserIdWithPassword(userId: string, plainPassword: string) 
       avatarUrl: user.avatarUrl,
       bannerUrl: user.bannerUrl,
       position: user.position,
+      isReadOnly,
     },
   });
   response.cookies.set(SESSION_COOKIE_NAME, signSessionToken(user.id), buildSessionCookieOptions());
@@ -214,6 +232,12 @@ async function loginByUserId(userId: string) {
   if (!user || !user.isActive) {
     return NextResponse.json({ message: "Usuario no disponible" }, { status: 404 });
   }
+  const readOnlyRows = await prisma.$queryRawUnsafe<{ isReadOnly: number | boolean | null }[]>(
+    `SELECT isReadOnly FROM "User" WHERE id = ? LIMIT 1`,
+    user.id,
+  );
+  const isReadOnly =
+    readOnlyRows[0]?.isReadOnly === true || readOnlyRows[0]?.isReadOnly === 1;
 
   await prisma.user.update({
     where: { id: user.id },
@@ -238,6 +262,7 @@ async function loginByUserId(userId: string) {
       avatarUrl: user.avatarUrl,
       bannerUrl: user.bannerUrl,
       position: user.position,
+      isReadOnly,
     },
   });
   response.cookies.set(SESSION_COOKIE_NAME, signSessionToken(user.id), buildSessionCookieOptions());

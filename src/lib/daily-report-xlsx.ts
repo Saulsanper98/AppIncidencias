@@ -38,6 +38,13 @@ export type DailyReportMeta = {
   generatedByEmail: string;
   /** Cu?ntos compa?eros ya hab?an generado este informe hoy (antes del actual). */
   previousGenerations: number;
+  /**
+   * N?mero de veh?culos ACTIVOS en el turno seg?n el operador del centro
+   * (lo introduce manualmente al generar). Es una foto del estado de la
+   * flota en ese momento (no incidencias acumuladas). Si se generan varios
+   * informes el mismo d?a, cada uno lleva su propio valor — no se suman.
+   */
+  activeBusesCount?: number | null;
 };
 
 // =================== TOKENS DE DISE?O ===================
@@ -250,17 +257,27 @@ export async function buildDailyReportXlsx(
   sheet.getRow(9).height = 8;
 
   // ============ FILAS 10-13: MINI-CARDS DE RESUMEN ============
-  // Solo 4 tarjetas: Total destacado + 3 niveles de prioridad. Se ha quitado
-  // el desglose por estado (Abiertos/En proceso/Resueltos) porque al Jefe no
-  // le aporta valor y satura la lectura.
+  // 5 tarjetas: Total destacado + 3 niveles de prioridad + Vehículos activos.
+  // Layout en 11 columnas: 3 + 2 + 2 + 2 + 2 = 11.
+  // La tarjeta de "Vehículos activos" sólo se pinta si el operador
+  // introdujo un número al generar (es opcional). Si no llega, mantenemos
+  // las 4 cards clásicas en 5+2+2+2.
   const totals = summarize(rows);
-  // 4 tarjetas en un layout de 11 columnas: 5 + 2 + 2 + 2 = 11.
-  const cards: Array<{ range: string; label: string; value: string; accent: string; emphasis?: "primary" }> = [
-    { range: "A10:E13", label: "TOTAL INCIDENCIAS", value: String(totals.total), accent: T.brand, emphasis: "primary" },
-    { range: "F10:G13", label: "PRIORIDAD ALTA", value: String(totals.byPriority.alta), accent: PRIORITY_TEXT.alta },
-    { range: "H10:I13", label: "PRIORIDAD MEDIA", value: String(totals.byPriority.media), accent: PRIORITY_TEXT.media },
-    { range: "J10:K13", label: "PRIORIDAD BAJA", value: String(totals.byPriority.baja), accent: PRIORITY_TEXT.baja },
-  ];
+  const showActiveBuses = typeof meta.activeBusesCount === "number" && meta.activeBusesCount >= 0;
+  const cards: Array<{ range: string; label: string; value: string; accent: string; emphasis?: "primary" }> = showActiveBuses
+    ? [
+        { range: "A10:C13", label: "TOTAL INCIDENCIAS", value: String(totals.total), accent: T.brand, emphasis: "primary" },
+        { range: "D10:E13", label: "PRIORIDAD ALTA", value: String(totals.byPriority.alta), accent: PRIORITY_TEXT.alta },
+        { range: "F10:G13", label: "PRIORIDAD MEDIA", value: String(totals.byPriority.media), accent: PRIORITY_TEXT.media },
+        { range: "H10:I13", label: "PRIORIDAD BAJA", value: String(totals.byPriority.baja), accent: PRIORITY_TEXT.baja },
+        { range: "J10:K13", label: "VEH\u00cdCULOS ACTIVOS", value: String(meta.activeBusesCount ?? 0), accent: T.brandSoft },
+      ]
+    : [
+        { range: "A10:E13", label: "TOTAL INCIDENCIAS", value: String(totals.total), accent: T.brand, emphasis: "primary" },
+        { range: "F10:G13", label: "PRIORIDAD ALTA", value: String(totals.byPriority.alta), accent: PRIORITY_TEXT.alta },
+        { range: "H10:I13", label: "PRIORIDAD MEDIA", value: String(totals.byPriority.media), accent: PRIORITY_TEXT.media },
+        { range: "J10:K13", label: "PRIORIDAD BAJA", value: String(totals.byPriority.baja), accent: PRIORITY_TEXT.baja },
+      ];
 
   for (const card of cards) {
     sheet.mergeCells(card.range);

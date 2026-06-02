@@ -51,6 +51,7 @@ import {
 } from "@/lib/tipologia";
 import { priorityBadgeProps } from "@/lib/ticket-ui";
 import { cn } from "@/lib/utils";
+import { useTimedFlow } from "@/lib/ux-telemetry";
 
 const TicketLocationPicker = dynamic(
   () => import("@/components/tickets/ticket-location-picker").then((m) => m.TicketLocationPicker),
@@ -250,6 +251,29 @@ export function TicketCreateForm({
   const [formSectionOpen, setFormSectionOpen] = useState<Record<TicketFormSectionId, boolean>>(() =>
     normalizeAccordionOpen(undefined, "equipment"),
   );
+
+  // Telemetría: medimos el tiempo total de creación de ticket, paso a paso.
+  // El flujo se "abre" al montar el formulario y se "completa" cuando el
+  // backend confirma la creación. Si el usuario se va sin completar, el hook
+  // emite automáticamente un `ticket_create_abandon` en el unmount.
+  const createFlow = useTimedFlow("ticket_create");
+  useEffect(() => {
+    createFlow.start();
+    // start() solo debe correr al montar; createFlow es estable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Cada vez que cambia la sección abierta, emitimos un `ticket_create_step`
+  // con el nombre de la nueva sección y la duración desde el anterior.
+  const lastSectionRef = useRef<TicketFormSectionId | null>(null);
+  useEffect(() => {
+    const current = TICKET_FORM_SECTION_ORDER.find((k) => formSectionOpen[k]) ?? null;
+    if (current && current !== lastSectionRef.current) {
+      lastSectionRef.current = current;
+      createFlow.step(current);
+    }
+    // createFlow es estable; lo excluimos para no disparar dobles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formSectionOpen]);
   const [formDraftHydrated, setFormDraftHydrated] = useState(false);
   const [stagedUploadFiles, setStagedUploadFiles] = useState<File[]>([]);
   // ─── Sugerencias Ibrahim (fase 1 mejoras técnicos campo) ──────────────
@@ -618,6 +642,21 @@ export function TicketCreateForm({
       createAsResolved: canActorAssumeTicket ? createAsResolved : false,
       resolutionNote: createAsResolved ? resolutionNote.trim() : "",
       onTicketCreated: () => {
+        // Telemetría: ticket creado con éxito. Anotamos datos útiles para
+        // poder agregar después (qué tipo se crean más rápido, qué priority,
+        // si llevaba adjuntos, si se auto-asignó, etc.).
+        createFlow.complete({
+          tipo: selectedTipologia?.tipo ?? null,
+          subtipo: selectedTipologia?.subtipo ?? null,
+          subsubtipo: selectedTipologia?.subsubtipo ?? null,
+          nivelImpacto: selectedTipologia?.nivelImpacto ?? null,
+          attachments_count: stagedUploadFiles.length,
+          assign_to_me: canActorAssumeTicket ? assignToMe : false,
+          created_as_resolved: canActorAssumeTicket ? createAsResolved : false,
+        });
+        // Reabrimos un flujo nuevo para el siguiente ticket que cree el usuario.
+        createFlow.start();
+        lastSectionRef.current = null;
         setForm((prev) => ({ ...defaultForm(prev.busId), busId: prev.busId }));
         setStagedUploadFiles([]);
         setFormSectionOpen(normalizeAccordionOpen(undefined, "equipment"));

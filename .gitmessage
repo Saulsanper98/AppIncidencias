@@ -1,0 +1,27 @@
+; ─────────────────────────────────────────────────────────────────
+;  Plantilla de commit del CCMGC
+;  (las líneas que empiezan con ';' se borran automáticamente)
+;
+;  LÍNEA 1 — Resumen breve (< 72 caracteres):
+;    Formato:  <tipo>(<scope opcional>): <qué hace, en imperativo>
+;    Tipos:    feat · fix · refactor · perf · docs · style · test · chore
+;    Ej.:      feat(tickets): filtros por rango de fecha en export Excel
+;              fix(dashboard): gráfica de tendencia ya no se estira
+;
+;  CUERPO TÉCNICO (opcional, debajo del resumen):
+;    El QUÉ y POR QUÉ del cambio. Bullets, decisiones, contexto.
+;    Lo ve quien revisa el código y aparece en `git log`.
+;
+;  SECCIÓN '## Para usuarios' (al final):
+;    Si rellenas bullets debajo, el borrador automático de /novedades
+;    usará SOLO eso (lenguaje claro para tus compañeros del centro).
+;    Si el cambio es 100% técnico / refactor interno, BORRA esa
+;    sección entera para que no salga vacía en las novedades.
+; ─────────────────────────────────────────────────────────────────
+
+
+; ↑ Resumen aquí · cuerpo técnico opcional debajo ↓
+
+
+## Para usuarios
+- 

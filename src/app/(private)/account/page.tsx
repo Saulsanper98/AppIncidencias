@@ -37,6 +37,13 @@ export default async function AccountPage() {
   if (!user || !user.isActive) {
     redirect("/login?auth=required");
   }
+  // Cargamos `isReadOnly` por raw query: el cliente Prisma puede ir un build
+  // detrás del schema en arranques recién migrados (Windows + DLL bloqueada).
+  const readOnlyRows = await prisma.$queryRawUnsafe<
+    { isReadOnly: number | boolean | null }[]
+  >(`SELECT isReadOnly FROM "User" WHERE id = ? LIMIT 1`, user.id);
+  const isReadOnly =
+    readOnlyRows[0]?.isReadOnly === true || readOnlyRows[0]?.isReadOnly === 1;
 
   return (
     <div className="flex flex-col gap-6">
@@ -58,6 +65,7 @@ export default async function AccountPage() {
             lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
             passwordUpdatedAt: user.passwordUpdatedAt ? user.passwordUpdatedAt.toISOString() : null,
             mustChangePassword: user.mustChangePassword,
+            isReadOnly,
           }}
         />
       </Suspense>

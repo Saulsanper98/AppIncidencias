@@ -12,6 +12,8 @@ import {
   MapPinned,
   Megaphone,
   Menu,
+  MessageSquarePlus,
+  Vote,
   Shield,
   UserCircle2,
 } from "lucide-react";
@@ -61,7 +63,12 @@ type MenuSection = {
 //   Dashboard       → tabs: Operación · Reportes · Cuadros (`/reportes`, `/dashboards`)
 //   Tickets         → tabs: Bandeja · Pase de turno         (`/handover`)
 //   Preventivo      → calendario + buses anómalos           (`/preventivo`)
-//   Mi cuenta       → tabs: Cuenta · Feedback               (`/feedback`)
+//   Mi cuenta       → tab interna: Cuenta · Feedback        (`/feedback`)
+//
+// Mayo 2026 (continuación): "Feedback" promovido a ítem PROPIO del sidebar
+// dentro de "Mi espacio". Antes solo se accedía como pestaña interna de
+// "Mi cuenta", lo que lo escondía. La pestaña interna se mantiene para
+// continuidad, pero el ítem directo le da al usuario un atajo de 1 click.
 //
 // La barra de pestañas la pinta el componente `SectionTabs` en cada página.
 // "Inventario" se ocultó del menú (mayo 2026, decisión del centro: no se usa
@@ -94,6 +101,14 @@ const menuSections: MenuSection[] = [
     title: "Mi espacio",
     items: [
       { label: "Mi cuenta", icon: UserCircle2, href: "/account" },
+      // Feedback como ítem propio para que sea de fácil acceso (1 click
+      // desde cualquier página). Antes solo era una pestaña interna de
+      // "Mi cuenta", lo que lo escondía.
+      { label: "Feedback", icon: MessageSquarePlus, href: "/feedback" },
+      // Tablón comunitario de sugerencias votables (Fase 5 del feedback).
+      // No reemplaza a Feedback: este se usa para ENVIAR; Sugerencias para
+      // VER y PRIORIZAR las propuestas del resto del equipo.
+      { label: "Sugerencias", icon: Vote, href: "/sugerencias" },
       {
         label: "Administración",
         icon: Shield,
@@ -322,9 +337,13 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
     if (href === "/preventivo") {
       return pathname.startsWith("/preventivo") || pathname.startsWith("/inventory");
     }
-    // "Mi cuenta" engloba la cuenta y el formulario de feedback.
+    // "Mi cuenta" cubre solo /account. "Feedback" tiene ahora su propio
+    // ítem en el sidebar y se activa con pathname.startsWith("/feedback").
     if (href === "/account") {
-      return pathname.startsWith("/account") || pathname.startsWith("/feedback");
+      return pathname.startsWith("/account");
+    }
+    if (href === "/feedback") {
+      return pathname.startsWith("/feedback");
     }
     if (href === "/admin") return pathname.startsWith("/admin");
     if (href === "/mapa") return pathname.startsWith("/mapa");
@@ -333,7 +352,28 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
 
   // Filtramos por sección según el rol. Mientras carga la sesión ocultamos
   // los items con `visibleTo` para evitar parpadeos.
+  //
+  // Caso especial: usuarios `isReadOnly` (p.ej. read@movilidadgc.org) tienen
+  // un menú MUY reducido — solo la "Lectura de incidencias" y "Mi cuenta"
+  // (para cambio de contraseña / logout). Esto refuerza visualmente que la
+  // cuenta es de consulta y evita que el usuario pulse en sitios donde luego
+  // no podría editar nada (el backend lo bloquearía igualmente, ver
+  // auth-context.ts).
   const visibleSections = useMemo(() => {
+    if (sessionUser?.isReadOnly) {
+      return [
+        {
+          title: "Consulta",
+          items: [
+            { label: "Lectura de incidencias", icon: ClipboardList, href: "/lectura" },
+          ],
+        },
+        {
+          title: "Mi espacio",
+          items: [{ label: "Mi cuenta", icon: UserCircle2, href: "/account" }],
+        },
+      ] as MenuSection[];
+    }
     return menuSections
       .map((section) => ({
         ...section,
@@ -581,8 +621,13 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
                   <p className="truncate text-[13px] font-medium leading-tight text-[var(--color-text-1)]">
                     {sessionUser?.name ?? "Sin sesión"}
                   </p>
-                  <p className="truncate text-[10.5px] uppercase tracking-[0.08em] text-[var(--color-text-3)]">
-                    {humanRole(sessionUser?.role)}
+                  <p className={cn(
+                    "truncate text-[10.5px] uppercase tracking-[0.08em]",
+                    sessionUser?.isReadOnly
+                      ? "font-semibold text-[var(--color-accent)]"
+                      : "text-[var(--color-text-3)]",
+                  )}>
+                    {sessionUser?.isReadOnly ? "Solo lectura" : humanRole(sessionUser?.role)}
                   </p>
                 </div>
               </div>

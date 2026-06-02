@@ -1,5 +1,6 @@
 import {
   ArrowUpRight,
+  BarChart3,
   BookOpenCheck,
   Boxes,
   ChevronRight,
@@ -28,7 +29,7 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-type SectionTone = "users" | "catalog" | "feedback" | "kb" | "novedades";
+type SectionTone = "users" | "catalog" | "feedback" | "kb" | "novedades" | "analytics";
 
 const TONE_STYLES: Record<
   SectionTone,
@@ -69,6 +70,13 @@ const TONE_STYLES: Record<
     accentBar: "bg-rose-400/70",
     glow: "from-rose-500/10",
   },
+  analytics: {
+    ring: "hover:border-cyan-400/35",
+    iconBg: "bg-cyan-500/12",
+    iconText: "text-cyan-300",
+    accentBar: "bg-cyan-400/70",
+    glow: "from-cyan-500/10",
+  },
 };
 
 export default async function AdminHomePage() {
@@ -92,8 +100,10 @@ export default async function AdminHomePage() {
   const showFeedback = canReviewFeedback(user.role);
   const showKb = canManageKnowledge(user.role);
   const showAnnouncements = canPublishAnnouncements(user.role);
+  // Analytics está reservado al mismo permiso que gestionar usuarios (gestores).
+  const showAnalytics = canManageUsers(user.role);
 
-  if (!showUsers && !showCatalog && !showFeedback && !showKb && !showAnnouncements) {
+  if (!showUsers && !showCatalog && !showFeedback && !showKb && !showAnnouncements && !showAnalytics) {
     redirect("/dashboard");
   }
 
@@ -129,6 +139,29 @@ export default async function AdminHomePage() {
     prisma.announcement.count({ where: { ...activeAnnouncementWhere(), kind: "aviso" } }),
     prisma.announcement.count({ where: { status: "publicado", kind: "novedad" } }),
   ]);
+
+  // Telemetría: dos contadores rápidos para la card de Analytics. Usamos raw
+  // query para tolerar arranques recién migrados donde el cliente Prisma
+  // pueda no tener el modelo todavía. Si la tabla no existe, capturamos y
+  // devolvemos 0 silenciosamente.
+  let uxEventsLast24h = 0;
+  let uxSessionsLast24h = 0;
+  if (showAnalytics) {
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const rows = await prisma.$queryRawUnsafe<
+        { events: bigint; sessions: bigint }[]
+      >(
+        `SELECT COUNT(*) AS events, COUNT(DISTINCT sessionId) AS sessions
+           FROM "UxEvent" WHERE createdAt >= ?`,
+        since,
+      );
+      uxEventsLast24h = Number(rows[0]?.events ?? 0);
+      uxSessionsLast24h = Number(rows[0]?.sessions ?? 0);
+    } catch {
+      /* tabla aún no migrada o sin datos */
+    }
+  }
 
   const inactiveUsers = totalUsers - activeUsers;
   const operadorasCount = operadorasRows.length;
@@ -287,6 +320,19 @@ export default async function AdminHomePage() {
             stats={[
               { label: "Avisos activos", value: avisosActivos, accent: true, warn: avisosActivos > 0 },
               { label: "Novedades", value: novedadesPublicadas },
+            ]}
+          />
+        ) : null}
+        {showAnalytics ? (
+          <SectionCard
+            href="/admin/analytics"
+            tone="analytics"
+            icon={<BarChart3 size={20} strokeWidth={1.6} aria-hidden />}
+            title="Analítica de uso"
+            description="Tiempos de creación, secciones más usadas, ranking, errores y actividad por turno."
+            stats={[
+              { label: "Eventos 24h", value: uxEventsLast24h, accent: true },
+              { label: "Sesiones 24h", value: uxSessionsLast24h },
             ]}
           />
         ) : null}

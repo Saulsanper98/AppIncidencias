@@ -14,7 +14,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/inventory") ||
     pathname.startsWith("/mapa") ||
     pathname.startsWith("/feedback") ||
-    pathname.startsWith("/novedades");
+    pathname.startsWith("/novedades") ||
+    pathname.startsWith("/lectura");
   const isAdminPage = pathname.startsWith("/admin");
   const isProtectedApi =
     pathname.startsWith("/api/tickets") ||
@@ -53,6 +54,8 @@ export const config = {
     "/feedback",
     "/novedades",
     "/novedades/:path*",
+    "/lectura",
+    "/lectura/:path*",
     "/admin/:path*",
     "/api/tickets/:path*",
     "/api/map",

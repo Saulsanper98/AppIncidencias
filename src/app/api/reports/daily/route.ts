@@ -23,17 +23,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Debes iniciar sesion" }, { status: 401 });
     }
 
-    // Aceptamos un { date: "YYYY-MM-DD" } opcional en el body para generar
-    // el informe de un dia distinto a "hoy". Si no llega body, mantenemos
-    // el comportamiento clasico (informe de hoy en la TZ del servidor).
+    // Aceptamos un body con:
+    //   - date?: "YYYY-MM-DD"            (opcional, default: hoy)
+    //   - activeBusesCount?: number       (opcional, foto de vehículos activos
+    //                                      en el turno; el operador lo introduce
+    //                                      al pulsar Generar). Es un valor INDEPENDIENTE
+    //                                      por generación: no se suma entre informes.
     let requestedDate: string | null = null;
+    let activeBusesCount: number | null = null;
     try {
-      const body = (await request.json()) as { date?: unknown } | null;
+      const body = (await request.json()) as {
+        date?: unknown;
+        activeBusesCount?: unknown;
+      } | null;
       if (body && typeof body.date === "string" && isValidIsoDate(body.date)) {
         requestedDate = body.date;
       }
+      if (body && typeof body.activeBusesCount === "number") {
+        const raw = body.activeBusesCount;
+        if (Number.isFinite(raw) && raw >= 0 && raw <= 9999) {
+          activeBusesCount = Math.round(raw);
+        }
+      }
     } catch {
-      // Body vacio o no-JSON: usamos hoy.
+      // Body vacio o no-JSON: usamos hoy y sin activeBusesCount.
     }
 
     const now = new Date();
@@ -85,6 +98,7 @@ export async function POST(request: Request) {
       generatedByName: user?.name ?? "Usuario desconocido",
       generatedByEmail: user?.email ?? "",
       previousGenerations,
+      activeBusesCount,
     });
 
     // Registramos la generacion (tras un build exitoso) para la proxima consulta.

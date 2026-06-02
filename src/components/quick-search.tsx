@@ -37,6 +37,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { trackUxEvent } from "@/lib/ux-telemetry";
 
 // Tipos duplicados local-mente para evitar arrastrar el route handler al
 // bundle del cliente (Next.js permite importar tipos pero queremos cero
@@ -177,6 +178,26 @@ export function QuickSearch() {
         }
         const data = (await res.json()) as GlobalSearchPayload;
         setRemote(data.results);
+        // Telemetría: registramos cada consulta para saber qué busca la gente,
+        // cuántos resultados obtiene y si la query tiene texto suficiente.
+        // Solo trackeamos queries con >=2 caracteres para evitar ruido.
+        const trimmed = query.trim();
+        if (trimmed.length >= 2) {
+          const counts = data.results;
+          const total =
+            (counts.ticket?.length ?? 0) +
+            (counts.kb?.length ?? 0) +
+            (counts.desvio?.length ?? 0) +
+            (counts.bus?.length ?? 0) +
+            (counts.linea?.length ?? 0) +
+            (counts.announcement?.length ?? 0);
+          trackUxEvent("search_query", {
+            query: trimmed.slice(0, 80),
+            length: trimmed.length,
+            n_results: total,
+            has_results: total > 0,
+          });
+        }
       } catch (error) {
         if ((error as { name?: string })?.name !== "AbortError") {
           console.warn("quick-search:", error);

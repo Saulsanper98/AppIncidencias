@@ -16,7 +16,7 @@
  *      grande, así que respeta validaciones, attachments, SSE, audit, etc.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Sparkles, X, Zap } from "lucide-react";
 
 import type { TicketTemplate } from "@/components/tickets/TicketTemplatePicker";
@@ -31,6 +31,7 @@ import { Input, Select } from "@/components/ui/input";
 import type { NivelImpacto, TipologiaItem } from "@/lib/tipologia";
 import type { SessionUser } from "@/lib/domain";
 import { cn } from "@/lib/utils";
+import { trackUxEvent } from "@/lib/ux-telemetry";
 
 type Props = {
   open: boolean;
@@ -69,9 +70,15 @@ export function QuickTicketDialog({
   const [createAsResolved, setCreateAsResolved] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Telemetría: timestamp de apertura del diálogo (para medir cuánto tarda
+  // un quick-ticket de principio a fin).
+  const dialogOpenedAtRef = useRef<number>(0);
+
   // Recarga plantillas al abrir y resetea estado.
   useEffect(() => {
     if (!open) return;
+    dialogOpenedAtRef.current = Date.now();
+    trackUxEvent("quickticket_open");
     setSubmitError(null);
     setAssignToMe(canActorAssumeTicket);
     if (templates === null && !loadingTemplates) {
@@ -219,6 +226,20 @@ export function QuickTicketDialog({
       createAsResolved: canActorAssumeTicket ? createAsResolved : false,
       resolutionNote: "",
       onTicketCreated: () => {
+        // Telemetría: distinguimos los tickets creados desde "Quick Ticket"
+        // (con plantilla) de los del formulario completo. Permite ver qué
+        // plantillas son las más útiles y cuánto ahorra el modo rápido.
+        trackUxEvent(
+          "quickticket_complete",
+          {
+            template_id: selectedTemplate.id,
+            template_name: selectedTemplate.name,
+            tipo: resolvedTipologia.tipo,
+            assign_to_me: canActorAssumeTicket ? assignToMe : false,
+            created_as_resolved: canActorAssumeTicket ? createAsResolved : false,
+          },
+          Date.now() - dialogOpenedAtRef.current,
+        );
         reset();
         onClose();
       },

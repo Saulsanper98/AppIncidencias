@@ -105,11 +105,46 @@ export async function GET(request: Request) {
       _avg: { rating: true },
     });
 
+    // Cargamos adjuntos de los feedbacks visibles. Usamos $queryRawUnsafe
+    // para no depender de que el cliente Prisma exponga el modelo recién
+    // migrado (puede haber un desfase tras un deploy).
+    const ids = items.map((i) => i.id);
+    type AttRow = {
+      id: string;
+      feedbackId: string;
+      fileName: string;
+      mimeType: string | null;
+      sizeBytes: number | null;
+      diskFileName: string;
+    };
+    const attRows: AttRow[] = ids.length
+      ? await prisma.$queryRawUnsafe<AttRow[]>(
+          `SELECT id, feedbackId, fileName, mimeType, sizeBytes, diskFileName
+             FROM FeedbackAttachment
+             WHERE feedbackId IN (${ids.map(() => "?").join(",")})
+             ORDER BY createdAt ASC`,
+          ...ids,
+        )
+      : [];
+    const byFid = new Map<string, AttRow[]>();
+    for (const r of attRows) {
+      const list = byFid.get(r.feedbackId) ?? [];
+      list.push(r);
+      byFid.set(r.feedbackId, list);
+    }
+
     return NextResponse.json({
       items: items.map((f) => ({
         ...f,
         createdAt: f.createdAt.toISOString(),
         updatedAt: f.updatedAt.toISOString(),
+        attachments: (byFid.get(f.id) ?? []).map((a) => ({
+          id: a.id,
+          fileName: a.fileName,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes,
+          url: `/uploads/feedback/${f.id}/${a.diskFileName}`,
+        })),
       })),
       total,
       page,

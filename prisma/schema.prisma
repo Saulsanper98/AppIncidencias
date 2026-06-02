@@ -352,6 +352,12 @@ model User {
   email      String       @unique
   role       UserRole
   isActive   Boolean      @default(true)
+  /// Si está activo, el usuario solo puede LEER en toda la app: el servidor
+  /// rechaza cualquier petición mutante (POST/PATCH/PUT/DELETE) y el cliente
+  /// renderiza solo la vista /lectura. Útil para cuentas de consulta
+  /// (`read@movilidadgc.org`) usadas por personas que necesitan ver la
+  /// bandeja de incidencias en una pantalla sin riesgo de tocar nada.
+  isReadOnly Boolean      @default(false)
   /// Hash bcrypt de la contraseña local. Nullable: cuentas legacy sin contraseña no pueden iniciar sesión hasta que un gestor les asigne una.
   passwordHash         String?
   /// Forzar cambio de contraseña en el próximo login (alta nueva o reset por administrador).
@@ -378,12 +384,14 @@ model User {
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @default(now()) @updatedAt
   auditEvents AuditEvent[]
+  uxEvents    UxEvent[]
   createdPreventiveTasks PreventiveTask[] @relation("PreventiveTaskCreator")
   assignedPreventiveTasks PreventiveTask[] @relation("PreventiveTaskAssignee")
   assignedTickets Ticket[] @relation("TicketAssignee")
   createdDashboards CustomDashboard[] @relation("DashboardCreator")
   preferredDashboard CustomDashboard? @relation("UserPreferredDashboard", fields: [preferredDashboardId], references: [id], onDelete: SetNull)
   feedbackItems UserFeedback[]
+  feedbackVotes FeedbackVote[]
   kbArticles    KbArticle[]      @relation("KbAuthor")
   dailyReports  DailyReport[]    @relation("DailyReportAuthor")
   createdTicketRelations TicketRelation[] @relation("TicketRelationCreator")
@@ -420,10 +428,45 @@ model UserFeedback {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  attachments FeedbackAttachment[]
+  votes       FeedbackVote[]
 
   @@index([createdAt])
   @@index([type, status])
   @@index([userId, createdAt])
+}
+
+/// Voto positivo (upvote) de un usuario sobre un reporte de feedback.
+/// Se usa en /sugerencias para priorizar ideas/mejoras según interés del
+/// equipo. Restricción única (feedbackId, userId): un usuario solo puede
+/// votar una vez por sugerencia (toggle si vuelve a pulsar).
+model FeedbackVote {
+  id         String       @id @default(cuid())
+  feedbackId String
+  userId     String
+  createdAt  DateTime     @default(now())
+  feedback   UserFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([feedbackId, userId])
+  @@index([feedbackId])
+}
+
+/// Adjuntos de un reporte de feedback (capturas de pantalla principalmente).
+/// Se guardan en `public/uploads/feedback/{feedbackId}/{diskFileName}`. La
+/// relación es `onDelete: Cascade`: si se borra el feedback, se borran sus
+/// adjuntos en BD (los ficheros físicos se limpian aparte si hace falta).
+model FeedbackAttachment {
+  id           String       @id @default(cuid())
+  feedbackId   String
+  fileName     String
+  mimeType     String?
+  sizeBytes    Int?
+  diskFileName String
+  createdAt    DateTime     @default(now())
+  feedback     UserFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackId])
 }
 
 model AuditEvent {
@@ -437,6 +480,52 @@ model AuditEvent {
 
   @@index([createdAt])
   @@index([userId, createdAt])
+}
+
+/// Telemetría de uso (UX analytics).
+///
+/// Cada fila es UN evento del cliente. La gracia de tenerlo en BD propia (no
+/// en Google Analytics) es que podemos cruzarlo con tickets/turnos/usuarios
+/// reales sin depender de servicios externos ni de la red exterior.
+///
+/// Convenciones:
+///   - `eventName` es snake_case con prefijo de dominio: `page_visit`,
+///     `ticket_create_open`, `ticket_create_step`, `ticket_create_complete`,
+///     `ticket_create_abandon`, `feedback_submit_open/complete/abandon`,
+///     `search_query`, `client_error`, `ticket_status_change`, etc.
+///   - `sessionId` es un UUID generado en el cliente y persistido en
+///     sessionStorage. Permite agrupar eventos de la misma pestaña.
+///   - `path` es la ruta donde se disparó (`/tickets`, `/dashboard`...).
+///   - `durationMs` opcional: solo para eventos "cerrados" que miden tiempo
+///     (page_visit, ticket_create_complete, ticket_create_step...).
+///   - `shift` se calcula al insertar: M (06-14), T (14-22) o N (22-06).
+///     Permite filtrar/agregar por turno sin recalcular en consulta.
+///   - `props` es JSON arbitrario (stringified) con campos específicos del
+///     evento (template_id, n_results, step_name, error_message, etc.).
+model UxEvent {
+  id         String   @id @default(cuid())
+  userId     String?
+  /// Rol del usuario en el momento del evento. Lo guardamos congelado para
+  /// poder reportar por rol aunque el usuario cambie de rol después.
+  userRole   String?
+  eventName  String
+  sessionId  String?
+  path       String?
+  durationMs Int?
+  /// "M" (mañana 06-14), "T" (tarde 14-22), "N" (noche 22-06).
+  shift      String?
+  /// "desktop" | "mobile" | "tablet" — inferido del User-Agent al insertar.
+  device     String?
+  /// JSON arbitrario con datos específicos del evento.
+  props      String?
+  createdAt  DateTime @default(now())
+
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([eventName, createdAt])
+  @@index([userId, createdAt])
+  @@index([path, createdAt])
 }
 
 /// Registro de cada generación del informe diario "para Jefatura".

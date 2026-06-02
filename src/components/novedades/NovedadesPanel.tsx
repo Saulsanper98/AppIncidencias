@@ -118,6 +118,15 @@ export function NovedadesPanel({
   const [editingDirty, setEditingDirty] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"publicado" | "todos">("publicado");
   const [autoDraftLoading, setAutoDraftLoading] = useState(false);
+  /**
+   * Rango de días que el usuario pide al generar el borrador desde git.
+   *   - "today" = commits desde las 00:00 del día actual (default).
+   *   - número  = últimas N · 24 h.
+   *
+   * Antes el endpoint cogía desde el último Announcement publicado, lo que
+   * daba borradores enormes cuando llevaba varios días sin publicar.
+   */
+  const [autoDraftRange, setAutoDraftRange] = useState<"today" | 7 | 14 | 30>("today");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -180,7 +189,14 @@ export function NovedadesPanel({
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 20_000);
     try {
-      const response = await fetch("/api/announcements/auto-draft", {
+      // Construimos la URL según el rango elegido. "today" → sin params
+      // (el backend usa el día actual por defecto). Cualquier preset
+      // numérico se pasa como ?days=N.
+      const url =
+        autoDraftRange === "today"
+          ? "/api/announcements/auto-draft"
+          : `/api/announcements/auto-draft?days=${autoDraftRange}`;
+      const response = await fetch(url, {
         cache: "no-store",
         signal: controller.signal,
       });
@@ -202,12 +218,17 @@ export function NovedadesPanel({
       setEditing(draft);
       setEditingDirty(true);
       const count = Array.isArray(data.commits) ? data.commits.length : 0;
+      // Etiqueta del rango usado, para que el aviso al usuario refleje
+      // exactamente qué ventana se incluyó en el borrador (evita la
+      // sorpresa de "¿por qué hay 5 días si quería solo hoy?").
+      const rangeLabel =
+        autoDraftRange === "today" ? "hoy" : `los últimos ${autoDraftRange} días`;
       setNotice({
         kind: "info",
         text:
           count > 0
-            ? `Borrador generado con ${count} commit${count === 1 ? "" : "s"}. Revísalo antes de publicar.`
-            : "No se encontraron commits nuevos. El borrador está vacío para editar manualmente.",
+            ? `Borrador generado con ${count} commit${count === 1 ? "" : "s"} de ${rangeLabel}. Revísalo antes de publicar.`
+            : `No se encontraron commits nuevos en ${rangeLabel}. El borrador está vacío para editar manualmente.`,
       });
     } catch (error) {
       const aborted = error instanceof DOMException && error.name === "AbortError";
@@ -222,6 +243,11 @@ export function NovedadesPanel({
     } finally {
       window.clearTimeout(timeoutId);
       setAutoDraftLoading(false);
+      // Reset explícito a "Hoy" tras cada generación. Así el siguiente
+      // click del botón "Generar desde git" parte SIEMPRE del día actual,
+      // y solo se amplía la ventana si el usuario lo pide activamente.
+      // (Antes el rango se quedaba pegado en 7/14/30 d entre generaciones).
+      setAutoDraftRange("today");
     }
   };
 
@@ -365,25 +391,80 @@ export function NovedadesPanel({
             </div>
           </div>
           {canEdit ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {canAutoDraft ? (
-                <button
-                  type="button"
-                  onClick={() => void runAutoDraft()}
-                  disabled={autoDraftLoading}
-                  className="group inline-flex items-center gap-1.5 rounded-lg border border-violet-400/40 bg-gradient-to-r from-violet-500/15 to-sky-500/15 px-3 py-1.5 text-[12.5px] font-medium text-violet-200 hover:from-violet-500/25 hover:to-sky-500/25 disabled:opacity-60"
-                  title="Genera un borrador leyendo los commits de git desde la última novedad publicada"
-                >
-                  {autoDraftLoading ? (
-                    <Loader2 size={13} strokeWidth={1.8} className="animate-spin" aria-hidden />
-                  ) : (
-                    <Wand2 size={13} strokeWidth={1.8} aria-hidden />
-                  )}
-                  {autoDraftLoading ? "Detectando cambios…" : "Generar desde git"}
-                  <span className="ml-1 hidden rounded-full bg-violet-400/15 px-1.5 py-px text-[9px] uppercase tracking-wider text-violet-300 sm:inline">
-                    Solo Saúl
-                  </span>
-                </button>
+                <>
+                  {/* Selector de rango. Comportamiento (mayo 2026):
+                   *   - Default y reset tras generar: "Hoy".
+                   *   - Si el usuario pulsa 7/14/30 d, esa elección es
+                   *     SOLO para la siguiente generación. Tras pulsar
+                   *     "Generar desde git" el selector vuelve a "Hoy"
+                   *     automáticamente, evitando que se quede pegado.
+                   *   - El chip activo se resalta con fondo violeta
+                   *     intenso + borde para que sea visualmente obvio
+                   *     qué ventana se va a usar. */}
+                  <div className="flex flex-col items-start gap-0.5">
+                    <div
+                      role="group"
+                      aria-label="Rango de commits"
+                      className="inline-flex overflow-hidden rounded-lg border border-violet-400/30 bg-violet-500/5 text-[11px]"
+                    >
+                      {(
+                        [
+                          { id: "today" as const, label: "Hoy" },
+                          { id: 7 as const, label: "7 d" },
+                          { id: 14 as const, label: "14 d" },
+                          { id: 30 as const, label: "30 d" },
+                        ]
+                      ).map((opt, i) => {
+                        const active = autoDraftRange === opt.id;
+                        return (
+                          <button
+                            key={String(opt.id)}
+                            type="button"
+                            onClick={() => setAutoDraftRange(opt.id)}
+                            disabled={autoDraftLoading}
+                            className={
+                              "px-2.5 py-1.5 font-medium transition-colors " +
+                              (active
+                                ? "bg-violet-500/40 text-white ring-1 ring-inset ring-violet-300/60"
+                                : "text-violet-300 hover:bg-violet-500/15") +
+                              (i > 0 ? " border-l border-violet-400/20" : "")
+                            }
+                            aria-pressed={active}
+                            title={
+                              opt.id === "today"
+                                ? "Commits desde las 00:00 del día actual"
+                                : `Commits de los últimos ${opt.id} días (luego vuelve a 'Hoy')`
+                            }
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="px-1 text-[9.5px] text-[var(--color-text-3)]">
+                      Por defecto solo el día actual · tras generar vuelve a “Hoy”.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void runAutoDraft()}
+                    disabled={autoDraftLoading}
+                    className="group inline-flex items-center gap-1.5 rounded-lg border border-violet-400/40 bg-gradient-to-r from-violet-500/15 to-sky-500/15 px-3 py-1.5 text-[12.5px] font-medium text-violet-200 hover:from-violet-500/25 hover:to-sky-500/25 disabled:opacity-60"
+                    title="Genera un borrador leyendo los commits del rango seleccionado"
+                  >
+                    {autoDraftLoading ? (
+                      <Loader2 size={13} strokeWidth={1.8} className="animate-spin" aria-hidden />
+                    ) : (
+                      <Wand2 size={13} strokeWidth={1.8} aria-hidden />
+                    )}
+                    {autoDraftLoading ? "Detectando cambios…" : "Generar desde git"}
+                    <span className="ml-1 hidden rounded-full bg-violet-400/15 px-1.5 py-px text-[9px] uppercase tracking-wider text-violet-300 sm:inline">
+                      Solo Saúl
+                    </span>
+                  </button>
+                </>
               ) : null}
               <button
                 type="button"

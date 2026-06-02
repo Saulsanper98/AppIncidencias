@@ -356,6 +356,40 @@ function FeedbackRow({ item, onUpdated }: { item: UserFeedback; onUpdated: (u: U
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-1)]">{item.description}</p>
               </div>
 
+              {/* Adjuntos (capturas) */}
+              {item.attachments && item.attachments.length > 0 ? (
+                <div className="border-t border-[var(--color-border)] px-4 py-3">
+                  <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                    Capturas adjuntas ({item.attachments.length})
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                    {item.attachments.map((att) => (
+                      <a
+                        key={att.id}
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="group relative block overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] transition-transform hover:scale-[1.02]"
+                        title={`${att.fileName} — abrir en grande`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={att.url}
+                          alt={att.fileName}
+                          loading="lazy"
+                          className="aspect-[4/3] h-full w-full object-cover"
+                        />
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 py-1">
+                          <p className="truncate text-[10px] font-medium text-white" title={att.fileName}>
+                            {att.fileName}
+                          </p>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               {/* Status pipeline + context chips */}
               <div className="flex flex-wrap items-start justify-between gap-4 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/50 px-4 py-3">
                 <div>

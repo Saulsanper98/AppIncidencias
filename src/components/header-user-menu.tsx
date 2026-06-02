@@ -127,8 +127,13 @@ export function HeaderUserMenu({ user }: HeaderUserMenuProps) {
           <span className="max-w-[10rem] truncate text-[12px] font-semibold leading-tight text-[var(--color-text-1)] drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]">
             {user.name}
           </span>
-          <span className="max-w-[10rem] truncate text-[10px] leading-tight text-[var(--color-text-2)] drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]">
-            {ROLE_LABEL[user.role]}
+          <span className={cn(
+            "max-w-[10rem] truncate text-[10px] leading-tight drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]",
+            user.isReadOnly
+              ? "font-semibold text-[var(--color-accent)]"
+              : "text-[var(--color-text-2)]",
+          )}>
+            {user.isReadOnly ? "Solo lectura" : ROLE_LABEL[user.role]}
           </span>
         </span>
         <ChevronDown

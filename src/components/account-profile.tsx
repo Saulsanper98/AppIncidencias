@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { resolveAccountImageUrl } from "@/lib/account-media";
 import type { UserRole } from "@/lib/domain";
+import { cn } from "@/lib/utils";
 
 type InitialUser = {
   id: string;
@@ -34,6 +35,8 @@ type InitialUser = {
   lastLoginAt: string | null;
   passwordUpdatedAt: string | null;
   mustChangePassword: boolean;
+  /** Cuenta de solo lectura: solo puede editar SU perfil (avatar, contraseña). */
+  isReadOnly?: boolean;
 };
 
 type ImageKind = "avatar" | "banner";
@@ -293,9 +296,16 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
           <h1 className="mt-4 text-center text-2xl font-semibold text-[var(--color-text-1)]">{user.name}</h1>
           <p className="text-sm text-[var(--color-text-3)]">{user.email}</p>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-surface-2)] px-3 py-1 text-xs font-medium text-[var(--color-text-2)] ring-1 ring-inset ring-[var(--color-border)]">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset",
+                user.isReadOnly
+                  ? "bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-[var(--color-accent)]/30"
+                  : "bg-[var(--color-surface-2)] text-[var(--color-text-2)] ring-[var(--color-border)]",
+              )}
+            >
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)]" aria-hidden />
-              {ROLE_LABEL[user.role]}
+              {user.isReadOnly ? "Solo lectura" : ROLE_LABEL[user.role]}
             </span>
             {positionLabel ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-accent-light)] px-3 py-1 text-xs font-medium text-[var(--color-accent)]">
@@ -694,7 +704,10 @@ function PreviewCard({
   user,
   variant,
 }: {
-  user: Pick<InitialUser, "name" | "email" | "avatarUrl" | "bannerUrl" | "position" | "role">;
+  user: Pick<
+    InitialUser,
+    "name" | "email" | "avatarUrl" | "bannerUrl" | "position" | "role" | "isReadOnly"
+  >;
   variant: "sidebar" | "list";
 }) {
   const initials = initialsFromName(user.name || "?");
@@ -721,7 +734,16 @@ function PreviewCard({
           )}
           <div className="min-w-0">
             <p className="truncate text-xs text-[var(--color-text-1)]">{user.name}</p>
-            <p className="truncate text-xs text-[var(--color-text-3)]">{ROLE_LABEL[user.role]}</p>
+            <p
+              className={cn(
+                "truncate text-xs",
+                user.isReadOnly
+                  ? "font-semibold text-[var(--color-accent)]"
+                  : "text-[var(--color-text-3)]",
+              )}
+            >
+              {user.isReadOnly ? "Solo lectura" : ROLE_LABEL[user.role]}
+            </p>
           </div>
         </div>
       </div>

@@ -8,13 +8,19 @@ import { useEffect, useRef } from "react";
 import { FeedbackForm, type FeedbackPrefillTarget } from "@/components/feedback/FeedbackForm";
 
 type Props = {
-  target: FeedbackPrefillTarget | null;
+  /** Si true, el modal se muestra (con o sin `target`). */
+  open: boolean;
+  /**
+   * Si se pasa un target el form aparece con un banner "Feedback sobre: X".
+   * Si es null, se abre como modal genérico (lo usa el FAB / atajo global).
+   */
+  target?: FeedbackPrefillTarget | null;
   onClose: () => void;
 };
 
-export function FeedbackModal({ target, onClose }: Props) {
+export function FeedbackModal({ open, target, onClose }: Props) {
   const reduceMotion = useReducedMotion();
-  const isOpen = target !== null;
+  const isOpen = open;
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
