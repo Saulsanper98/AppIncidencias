@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { resolveRequestActor } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { getMetricsExcludedUserIds } from "@/lib/ux-exclusions";
 
 /**
  * Telemetría UX — ingesta de eventos del cliente en BATCH.
@@ -82,6 +83,17 @@ export async function POST(request: Request) {
         { message: "Payload inválido", issues: parsed.error.flatten() },
         { status: 400 },
       );
+    }
+
+    // Si el usuario está en la lista de exclusiones (propietarios,
+    // cuentas de dev), descartamos todo el batch silenciosamente. No
+    // queremos que su actividad sesgue las métricas pero tampoco
+    // queremos romperle el cliente con un error.
+    if (actor.userId) {
+      const excluded = await getMetricsExcludedUserIds();
+      if (excluded.has(actor.userId)) {
+        return NextResponse.json({ ok: true, accepted: 0, skipped_excluded: true });
+      }
     }
 
     const device = inferDeviceFromUserAgent(request.headers.get("user-agent"));

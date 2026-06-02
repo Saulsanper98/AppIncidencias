@@ -10,6 +10,7 @@ import {
   Hash,
   Loader2,
   MapPin,
+  Pencil,
   Plus,
   Route,
   Search,
@@ -22,6 +23,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { BusEditModal } from "@/components/catalog/BusEditModal";
+import { LineaEditModal } from "@/components/catalog/LineaEditModal";
 import { cn } from "@/lib/utils";
 
 /** Pestañas internas del panel del catálogo (orden visual). */
@@ -131,6 +134,12 @@ export function CatalogAdminPanel() {
   const [lineaForm, setLineaForm] = useState("");
   const [lineaSaving, setLineaSaving] = useState(false);
   const [lineaError, setLineaError] = useState<string | null>(null);
+
+  // ====== Modales de edición ======
+  // Bus: editar operadora, municipio, líneas asignadas.
+  // Línea: ver/asignar/desasignar buses, renombrar (propagando).
+  const [editingBus, setEditingBus] = useState<CatalogBus | null>(null);
+  const [editingLinea, setEditingLinea] = useState<string | null>(null);
 
   // ====== Estado de la importacion masiva de Buses (Excel/CSV) ======
   const importFileInput = useRef<HTMLInputElement | null>(null);
@@ -427,14 +436,49 @@ export function CatalogAdminPanel() {
   };
 
   const deleteBus = async (id: string) => {
-    if (!confirm(`\u00BFEliminar el bus ${id}?`)) return;
-    const response = await fetch(`/api/catalog?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-    if (!response.ok) {
-      setNotice({ kind: "error", text: "No se pudo eliminar el bus." });
+    if (
+      !confirm(
+        `¿Eliminar el bus ${id}?\n\nSe borrarán también sus activos y tareas de mantenimiento.\nNo se podrá deshacer.`,
+      )
+    ) {
       return;
     }
-    await load();
-    setNotice({ kind: "success", text: `Bus ${id} eliminado.` });
+    try {
+      const response = await fetch(
+        `/api/catalog?id=${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+        reason?: string;
+        ticketCount?: number;
+      };
+      if (!response.ok) {
+        // Mostramos el motivo concreto que devuelve el backend
+        // (FK con tickets, sin permisos, no existe…).
+        setNotice({
+          kind: "error",
+          text:
+            data.message ??
+            `No se pudo eliminar el bus ${id} (HTTP ${response.status}).`,
+        });
+        return;
+      }
+      await load();
+      setNotice({
+        kind: "success",
+        text: data.message ?? `Bus ${id} eliminado.`,
+      });
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? `No se pudo eliminar el bus ${id}: ${error.message}`
+            : `Error de red eliminando el bus ${id}.`,
+      });
+    }
   };
 
   const saveSlaConfig = async () => {
@@ -1259,12 +1303,15 @@ export function CatalogAdminPanel() {
                         ) : (
                           <div className="flex flex-wrap gap-1">
                             {bus.lineas.slice(0, 6).map((l) => (
-                              <span
+                              <button
                                 key={l}
-                                className="num-tabular rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-text-2)]"
+                                type="button"
+                                onClick={() => setEditingLinea(l)}
+                                className="num-tabular rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-text-2)] transition-colors hover:border-violet-400/40 hover:bg-violet-500/10 hover:text-violet-200"
+                                title={`Editar línea ${l}`}
                               >
                                 {l}
-                              </span>
+                              </button>
                             ))}
                             {bus.lineas.length > 6 ? (
                               <span
@@ -1308,7 +1355,16 @@ export function CatalogAdminPanel() {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex justify-end">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingBus(bus)}
+                            className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11.5px] text-[var(--color-text-3)] transition-colors hover:border-sky-400/50 hover:bg-sky-500/10 hover:text-sky-300"
+                            aria-label={`Editar bus ${bus.id}`}
+                            title="Editar bus"
+                          >
+                            <Pencil size={11} strokeWidth={1.9} aria-hidden />
+                          </button>
                           <button
                             type="button"
                             onClick={() => void deleteBus(bus.id)}
@@ -1955,27 +2011,113 @@ export function CatalogAdminPanel() {
             </p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
-              {filteredLineas.map((linea) => (
-                <span
-                  key={linea}
-                  className="group inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] py-1 pl-2.5 pr-1 text-[11.5px] font-medium text-[var(--color-text-1)] transition-colors hover:border-[var(--color-border-hover)]"
-                >
-                  <span className="num-tabular">{linea}</span>
-                  <button
-                    type="button"
-                    onClick={() => void deleteLinea(linea)}
-                    aria-label={`Eliminar línea ${linea}`}
-                    title={`Eliminar ${linea}`}
-                    className="rounded p-0.5 text-[var(--color-text-3)] opacity-60 transition-all hover:bg-[var(--color-error-light)] hover:text-[var(--color-error)] group-hover:opacity-100"
+              {filteredLineas.map((linea) => {
+                const busesCount = buses.filter((b) =>
+                  b.lineas.some((l) => l === linea),
+                ).length;
+                return (
+                  <span
+                    key={linea}
+                    className="group inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] py-1 pl-1 pr-1 text-[11.5px] font-medium text-[var(--color-text-1)] transition-colors hover:border-violet-400/40 hover:bg-violet-500/[0.04]"
                   >
-                    <Trash2 size={11} strokeWidth={1.75} aria-hidden />
-                  </button>
-                </span>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => setEditingLinea(linea)}
+                      title={`Editar línea ${linea} · ${busesCount} bus${busesCount === 1 ? "" : "es"} asignado${busesCount === 1 ? "" : "s"}`}
+                      className="inline-flex items-center gap-1 rounded px-1.5 py-0 text-left hover:text-violet-200"
+                    >
+                      <span className="num-tabular">{linea}</span>
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-px text-[9.5px] font-semibold tabular-nums",
+                          busesCount > 0
+                            ? "bg-violet-500/15 text-violet-300 ring-1 ring-inset ring-violet-500/30"
+                            : "bg-[var(--color-warning-light)] text-[var(--color-warning)] ring-1 ring-inset ring-[var(--color-warning)]/30",
+                        )}
+                        title={
+                          busesCount === 0
+                            ? "Sin buses asignados"
+                            : `${busesCount} bus${busesCount === 1 ? "" : "es"} asignado${busesCount === 1 ? "" : "s"}`
+                        }
+                      >
+                        {busesCount}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteLinea(linea)}
+                      aria-label={`Eliminar línea ${linea}`}
+                      title={`Eliminar ${linea}`}
+                      className="rounded p-0.5 text-[var(--color-text-3)] opacity-60 transition-all hover:bg-[var(--color-error-light)] hover:text-[var(--color-error)] group-hover:opacity-100"
+                    >
+                      <Trash2 size={11} strokeWidth={1.75} aria-hidden />
+                    </button>
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>
       </section>
+      ) : null}
+
+      {/* ── Modales de edición ───────────────────────────────────────────── */}
+      {editingBus ? (
+        <BusEditModal
+          bus={{
+            id: editingBus.id,
+            operator: editingBus.operator,
+            municipio: editingBus.municipio,
+            lineas: editingBus.lineas,
+          }}
+          catalogLineas={lineas}
+          catalogOperators={operatorOptions.map((o) => o.name)}
+          catalogMunicipios={Array.from(
+            new Set(buses.map((b) => b.municipio).filter(Boolean)),
+          ).sort((a, b) => a.localeCompare(b, "es"))}
+          onClose={() => setEditingBus(null)}
+          onSaved={async (next) => {
+            setEditingBus(null);
+            await Promise.all([load(), loadLineas()]);
+            setNotice({ kind: "success", text: `Bus ${next.id} actualizado.` });
+          }}
+        />
+      ) : null}
+
+      {editingLinea ? (
+        <LineaEditModal
+          linea={editingLinea}
+          allBuses={buses.map((b) => ({
+            id: b.id,
+            operator: b.operator,
+            municipio: b.municipio,
+            lineas: b.lineas,
+          }))}
+          onClose={() => setEditingLinea(null)}
+          onSaved={async (info) => {
+            setEditingLinea(null);
+            await Promise.all([load(), loadLineas()]);
+            const parts: string[] = [];
+            if (info.renamedTo) parts.push(`Línea renombrada a ${info.renamedTo}`);
+            if (info.addedBuses.length > 0)
+              parts.push(`${info.addedBuses.length} asignados`);
+            if (info.removedBuses.length > 0)
+              parts.push(`${info.removedBuses.length} desasignados`);
+            if (info.failedBuses.length > 0) {
+              setNotice({
+                kind: "error",
+                text: `Cambios parciales: fallaron ${info.failedBuses.length} bus${info.failedBuses.length === 1 ? "" : "es"} (${info.failedBuses.join(", ")}).`,
+              });
+            } else {
+              setNotice({
+                kind: "success",
+                text: parts.length
+                  ? `Línea actualizada · ${parts.join(" · ")}.`
+                  : "Línea actualizada.",
+              });
+            }
+          }}
+        />
       ) : null}
     </div>
   );

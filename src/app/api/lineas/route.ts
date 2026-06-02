@@ -146,6 +146,115 @@ export async function POST(request: Request) {
   }
 }
 
+/**
+ * PATCH /api/lineas — renombra una línea (`oldId` → `newId`).
+ *
+ * Además de actualizar la fila `Linea`, propaga el cambio a todos los
+ * buses cuya cadena `Bus.lineas` contenga la línea antigua, sustituyéndola
+ * por la nueva (preservando el resto y deduplicando). Es la única forma
+ * de mantener consistencia entre `Linea` (catálogo) y `Bus.lineas` (cadena
+ * coma-separada).
+ *
+ * Body: { oldId: string; newId: string }
+ */
+const renameLineaSchema = z.object({
+  oldId: z.string().trim().min(1).max(64),
+  newId: z.string().trim().min(1).max(64),
+});
+
+export async function PATCH(request: Request) {
+  try {
+    const actor = await resolveRequestActor(request);
+    if (!actor.userId || !canManageCatalog(actor.role)) {
+      return NextResponse.json(
+        { message: "Sin permisos para gestionar el catálogo" },
+        { status: 403 },
+      );
+    }
+    const payload = await request.json().catch(() => null);
+    const parsed = renameLineaSchema.safeParse(payload);
+    if (!parsed.success) {
+      return NextResponse.json({ message: "Datos inválidos" }, { status: 400 });
+    }
+    const oldId = parsed.data.oldId;
+    const newId = parsed.data.newId;
+    if (oldId === newId) {
+      return NextResponse.json({ ok: true, changed: 0, busesUpdated: 0 });
+    }
+
+    // 1) Validar que la línea origen existe
+    const exists = await prisma.linea.findUnique({ where: { id: oldId } });
+    if (!exists) {
+      return NextResponse.json(
+        { message: `La línea ${oldId} no existe.` },
+        { status: 404 },
+      );
+    }
+    // 2) Si el destino ya existe lo permitimos (fusión), pero avisamos
+    //    en la respuesta para que el cliente sepa qué pasó.
+    const destExists = await prisma.linea.findUnique({
+      where: { id: newId },
+    });
+
+    // 3) Propagar a los buses cuya `lineas` contiene oldId
+    //    Hacemos LIKE para acotar y luego split exacto en JS.
+    const candidateBuses = await prisma.bus.findMany({
+      where: { lineas: { contains: oldId } },
+      select: { id: true, lineas: true },
+    });
+    let busesUpdated = 0;
+    for (const b of candidateBuses) {
+      const arr = b.lineas
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (!arr.includes(oldId)) continue;
+      const next = Array.from(
+        new Set(arr.map((l) => (l === oldId ? newId : l))),
+      );
+      await prisma.bus.update({
+        where: { id: b.id },
+        data: { lineas: next.join(",") },
+      });
+      busesUpdated += 1;
+    }
+
+    // 4) Sustituir la fila Linea. Si destExists, simplemente borramos la
+    //    antigua (los buses ya apuntan al destino y la línea destino ya
+    //    estaba creada). Si no existe, renombramos creando newId y
+    //    borrando oldId — Prisma no permite update del PK directamente
+    //    en SQLite con relaciones implícitas, así que lo hacemos en dos
+    //    pasos dentro de una transacción.
+    if (destExists) {
+      await prisma.linea.delete({ where: { id: oldId } });
+    } else {
+      await prisma.$transaction([
+        prisma.linea.create({ data: { id: newId } }),
+        prisma.linea.delete({ where: { id: oldId } }),
+      ]);
+    }
+
+    await writeAuditEvent({
+      userId: actor.userId,
+      action: "catalog.rename_linea",
+      detail: `Línea ${oldId} → ${newId} (${busesUpdated} bus${busesUpdated === 1 ? "" : "es"} actualizado${busesUpdated === 1 ? "" : "s"}${destExists ? ", fusionada con existente" : ""}).`,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      changed: 1,
+      busesUpdated,
+      mergedWithExisting: !!destExists,
+    });
+  } catch (error) {
+    console.error("Error renaming linea:", error);
+    return NextResponse.json(
+      { message: "No se pudo renombrar la línea" },
+      { status: 500 },
+    );
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const actor = await resolveRequestActor(request);
