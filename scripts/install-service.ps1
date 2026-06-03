@@ -271,9 +271,15 @@ Write-Ok "Logs en: $logsDir"
 # ---------------------------------------------------------------------------
 Write-Step "Configurando el servicio '$ServiceName'"
 
+$serverEntry = Join-Path $ProjectRoot "server.js"
+if (-not (Test-Path $serverEntry)) {
+  Write-Err "No se encuentra el servidor custom en $serverEntry. Asegurate de tener la version actual del repositorio."
+  exit 1
+}
+# Sanity: el server.js requiere que next este instalado.
 $nextBin = Join-Path $ProjectRoot "node_modules\next\dist\bin\next"
 if (-not (Test-Path $nextBin)) {
-  Write-Err "No se encuentra el binario de Next en $nextBin. Ejecuta 'npm install' (o lanza este script sin -SkipBuild)."
+  Write-Err "Falta el paquete 'next' en node_modules. Ejecuta 'npm install' (o lanza este script sin -SkipBuild)."
   exit 1
 }
 
@@ -290,9 +296,11 @@ if ($existing) {
   Start-Sleep -Seconds 1
 }
 
-# Instalar de cero.
-$nextArgs = "`"$nextBin`" start -H 0.0.0.0 -p $Port"
-& $nssmExe install $ServiceName $nodeExe $nextArgs | Out-Null
+# Instalar de cero. Usamos el servidor custom (server.js) en lugar de
+# `next start` directo. Asi aplicamos rate limiting por IP y proteccion
+# anti-flood ANTES de que las peticiones lleguen a Next.
+$serverArgs = "`"$serverEntry`""
+& $nssmExe install $ServiceName $nodeExe $serverArgs | Out-Null
 & $nssmExe set $ServiceName AppDirectory $ProjectRoot | Out-Null
 & $nssmExe set $ServiceName DisplayName  $DisplayName | Out-Null
 & $nssmExe set $ServiceName Description  "Servidor Next.js de la App de Incidencias CCMGC. Escucha en http://0.0.0.0:$Port y se reinicia automaticamente ante fallos." | Out-Null

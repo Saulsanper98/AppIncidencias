@@ -170,19 +170,30 @@ if ($SkipBuild) {
   }
 }
 
-# --- 4.b. Asegurar variables de entorno del servicio ---
-# La TZ es CRITICA: si el host esta en Europe/Madrid (default Windows en
-# territorio peninsular), `new Date(...)` en Node interpreta horas literales
-# como Madrid y al guardarlas en UTC se desplazan -1h al pintarlas en el
-# navegador canario. Forzando TZ=Atlantic/Canary la conversion es consistente
-# de extremo a extremo. Lo reaplicamos en cada rebuild para que un
-# install-service previo sin TZ (o un nssm set manual incompleto) quede
-# corregido automaticamente. Esta tarea corre como SYSTEM y por tanto tiene
-# permisos suficientes (`nssm set` desde sesion no-admin devuelve "Acceso
-# denegado").
+# --- 4.b. Asegurar configuracion del servicio (Application + Env vars) ---
+# Reaplicamos en cada rebuild dos cosas:
+#  (1) Application/AppParameters: deben apuntar al servidor custom server.js
+#      (no a `next start` directo). El server.js incluye rate-limiting por IP
+#      y proteccion anti-flood antes de delegar en Next.
+#  (2) AppEnvironmentExtra con TZ=Atlantic/Canary: si el host esta en
+#      Europe/Madrid (default Windows en territorio peninsular), `new Date(...)`
+#      en Node interpreta horas literales como Madrid y al guardarlas en UTC
+#      se desplazan -1h al pintarlas en el navegador canario. Forzando
+#      TZ=Atlantic/Canary la conversion es consistente de extremo a extremo.
+# Lo aplicamos aqui porque esta tarea corre como SYSTEM y tiene permisos
+# suficientes (`nssm set` desde sesion no-admin devuelve "Acceso denegado").
 $nssmExe = Join-Path $RepoPath "tools\nssm\nssm.exe"
+$serverEntry = Join-Path $RepoPath "server.js"
+$nodeExe = Join-Path $NodePath "node.exe"
 if (Test-Path $nssmExe) {
   try {
+    if ((Test-Path $serverEntry) -and (Test-Path $nodeExe)) {
+      & $nssmExe set $ServiceName Application $nodeExe | Out-Null
+      & $nssmExe set $ServiceName AppParameters "`"$serverEntry`"" | Out-Null
+      Log "[i] NSSM Application apunta a node server.js (rate-limit activo)." "Cyan"
+    } else {
+      Log "[!] Falta node.exe o server.js. Dejo Application sin tocar." "Yellow"
+    }
     & $nssmExe set $ServiceName AppEnvironmentExtra `
         "NODE_ENV=production" `
         "HOST=0.0.0.0" `
@@ -190,10 +201,10 @@ if (Test-Path $nssmExe) {
         "TZ=Atlantic/Canary" | Out-Null
     Log "[i] AppEnvironmentExtra reaplicado (incluye TZ=Atlantic/Canary)." "Cyan"
   } catch {
-    Log "[!] No se pudo actualizar AppEnvironmentExtra via nssm: $($_.Exception.Message)" "Yellow"
+    Log "[!] No se pudo actualizar la config del servicio via nssm: $($_.Exception.Message)" "Yellow"
   }
 } else {
-  Log "[!] No encuentro $nssmExe. Saltando reaplicacion de TZ del servicio." "Yellow"
+  Log "[!] No encuentro $nssmExe. Saltando reaplicacion de config del servicio." "Yellow"
 }
 
 # --- 5. Arrancar servicio ---

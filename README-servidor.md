@@ -167,6 +167,104 @@ Equivale a `npm run start:server`, exporta `HOST=0.0.0.0`, `PORT=3000`, `NODE_EN
 
 ---
 
+## 7-bis. Rate limiting / protección anti-flood
+
+Desde la versión actual el servicio NO ejecuta `next start` directamente:
+arranca `node server.js`, un *custom server* que envuelve Next y aplica
+rate limiting por IP **antes** de que la petición llegue a la aplicación.
+Esto bloquea ataques de tipo `hey`, `wrk`, scripts de scraping, fuerza
+bruta sobre `/api/auth/login`, etc.
+
+### Cómo funciona
+
+- **Token bucket por IP** (sostenido + burst). Por defecto: 240 req/min
+  sostenidas con burst de 60.
+- **Bucket adicional estricto** para rutas sensibles (`/api/auth/*`, reset
+  de contraseña…): 20 req/min con burst de 6.
+- **Auto-ban**: si una IP recibe ≥ 150 respuestas 429 en 60 s, se la banea
+  15 min (configurable). El log lo deja claro:
+
+  ```
+  [rate-limit] BAN ip=192.168.1.34 hits=152 until=2026-06-03T19:32:00.000Z
+  ```
+
+- **Cabecera `X-Real-IP`**: el server inyecta siempre la IP detectada a las
+  peticiones que pasan a Next, así los route handlers / middleware pueden
+  auditarla aunque no haya proxy delante.
+- **Assets estáticos** (`/_next/static`, `/icons`, `/favicon`, etc.) están
+  exentos para no penalizar la carga normal de la SPA.
+- **Whitelist por defecto**: `127.0.0.1` y `::1` (peticiones desde el
+  propio servidor).
+
+### Variables de entorno (opcionales, en `.env`)
+
+| Variable | Default | Qué hace |
+|----------|---------|----------|
+| `RATE_LIMIT_DISABLE` | `0` | `1` lo apaga del todo (NO recomendado). |
+| `RATE_LIMIT_GENERAL_RPM` | `240` | Req/min sostenidas por IP. |
+| `RATE_LIMIT_GENERAL_BURST` | `60` | Capacidad del bucket general (ráfaga). |
+| `RATE_LIMIT_LOGIN_RPM` | `20` | Req/min para endpoints sensibles. |
+| `RATE_LIMIT_LOGIN_BURST` | `6` | Capacidad del bucket sensible. |
+| `RATE_LIMIT_BAN_THRESHOLD` | `150` | Nº de 429 en 60 s que dispara el ban. |
+| `RATE_LIMIT_BAN_MINUTES` | `15` | Duración del ban. |
+| `RATE_LIMIT_TRUST_PROXY` | `0` | `1` para leer `X-Forwarded-For` (solo si tienes reverse proxy de confianza). |
+| `RATE_LIMIT_WHITELIST` | `127.0.0.1,::1` | CSV de IPs exentas. |
+
+Cualquier cambio requiere reiniciar el servicio:
+
+```powershell
+Restart-Service CCMGCTicketing
+```
+
+### Migrar el servicio al nuevo `server.js` (paso único)
+
+Si tienes el servicio instalado **antes** de este cambio, sigue
+ejecutando `next start` y NO tiene el rate limit. Para migrarlo basta
+con relanzar el instalador (es idempotente y conserva firewall):
+
+```powershell
+# PowerShell COMO ADMINISTRADOR
+cd C:\Users\Incidencias\AppIncidencias
+.\scripts\install-service.ps1 -SkipBuild
+```
+
+Esto reconfigura el servicio NSSM para que ejecute `node server.js` en
+lugar de `next start`. Si prefieres no usar el script, también puedes
+editarlo a mano sin reinstalar:
+
+```powershell
+.\tools\nssm\nssm.exe set CCMGCTicketing Application "C:\Program Files\nodejs\node.exe"
+.\tools\nssm\nssm.exe set CCMGCTicketing AppParameters "`"C:\Users\Incidencias\AppIncidencias\server.js`""
+Restart-Service CCMGCTicketing
+```
+
+Comprueba en los logs que el rate limit está activo:
+
+```powershell
+Get-Content .\logs\service-out.log -Tail 4
+# Esperado:
+#   > Listo en http://0.0.0.0:3000 (NODE_ENV=production, rate-limit=ON)
+#   [rate-limit] general=240rpm burst=60 | sensible=20rpm burst=6 | ban_threshold=150/min ban_dur=15min ...
+```
+
+### Pruebas rápidas
+
+Desde otra máquina (o cambiando la whitelist y usando `127.0.0.2`):
+
+```powershell
+# Lanza 100 peticiones; deberías ver 429s y eventualmente "banned"
+1..100 | ForEach-Object {
+  try { (Invoke-WebRequest -UseBasicParsing "http://192.168.12.67:3000/login" -MaximumRedirection 0).StatusCode }
+  catch { $_.Exception.Response.StatusCode.value__ }
+}
+```
+
+Si necesitas exonerar la IP de un usuario concreto (porque trabaja de
+forma poco común y se autopenaliza), añádela a `RATE_LIMIT_WHITELIST`
+en `.env` y reinicia el servicio.
+
+---
+
 ## 8. Solución de problemas
 
 | Síntoma | Qué mirar |

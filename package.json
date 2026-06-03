@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "start:server": "next start -H 0.0.0.0 -p 3000",
+    "start:server": "node server.js",
     "lint": "next lint",
     "check:login:contrast": "node scripts/check-login-contrast.mjs",
     "test:login:visual": "playwright test tests/login.visual.spec.ts",
