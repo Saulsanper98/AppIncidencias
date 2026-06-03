@@ -30,13 +30,40 @@ export async function PATCH(request: Request, context: { params: Promise<{ ticke
       return NextResponse.json({ message: "Datos de asignación invalidos" }, { status: 400 });
     }
 
-    // Técnicos solo pueden auto-asignarse o desasignarse
+    // Verificamos que el ticket existe y comprobamos quién lo creó. El
+    // modelo `Ticket` no guarda createdBy directamente: el creador se
+    // rastrea en `AuditEvent` (action='ticket.created'). El creador puede
+    // asignar a cualquier técnico activo aunque su rol sea tecnico_campo.
+    const [existingTicket, creationEvent] = await Promise.all([
+      prisma.ticket.findUnique({
+        where: { id: ticketId },
+        select: { id: true, assignedToUserId: true },
+      }),
+      prisma.auditEvent.findFirst({
+        where: { ticketId, action: "ticket.created" },
+        orderBy: { createdAt: "asc" },
+        select: { userId: true },
+      }),
+    ]);
+    if (!existingTicket) {
+      return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 });
+    }
+
+    const isCreator = creationEvent?.userId === actor.userId;
+
+    // Técnicos solo pueden auto-asignarse / desasignarse, salvo que sean
+    // el creador del ticket: en ese caso pueden asignarlo a cualquier
+    // técnico de campo activo.
     if (
       actor.role === "tecnico_campo" &&
+      !isCreator &&
       parsed.data.assignedToUserId !== null &&
       parsed.data.assignedToUserId !== actor.userId
     ) {
-      return NextResponse.json({ message: "Los técnicos solo pueden asignarse a sí mismos" }, { status: 403 });
+      return NextResponse.json(
+        { message: "Solo el creador o un gestor pueden asignar este ticket a otro técnico" },
+        { status: 403 },
+      );
     }
 
     // Solo técnicos de campo activos pueden recibir tickets; si el usuario
