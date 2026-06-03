@@ -32,6 +32,7 @@ const patchSchema = z
     fecha_inicio: z.coerce.date().optional(),
     fecha_fin: z.coerce.date().optional(),
     hora_fin_estimada: z.boolean().optional(),
+    sin_fecha_fin: z.boolean().optional(),
     sentido: z.enum(["IDA", "VUELTA", "AMBOS"]).optional(),
     lineas_afectadas: z.array(z.string().min(1).max(20)).max(40).optional(),
     paradas_fuera: z.array(paradaSchema).max(60).optional(),
@@ -47,7 +48,11 @@ const patchSchema = z
       }),
   })
   .refine(
-    (d) => !d.fecha_inicio || !d.fecha_fin || d.fecha_fin.getTime() > d.fecha_inicio.getTime(),
+    (d) =>
+      d.sin_fecha_fin ||
+      !d.fecha_inicio ||
+      !d.fecha_fin ||
+      d.fecha_fin.getTime() > d.fecha_inicio.getTime(),
     { message: "fecha_fin debe ser posterior a fecha_inicio", path: ["fecha_fin"] },
   );
 

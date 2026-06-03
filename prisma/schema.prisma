@@ -608,6 +608,12 @@ model Desvio {
   fecha_inicio         DateTime
   fecha_fin            DateTime
   hora_fin_estimada    Boolean      @default(false)
+  /// Desvio sin fecha de fin programada: queda vivo hasta que un operador
+  /// lo marca como RESUELTO/CANCELADO. Util para cortes recurrentes o por
+  /// franjas horarias que se "activan/desactivan" a mano. Cuando es true,
+  /// `fecha_fin` se ignora en la UI (se almacena el valor que envia el
+  /// formulario, normalmente igual a fecha_inicio).
+  sin_fecha_fin        Boolean      @default(false)
   motivo               String
   sentido              Sentido
   /// JSON string con el array de lineas afectadas. Ejemplos: '["303"]' o '["19","36"]'.

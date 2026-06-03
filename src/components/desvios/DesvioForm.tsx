@@ -2,6 +2,9 @@
 
 import {
   AlertCircle,
+  CalendarClock,
+  Check,
+  Infinity as InfinityIcon,
   Loader2,
   Plus,
   Save,
@@ -40,6 +43,7 @@ type FormState = {
   fecha_fin: string;
   hora_fin: string;
   hora_fin_estimada: boolean;
+  sin_fecha_fin: boolean;
   sentido: DesvioSentido;
   lineas: string[];
   paradas_fuera: ParadaDesvio[];
@@ -57,6 +61,7 @@ const EMPTY_FORM: FormState = {
   fecha_fin: "",
   hora_fin: "20:00",
   hora_fin_estimada: false,
+  sin_fecha_fin: false,
   sentido: "AMBOS",
   lineas: [],
   paradas_fuera: [],
@@ -78,6 +83,7 @@ function buildInitialState(initial?: DesvioDetalle): FormState {
     fecha_fin: toDateInput(df),
     hora_fin: toTimeInput(df),
     hora_fin_estimada: initial.hora_fin_estimada,
+    sin_fecha_fin: initial.sin_fecha_fin,
     sentido: initial.sentido,
     lineas: initial.lineas_afectadas,
     paradas_fuera: initial.paradas_fuera,
@@ -109,11 +115,13 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
     if (form.tramo.trim().length < 2) errors.tramo = "Indica el tramo afectado.";
     if (form.motivo.trim().length < 2) errors.motivo = "Indica el motivo del cierre.";
     if (!form.fecha_inicio) errors.fecha_inicio = "Fecha de inicio obligatoria.";
-    if (!form.fecha_fin) errors.fecha_fin = "Fecha de fin obligatoria.";
-    if (form.fecha_inicio && form.fecha_fin) {
-      const inicio = combine(form.fecha_inicio, form.hora_inicio);
-      const fin = combine(form.fecha_fin, form.hora_fin);
-      if (fin <= inicio) errors.fecha_fin = "Debe ser posterior al inicio.";
+    if (!form.sin_fecha_fin) {
+      if (!form.fecha_fin) errors.fecha_fin = "Fecha de fin obligatoria.";
+      if (form.fecha_inicio && form.fecha_fin) {
+        const inicio = combine(form.fecha_inicio, form.hora_inicio);
+        const fin = combine(form.fecha_fin, form.hora_fin);
+        if (fin <= inicio) errors.fecha_fin = "Debe ser posterior al inicio.";
+      }
     }
     if (form.lineas.length === 0) errors.lineas = "Indica al menos una linea afectada.";
     if (form.url_itinerario && !/^https?:\/\//i.test(form.url_itinerario.trim())) {
@@ -128,13 +136,24 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
     if (!validate()) return;
     setSubmitting(true);
     try {
+      const inicio = combine(form.fecha_inicio, form.hora_inicio);
+      // Cuando el operador marca "Sin fecha de fin", la fecha_fin no tiene
+      // significado operativo. La almacenamos igual a la de inicio para no
+      // romper la columna NOT NULL y para que el cronograma del detalle no
+      // muestre un "intervalo invertido" si alguien desactiva el flag mas
+      // tarde. La UI seguira pintando "Hasta desactivar" mientras el flag
+      // este activo.
+      const fin = form.sin_fecha_fin
+        ? inicio
+        : combine(form.fecha_fin, form.hora_fin);
       const payload = {
         via: form.via.trim(),
         tramo: form.tramo.trim(),
         motivo: form.motivo.trim(),
-        fecha_inicio: combine(form.fecha_inicio, form.hora_inicio).toISOString(),
-        fecha_fin: combine(form.fecha_fin, form.hora_fin).toISOString(),
-        hora_fin_estimada: form.hora_fin_estimada,
+        fecha_inicio: inicio.toISOString(),
+        fecha_fin: fin.toISOString(),
+        hora_fin_estimada: form.sin_fecha_fin ? false : form.hora_fin_estimada,
+        sin_fecha_fin: form.sin_fecha_fin,
         sentido: form.sentido,
         lineas_afectadas: form.lineas,
         paradas_fuera: form.paradas_fuera,
@@ -251,6 +270,23 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
         </Section>
 
         <Section title="Horario">
+          {/* Selector tipo "segmento" para elegir el tipo de desvio: programado
+              (con fecha y hora de fin) o indefinido (se activa/desactiva a mano).
+              Sustituye a un checkbox plano para hacer la decision mas obvia y
+              dejar claro que las dos opciones son mutuamente excluyentes. */}
+          <TipoSelector
+            value={form.sin_fecha_fin ? "indefinido" : "programado"}
+            onChange={(v) =>
+              setForm((p) => ({
+                ...p,
+                sin_fecha_fin: v === "indefinido",
+                // Si pasamos a indefinido, desmarcamos "hora estimada" por
+                // coherencia (ya no tiene sentido).
+                hora_fin_estimada: v === "indefinido" ? false : p.hora_fin_estimada,
+              }))
+            }
+          />
+
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fecha inicio" error={fieldErrors.fecha_inicio} required>
               <Input
@@ -266,30 +302,62 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
                 onChange={(e) => setForm((p) => ({ ...p, hora_inicio: e.target.value }))}
               />
             </Field>
-            <Field label="Fecha fin" error={fieldErrors.fecha_fin} required>
-              <Input
-                type="date"
-                value={form.fecha_fin}
-                onChange={(e) => setForm((p) => ({ ...p, fecha_fin: e.target.value }))}
-              />
-            </Field>
-            <Field label="Hora fin">
-              <Input
-                type="time"
-                value={form.hora_fin}
-                onChange={(e) => setForm((p) => ({ ...p, hora_fin: e.target.value }))}
-              />
-            </Field>
+
+            {form.sin_fecha_fin ? (
+              <div className="col-span-2 rounded-lg border border-dashed border-[var(--color-accent)]/40 bg-gradient-to-br from-[var(--color-accent-light)]/55 to-transparent p-3">
+                <p className="flex items-center gap-2 text-[12px] font-semibold text-[var(--color-text-1)]">
+                  <span
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-[var(--color-accent-light)] text-[var(--color-accent)]"
+                    aria-hidden
+                  >
+                    <InfinityIcon size={12} strokeWidth={2.2} />
+                  </span>
+                  Este desvío no tiene fecha de fin
+                </p>
+                <p className="mt-1.5 pl-7 text-[11.5px] leading-relaxed text-[var(--color-text-3)]">
+                  Quedará vivo hasta que un operador pulse{" "}
+                  <strong className="text-[var(--color-text-2)]">Desactivar</strong>{" "}
+                  desde la vista de detalle. Ideal para cortes que se repiten
+                  por franjas horarias o eventos sin hora de reapertura clara.
+                </p>
+              </div>
+            ) : (
+              <>
+                <Field label="Fecha fin" error={fieldErrors.fecha_fin} required>
+                  <Input
+                    type="date"
+                    value={form.fecha_fin}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, fecha_fin: e.target.value }))
+                    }
+                  />
+                </Field>
+                <Field label="Hora fin">
+                  <Input
+                    type="time"
+                    value={form.hora_fin}
+                    onChange={(e) =>
+                      setForm((p) => ({ ...p, hora_fin: e.target.value }))
+                    }
+                  />
+                </Field>
+              </>
+            )}
           </div>
-          <label className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-[12px] text-[var(--color-text-2)]">
-            <input
-              type="checkbox"
-              checked={form.hora_fin_estimada}
-              onChange={(e) => setForm((p) => ({ ...p, hora_fin_estimada: e.target.checked }))}
-              className="h-3.5 w-3.5 rounded border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-accent)]"
-            />
-            Hora de fin estimada (&quot;previsiblemente&quot;).
-          </label>
+
+          {!form.sin_fecha_fin ? (
+            <label className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-[12px] text-[var(--color-text-2)]">
+              <input
+                type="checkbox"
+                checked={form.hora_fin_estimada}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, hora_fin_estimada: e.target.checked }))
+                }
+                className="h-3.5 w-3.5 rounded border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-accent)]"
+              />
+              Hora de fin estimada (&quot;previsiblemente&quot;).
+            </label>
+          ) : null}
           <Field label="URL del itinerario alternativo" error={fieldErrors.url_itinerario}>
             <Input
               value={form.url_itinerario}
@@ -398,6 +466,100 @@ function Field({
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Selector segmentado para elegir el tipo de horario del desvio. Las dos
+ * opciones se pintan como tarjetas con icono + descripcion; la activa queda
+ * resaltada con el color de acento. El operador entiende mas rapido que esto
+ * es una decision binaria que con un checkbox suelto.
+ */
+function TipoSelector({
+  value,
+  onChange,
+}: {
+  value: "programado" | "indefinido";
+  onChange: (v: "programado" | "indefinido") => void;
+}) {
+  const options: Array<{
+    id: "programado" | "indefinido";
+    icon: typeof CalendarClock;
+    title: string;
+    desc: string;
+  }> = [
+    {
+      id: "programado",
+      icon: CalendarClock,
+      title: "Programado",
+      desc: "Con fecha y hora de fin definidas",
+    },
+    {
+      id: "indefinido",
+      icon: InfinityIcon,
+      title: "Sin fecha de fin",
+      desc: "Se activa y desactiva manualmente",
+    },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Tipo de horario del desvio"
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+    >
+      {options.map((opt) => {
+        const Icon = opt.icon;
+        const active = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(opt.id)}
+            className={cn(
+              "group relative flex items-start gap-3 rounded-xl border p-3 text-left transition-all",
+              active
+                ? "border-[var(--color-accent)]/55 bg-gradient-to-br from-[var(--color-accent-light)]/85 via-[var(--color-accent-light)]/40 to-transparent shadow-sm"
+                : "border-[var(--color-border)] bg-[var(--color-surface-2)]/55 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-2)]",
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                active
+                  ? "bg-[var(--color-accent)] text-white shadow-md shadow-[var(--color-accent)]/30"
+                  : "bg-[var(--color-surface-3)] text-[var(--color-text-3)] group-hover:text-[var(--color-text-2)]",
+              )}
+              aria-hidden
+            >
+              <Icon size={14} strokeWidth={2} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p
+                className={cn(
+                  "text-[13px] font-semibold leading-tight",
+                  active ? "text-[var(--color-text-1)]" : "text-[var(--color-text-2)]",
+                )}
+              >
+                {opt.title}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-[var(--color-text-3)]">
+                {opt.desc}
+              </p>
+            </div>
+            {active ? (
+              <span
+                className="absolute right-2 top-2 inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--color-accent)] text-white shadow-sm"
+                aria-hidden
+              >
+                <Check size={10} strokeWidth={3} />
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

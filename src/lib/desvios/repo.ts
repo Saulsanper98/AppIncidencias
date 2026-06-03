@@ -37,6 +37,7 @@ type DesvioRecord = {
   fecha_inicio: Date;
   fecha_fin: Date;
   hora_fin_estimada: boolean;
+  sin_fecha_fin: boolean;
   motivo: string;
   sentido: DesvioSentido;
   lineas_afectadas: string;
@@ -66,6 +67,7 @@ function toResumen(row: DesvioRecord): DesvioResumen {
     fecha_inicio: row.fecha_inicio.toISOString(),
     fecha_fin: row.fecha_fin.toISOString(),
     hora_fin_estimada: row.hora_fin_estimada,
+    sin_fecha_fin: row.sin_fecha_fin,
     motivo: row.motivo,
     sentido: row.sentido,
     lineas_afectadas: getLineas(row),
@@ -241,6 +243,7 @@ export type ManualDesvioInput = {
   fecha_inicio: Date;
   fecha_fin: Date;
   hora_fin_estimada?: boolean;
+  sin_fecha_fin?: boolean;
   sentido: DesvioSentido;
   lineas_afectadas: string[];
   paradas_fuera?: ParadaDesvio[];
@@ -270,6 +273,7 @@ export async function createManualDesvio(input: ManualDesvioInput): Promise<Desv
       fecha_inicio: input.fecha_inicio,
       fecha_fin: input.fecha_fin,
       hora_fin_estimada: input.hora_fin_estimada ?? false,
+      sin_fecha_fin: input.sin_fecha_fin ?? false,
       motivo: input.motivo,
       sentido: input.sentido,
       lineas_afectadas: serializeLineas(input.lineas_afectadas),
@@ -334,6 +338,7 @@ export type DesvioPatch = Partial<{
   fecha_inicio: Date;
   fecha_fin: Date;
   hora_fin_estimada: boolean;
+  sin_fecha_fin: boolean;
   sentido: DesvioSentido;
   lineas_afectadas: string[];
   paradas_fuera: ParadaDesvio[];
@@ -355,6 +360,7 @@ export async function patchDesvio(id: string, patch: DesvioPatch): Promise<Desvi
   if (patch.fecha_inicio !== undefined) data.fecha_inicio = patch.fecha_inicio;
   if (patch.fecha_fin !== undefined) data.fecha_fin = patch.fecha_fin;
   if (patch.hora_fin_estimada !== undefined) data.hora_fin_estimada = patch.hora_fin_estimada;
+  if (patch.sin_fecha_fin !== undefined) data.sin_fecha_fin = patch.sin_fecha_fin;
   if (patch.sentido !== undefined) data.sentido = patch.sentido;
   if (patch.lineas_afectadas !== undefined) {
     data.lineas_afectadas = serializeLineas(patch.lineas_afectadas);

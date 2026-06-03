@@ -53,6 +53,12 @@ export type DesvioResumen = {
   fecha_inicio: string;
   fecha_fin: string;
   hora_fin_estimada: boolean;
+  /**
+   * Desvio indefinido: se mantiene vivo hasta que un operador lo desactiva.
+   * Cuando es true, `fecha_fin` no tiene significado operativo y la UI lo
+   * representa como "Hasta desactivar".
+   */
+  sin_fecha_fin: boolean;
   motivo: string;
   sentido: DesvioSentido;
   lineas_afectadas: string[];

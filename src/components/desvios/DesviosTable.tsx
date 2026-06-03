@@ -11,9 +11,11 @@ import {
   ChevronRight,
   FileText,
   Hourglass,
+  Infinity as InfinityIcon,
   Loader2,
   Mail,
   Plus,
+  Power,
   RefreshCcw,
   Route as RouteIcon,
   Search,
@@ -77,6 +79,12 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
     RESUELTO: 0,
     CANCELADO: 0,
   });
+  // Cuantos desvios visibles son "indefinidos" (sin fecha de fin). Se calcula
+  // sobre la pagina cargada porque el backend aun no agrupa por ese flag; es
+  // suficiente para que el operador vea "hay X corte abierto" de un vistazo.
+  const indefinidosVivos = items.filter(
+    (d) => d.sin_fecha_fin && (d.estado === "PENDIENTE" || d.estado === "ACTIVO"),
+  ).length;
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -177,6 +185,29 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
     }
   };
 
+  const handleReactivate = async (id: string) => {
+    if (acting[id]) return;
+    setActing((prev) => ({ ...prev, [id]: true }));
+    try {
+      const res = await fetch(`/api/desvios/${id}/reactivar`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? "No se pudo reactivar");
+      }
+      toast.success("Desvio reactivado");
+      await load();
+    } catch (err) {
+      toast.error("Error al reactivar", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setActing((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
   const handleCleanupArchived = async () => {
     if (cleanupRunning) return;
     setCleanupRunning(true);
@@ -223,6 +254,7 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
     <div className="space-y-4">
       <Header
         counts={counts}
+        indefinidos={indefinidosVivos}
         loading={loading}
         canCreate={canCreate}
         canImport={canManage}
@@ -269,6 +301,7 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
                     canManage={canManage}
                     acting={Boolean(acting[d.id])}
                     onConfirm={() => void handleConfirm(d.id)}
+                    onReactivate={() => void handleReactivate(d.id)}
                   />
                 ))}
               </AnimatePresence>
@@ -329,6 +362,7 @@ function Th({ children }: { children: React.ReactNode }) {
 
 function Header({
   counts,
+  indefinidos,
   loading,
   canCreate,
   canImport,
@@ -342,6 +376,7 @@ function Header({
   onConfirmCleanup,
 }: {
   counts: Counts;
+  indefinidos: number;
   loading: boolean;
   canCreate: boolean;
   canImport: boolean;
@@ -385,6 +420,15 @@ function Header({
           tone="emerald"
           icon={CheckCircle2}
         />
+        {indefinidos > 0 ? (
+          <KpiPill
+            label="Indefinidos"
+            value={indefinidos}
+            tone="violet"
+            icon={InfinityIcon}
+            pulse
+          />
+        ) : null}
 
         <button
           type="button"
@@ -486,27 +530,39 @@ function KpiPill({
   value,
   tone,
   icon: Icon,
+  pulse,
 }: {
   label: string;
   value: number;
-  tone: "amber" | "rose" | "emerald";
+  tone: "amber" | "rose" | "emerald" | "violet";
   icon: typeof AlertTriangle;
+  /** Anima el punto indicador (usado para los desvios indefinidos vivos). */
+  pulse?: boolean;
 }) {
-  const map: Record<typeof tone, { dot: string; text: string; border: string }> = {
+  const map: Record<typeof tone, { dot: string; text: string; border: string; ring: string }> = {
     amber: {
       dot: "bg-[#d97706]",
       text: "text-[#d97706]",
       border: "border-[rgba(217,119,6,0.30)]",
+      ring: "ring-[rgba(217,119,6,0.45)]",
     },
     rose: {
       dot: "bg-[#dc2626]",
       text: "text-[#dc2626]",
       border: "border-[rgba(220,38,38,0.30)]",
+      ring: "ring-[rgba(220,38,38,0.45)]",
     },
     emerald: {
       dot: "bg-[#059669]",
       text: "text-[#059669]",
       border: "border-[rgba(5,150,105,0.30)]",
+      ring: "ring-[rgba(5,150,105,0.45)]",
+    },
+    violet: {
+      dot: "bg-[#7c3aed]",
+      text: "text-[#7c3aed]",
+      border: "border-[rgba(124,58,237,0.32)]",
+      ring: "ring-[rgba(124,58,237,0.45)]",
     },
   };
   const c = map[tone];
@@ -517,7 +573,18 @@ function KpiPill({
         c.border,
       )}
     >
-      <span className={cn("h-1.5 w-1.5 rounded-full", c.dot)} aria-hidden />
+      <span className="relative inline-flex h-1.5 w-1.5">
+        {pulse ? (
+          <span
+            className={cn(
+              "absolute inset-0 animate-ping rounded-full opacity-70",
+              c.dot,
+            )}
+            aria-hidden
+          />
+        ) : null}
+        <span className={cn("relative h-1.5 w-1.5 rounded-full", c.dot)} aria-hidden />
+      </span>
       <Icon size={12} strokeWidth={1.8} className={c.text} />
       <span className="text-[var(--color-text-3)]">{label}</span>
       <strong className={cn("font-semibold tabular-nums", c.text)}>{value}</strong>
@@ -652,13 +719,23 @@ function Row({
   canManage,
   acting,
   onConfirm,
+  onReactivate,
 }: {
   desvio: DesvioResumen;
   canManage: boolean;
   acting: boolean;
   onConfirm: () => void;
+  onReactivate: () => void;
 }) {
   const isPendiente = desvio.estado === "PENDIENTE";
+  const isResuelto = desvio.estado === "RESUELTO";
+  const isIndefVivo =
+    desvio.sin_fecha_fin &&
+    (desvio.estado === "PENDIENTE" || desvio.estado === "ACTIVO");
+  // Para los indefinidos resueltos, dejamos una accion rapida en la fila
+  // para volverlos a poner ACTIVO sin abrir el detalle, util cuando el
+  // operador gestiona varios cortes recurrentes a la vez.
+  const canQuickReactivate = isResuelto && desvio.sin_fecha_fin && canManage;
   return (
     <motion.tr
       initial={{ opacity: 0, y: 4 }}
@@ -667,9 +744,14 @@ function Row({
       transition={{ duration: 0.18 }}
       className={cn(
         "transition-colors hover:bg-[var(--color-surface-2)]/55",
-        isPendiente
-          ? "bg-[rgba(217,119,6,0.06)]"
-          : "odd:bg-[var(--color-surface)] even:bg-[var(--color-surface-2)]/30",
+        // Tinte violeta sutil para los indefinidos vivos (manda sobre el
+        // tinte amarillo de "pendiente" porque ese estado tambien aparece
+        // marcado como indefinido en muchos casos).
+        isIndefVivo
+          ? "bg-[rgba(124,58,237,0.045)] shadow-[inset_2px_0_0_rgba(124,58,237,0.45)]"
+          : isPendiente
+            ? "bg-[rgba(217,119,6,0.06)]"
+            : "odd:bg-[var(--color-surface)] even:bg-[var(--color-surface-2)]/30",
       )}
     >
       <td className="whitespace-nowrap px-4 py-3 font-mono text-[12px] text-[var(--color-text-2)]">
@@ -699,6 +781,7 @@ function Row({
           inicio={desvio.fecha_inicio}
           fin={desvio.fecha_fin}
           estimada={desvio.hora_fin_estimada}
+          sinFin={desvio.sin_fecha_fin}
         />
       </td>
       <td className="px-4 py-3">
@@ -725,6 +808,18 @@ function Row({
             >
               {acting ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
               Confirmar
+            </button>
+          ) : null}
+          {canQuickReactivate ? (
+            <button
+              type="button"
+              onClick={onReactivate}
+              disabled={acting}
+              className="inline-flex h-7 items-center gap-1 rounded-md bg-[#7c3aed] px-2 text-[11px] font-semibold text-white shadow-sm transition-opacity hover:bg-[#6d28d9] disabled:opacity-60"
+              title="Reactivar desvio indefinido (vuelve a ACTIVO)"
+            >
+              {acting ? <Loader2 size={11} className="animate-spin" /> : <Power size={11} />}
+              Reactivar
             </button>
           ) : null}
           <Link
@@ -778,12 +873,51 @@ function FechasCell({
   inicio,
   fin,
   estimada,
+  sinFin,
 }: {
   inicio: string;
   fin: string;
   estimada: boolean;
+  sinFin: boolean;
 }) {
   const di = new Date(inicio);
+  const fechaInicio = formatShortDate(di);
+  const horaInicio = formatHour(di);
+
+  // Indefinido: solo mostramos el inicio y un chip "Indefinido" en lugar del
+  // tramo horario completo. La idea es que el operador entienda de un vistazo
+  // que ese desvio no caduca solo.
+  if (sinFin) {
+    return (
+      <div className="flex flex-col">
+        <span className="font-medium text-[var(--color-text-1)]">{fechaInicio}</span>
+        <span className="inline-flex items-center gap-1 text-[var(--color-text-3)]">
+          <span className="tabular-nums">{horaInicio}</span>
+          <ArrowRight
+            size={10}
+            strokeWidth={2}
+            className="opacity-60"
+            aria-hidden
+          />
+          <span className="inline-flex items-center gap-1 rounded-full border border-[rgba(124,58,237,0.40)] bg-[rgba(124,58,237,0.10)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[#7c3aed]">
+            <span className="relative inline-flex h-1.5 w-1.5">
+              <span
+                className="absolute inset-0 animate-ping rounded-full bg-[#7c3aed] opacity-60"
+                aria-hidden
+              />
+              <span
+                className="relative h-1.5 w-1.5 rounded-full bg-[#7c3aed]"
+                aria-hidden
+              />
+            </span>
+            <InfinityIcon size={10} strokeWidth={2.2} aria-hidden />
+            Indefinido
+          </span>
+        </span>
+      </div>
+    );
+  }
+
   const df = new Date(fin);
   // Same-day en TZ Atlantic/Canary para que coincida con la hora canaria que
   // se muestra abajo, no con la del navegador.
@@ -791,8 +925,6 @@ function FechasCell({
   const pf = canaryParts(df);
   const sameDay =
     pi.year === pf.year && pi.month === pf.month && pi.day === pf.day;
-  const fechaInicio = formatShortDate(di);
-  const horaInicio = formatHour(di);
   const horaFin = formatHour(df);
   return (
     <div className="flex flex-col">

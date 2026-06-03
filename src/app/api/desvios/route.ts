@@ -37,6 +37,7 @@ const createSchema = z
     fecha_inicio: z.coerce.date(),
     fecha_fin: z.coerce.date(),
     hora_fin_estimada: z.boolean().optional().default(false),
+    sin_fecha_fin: z.boolean().optional().default(false),
     sentido: z.enum(["IDA", "VUELTA", "AMBOS"]),
     lineas_afectadas: z
       .array(z.string().min(1).max(20))
@@ -54,10 +55,13 @@ const createSchema = z
         message: "La URL del itinerario debe empezar por http o https",
       }),
   })
-  .refine((d) => d.fecha_fin.getTime() > d.fecha_inicio.getTime(), {
-    message: "La fecha de fin debe ser posterior a la de inicio",
-    path: ["fecha_fin"],
-  });
+  .refine(
+    (d) => d.sin_fecha_fin || d.fecha_fin.getTime() > d.fecha_inicio.getTime(),
+    {
+      message: "La fecha de fin debe ser posterior a la de inicio",
+      path: ["fecha_fin"],
+    },
+  );
 
 export async function GET(request: Request) {
   const actor = await resolveRequestActor(request);
@@ -124,6 +128,7 @@ export async function POST(request: Request) {
       fecha_inicio: data.fecha_inicio,
       fecha_fin: data.fecha_fin,
       hora_fin_estimada: data.hora_fin_estimada,
+      sin_fecha_fin: data.sin_fecha_fin,
       sentido: data.sentido,
       lineas_afectadas: data.lineas_afectadas.map((l) => l.trim()).filter(Boolean),
       paradas_fuera: data.paradas_fuera,

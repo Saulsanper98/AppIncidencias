@@ -13,9 +13,11 @@ import {
   ExternalLink,
   FileText,
   Hourglass,
+  Infinity as InfinityIcon,
   Loader2,
   MapPin,
   Pencil,
+  Power,
   Route as RouteIcon,
   Send,
   ShieldCheck,
@@ -71,7 +73,7 @@ type Props = {
   canDelete: boolean;
 };
 
-type Action = "confirmar" | "resolver" | "cancelar" | "eliminar" | null;
+type Action = "confirmar" | "resolver" | "cancelar" | "reactivar" | "eliminar" | null;
 
 export function DesvioDetalle({ initial, canManage, canDelete }: Props) {
   const router = useRouter();
@@ -196,6 +198,7 @@ export function DesvioDetalle({ initial, canManage, canDelete }: Props) {
         onConfirmar={() => void transition("confirmar", "Desvio confirmado y activo")}
         onResolver={() => void transition("resolver", "Desvio resuelto")}
         onCancelar={() => void transition("cancelar", "Desvio cancelado")}
+        onReactivar={() => void transition("reactivar", "Desvio reactivado")}
         onAskDelete={() => setConfirmDelete(true)}
         onCancelDelete={() => setConfirmDelete(false)}
         onConfirmDelete={() => void remove()}
@@ -219,7 +222,12 @@ export function DesvioDetalle({ initial, canManage, canDelete }: Props) {
               <Description
                 label="Hora de fin estimada"
                 value={
-                  desvio.hora_fin_estimada ? (
+                  desvio.sin_fecha_fin ? (
+                    <span className="inline-flex items-center gap-1 text-[var(--color-accent)]">
+                      <InfinityIcon size={12} strokeWidth={2} />
+                      Sin fecha de fin
+                    </span>
+                  ) : desvio.hora_fin_estimada ? (
                     <span className="inline-flex items-center gap-1 text-[#d97706]">
                       <Hourglass size={12} strokeWidth={2} />
                       Si (previsiblemente)
@@ -283,6 +291,7 @@ function Header({
   onConfirmar,
   onResolver,
   onCancelar,
+  onReactivar,
   onAskDelete,
   onCancelDelete,
   onConfirmDelete,
@@ -296,12 +305,15 @@ function Header({
   onConfirmar: () => void;
   onResolver: () => void;
   onCancelar: () => void;
+  onReactivar: () => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
 }) {
   const isPendiente = desvio.estado === "PENDIENTE";
   const isActivo = desvio.estado === "ACTIVO";
+  const isResuelto = desvio.estado === "RESUELTO";
+  const isIndefinido = desvio.sin_fecha_fin;
   // El "titulo" del PDF a veces trae basura tipo "PRODUCCION DPTO. PAG. 1 DE 1".
   // Si el tramo esta presente, lo preferimos como subtitulo (es lo que el
   // operador necesita ver). Solo caemos al titulo cuando no hay tramo.
@@ -353,6 +365,15 @@ function Header({
                 </h1>
                 <EstadoBadge estado={desvio.estado} size="md" />
                 <OrigenBadge origen={desvio.origen} size="md" />
+                {isIndefinido ? (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full border border-[rgba(124,58,237,0.40)] bg-[rgba(124,58,237,0.10)] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#7c3aed] shadow-sm"
+                    title="Desvio sin fecha de fin: se desactiva manualmente"
+                  >
+                    <InfinityIcon size={11} strokeWidth={2.2} aria-hidden />
+                    Indefinido
+                  </span>
+                ) : null}
               </div>
               {subtitulo ? (
                 <p className="mt-1.5 flex items-center gap-1.5 text-sm text-[var(--color-text-2)]">
@@ -379,7 +400,7 @@ function Header({
                 disabled={running !== null}
                 loading={running === "confirmar"}
               >
-                Confirmar y activar
+                {isIndefinido ? "Activar" : "Confirmar y activar"}
               </ActionBtn>
             ) : null}
             {isActivo && canManage ? (
@@ -390,7 +411,21 @@ function Header({
                 disabled={running !== null}
                 loading={running === "resolver"}
               >
-                Marcar como resuelto
+                {isIndefinido ? "Desactivar" : "Marcar como resuelto"}
+              </ActionBtn>
+            ) : null}
+            {/* Reactivar solo aplica a desvios indefinidos: vuelve a ponerlo
+                en ACTIVO sin tener que crear uno nuevo. Util para cortes
+                recurrentes (manifestaciones semanales, mercados...). */}
+            {isResuelto && isIndefinido && canManage ? (
+              <ActionBtn
+                tone="violet"
+                icon={Power}
+                onClick={onReactivar}
+                disabled={running !== null}
+                loading={running === "reactivar"}
+              >
+                Reactivar
               </ActionBtn>
             ) : null}
             {isPendiente && canManage ? (
@@ -481,17 +516,27 @@ function ActionBtn({
   loading,
   children,
 }: {
-  tone: "success" | "muted";
+  tone: "success" | "muted" | "violet";
   icon: typeof CheckCircle2;
   onClick: () => void;
   disabled?: boolean;
   loading?: boolean;
   children: React.ReactNode;
 }) {
-  const palette =
-    tone === "success"
-      ? "bg-[var(--color-success)] text-white hover:opacity-90"
-      : "border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)] hover:text-[var(--color-text-1)]";
+  const palette = (() => {
+    switch (tone) {
+      case "success":
+        return "bg-[var(--color-success)] text-white hover:opacity-90";
+      case "violet":
+        // Mismo violeta que el resto del lenguaje visual de los desvios
+        // indefinidos (KPI pill, chips, barra "viva"...) para que el
+        // boton se lea como "vuelve a la misma fase indefinida".
+        return "bg-[#7c3aed] text-white shadow-md shadow-[#7c3aed]/25 hover:bg-[#6d28d9]";
+      case "muted":
+      default:
+        return "border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)] hover:text-[var(--color-text-1)]";
+    }
+  })();
   return (
     <button
       type="button"
@@ -789,6 +834,90 @@ function CronogramaTimeline({ desvio }: { desvio: DesvioDetalleType }) {
   const isResuelto = desvio.estado === "RESUELTO";
   const isCancelado = desvio.estado === "CANCELADO";
 
+  // Caso especial: desvio sin fecha de fin. No tiene sentido pintar barra de
+  // progreso ni "quedan X horas". Mostramos inicio + estado + barra "viva"
+  // con animacion stripe mientras esta abierto. Cuando se cancela/resuelve,
+  // la barra colapsa a un estado plano y mostramos cuanto duro.
+  if (desvio.sin_fecha_fin) {
+    const accent = ESTADO_ACCENT[desvio.estado];
+    const enMarchaMs = Math.max(0, ahora - inicio);
+    const contexto = (() => {
+      if (isCancelado) return "Desvio cancelado, no se aplico.";
+      if (isResuelto) {
+        return `Desactivado tras ${formatDurationMs(new Date(desvio.actualizado_en).getTime() - inicio)}.`;
+      }
+      if (isPendiente) return "Pendiente de activacion manual.";
+      return `Activo desde hace ${formatDurationMs(enMarchaMs)}. Permanecera vivo hasta que se desactive.`;
+    })();
+    const isVivo = !isCancelado && !isResuelto;
+    return (
+      <div className="space-y-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <div>
+            <p className="text-[10.5px] uppercase tracking-[0.08em] text-[var(--color-text-3)]">
+              Inicio
+            </p>
+            <p className="mt-0.5 text-sm font-semibold text-[var(--color-text-1)]">
+              {formatDateTime(desvio.fecha_inicio)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10.5px] uppercase tracking-[0.08em] text-[var(--color-text-3)]">
+              Fin
+            </p>
+            <p className="mt-0.5 inline-flex items-center gap-1.5 text-sm font-semibold text-[#7c3aed]">
+              <InfinityIcon size={14} strokeWidth={2.2} />
+              Sin fecha definida
+            </p>
+          </div>
+        </div>
+
+        {/* Barra "viva": fondo violeta y, cuando esta ACTIVO, lineas diagonales
+            animadas que reflejan que el corte sigue en marcha sin un final
+            predecible. Track violeta tenue para que se distinga visualmente
+            de los desvios programados (que usan rojo/verde segun estado). */}
+        <div className="relative h-3 overflow-hidden rounded-full bg-[rgba(124,58,237,0.10)] ring-1 ring-inset ring-[rgba(124,58,237,0.20)]">
+          {isVivo ? (
+            <>
+              <div
+                className={cn(
+                  "absolute inset-0 rounded-full",
+                  // Banda con animacion: lineas diagonales transparentes
+                  // sobre violeta. Solo en ACTIVO; en PENDIENTE se ve atenuado.
+                  isActivo
+                    ? "bg-[repeating-linear-gradient(45deg,_#7c3aed_0_10px,_#9333ea_10px_20px)] animate-[move-stripes_2s_linear_infinite] shadow-[0_0_0_2px_rgba(124,58,237,0.18)]"
+                    : "bg-[rgba(124,58,237,0.35)]",
+                )}
+                aria-hidden
+              />
+              {/* Brillo sutil sobre la barra para darle sensacion 3D. */}
+              <div
+                className="absolute inset-x-0 top-0 h-1/2 rounded-t-full bg-gradient-to-b from-white/15 to-transparent"
+                aria-hidden
+              />
+            </>
+          ) : (
+            <div
+              className={cn("absolute inset-0 rounded-full opacity-50", accent.fill)}
+              aria-hidden
+            />
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-[var(--color-text-2)]">
+          <span className="inline-flex items-center gap-1.5">
+            <Clock size={11} className="text-[var(--color-text-3)]" aria-hidden />
+            {contexto}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[rgba(124,58,237,0.08)] px-2 py-0.5 text-[10.5px] font-medium text-[#7c3aed]">
+            <InfinityIcon size={10} strokeWidth={2.2} />
+            Sin caducidad automatica
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   // Mostramos la barra al 100% solo si el desvio esta RESUELTO o si ya paso
   // el fin (independientemente del estado, asi vemos "termino" aunque siga
   // marcado como ACTIVO por despiste del operador).
@@ -902,19 +1031,27 @@ function formatDurationMs(ms: number): string {
 function FichaRapidaCard({ desvio }: { desvio: DesvioDetalleType }) {
   const di = new Date(desvio.fecha_inicio);
   const df = new Date(desvio.fecha_fin);
+  const sinFin = desvio.sin_fecha_fin;
   // Comparamos el dia en TZ Atlantic/Canary (no la del navegador) para que el
   // "mismo dia"/"+1d" coincida con la hora canaria que ve el operador.
   const pi = canaryParts(di);
   const pf = canaryParts(df);
   const sameDay =
-    pi.year === pf.year && pi.month === pf.month && pi.day === pf.day;
+    !sinFin && pi.year === pf.year && pi.month === pf.month && pi.day === pf.day;
   return (
-    <section className="rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-accent-light)]/40 via-[var(--color-surface)] to-[var(--color-surface-2)] p-4 shadow-sm">
+    <section
+      className={cn(
+        "rounded-2xl border p-4 shadow-sm transition-colors",
+        sinFin
+          ? "border-[rgba(124,58,237,0.30)] bg-gradient-to-br from-[rgba(124,58,237,0.10)] via-[var(--color-surface)] to-[var(--color-surface-2)]"
+          : "border-[var(--color-border)] bg-gradient-to-br from-[var(--color-accent-light)]/40 via-[var(--color-surface)] to-[var(--color-surface-2)]",
+      )}
+    >
       <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-3)]">
         <Clock
           size={12}
           strokeWidth={1.8}
-          className="text-[var(--color-accent)]"
+          className={cn(sinFin ? "text-[#7c3aed]" : "text-[var(--color-accent)]")}
           aria-hidden
         />
         Vista rapida
@@ -926,13 +1063,33 @@ function FichaRapidaCard({ desvio }: { desvio: DesvioDetalleType }) {
         <ArrowRight
           size={14}
           strokeWidth={2}
-          className="text-[var(--color-accent)]/70"
+          className={cn(sinFin ? "text-[#7c3aed]/70" : "text-[var(--color-accent)]/70")}
           aria-hidden
         />
-        <span className="text-2xl font-semibold tabular-nums tracking-tight text-[var(--color-text-1)]">
-          {formatHour(df)}
-        </span>
-        {desvio.hora_fin_estimada ? (
+        {sinFin ? (
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(124,58,237,0.45)] bg-[rgba(124,58,237,0.12)] px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-[0.06em] text-[#7c3aed] shadow-[0_1px_3px_rgba(124,58,237,0.15)]"
+            title="Sin fecha de fin: hasta que se desactive manualmente"
+          >
+            <span className="relative inline-flex h-1.5 w-1.5">
+              <span
+                className="absolute inset-0 animate-ping rounded-full bg-[#7c3aed] opacity-70"
+                aria-hidden
+              />
+              <span
+                className="relative h-1.5 w-1.5 rounded-full bg-[#7c3aed]"
+                aria-hidden
+              />
+            </span>
+            <InfinityIcon size={13} strokeWidth={2.4} aria-hidden />
+            Hasta desactivar
+          </span>
+        ) : (
+          <span className="text-2xl font-semibold tabular-nums tracking-tight text-[var(--color-text-1)]">
+            {formatHour(df)}
+          </span>
+        )}
+        {!sinFin && desvio.hora_fin_estimada ? (
           <span
             className="inline-flex items-center gap-1 rounded-full bg-[rgba(217,119,6,0.13)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[#d97706]"
             title="Hora de fin estimada (previsiblemente)"
@@ -944,7 +1101,7 @@ function FichaRapidaCard({ desvio }: { desvio: DesvioDetalleType }) {
       </div>
       <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--color-text-2)]">
         <span>{formatShortDate(di)}</span>
-        {sameDay ? null : (
+        {sameDay || sinFin ? null : (
           <>
             <ArrowRight
               size={11}
@@ -961,8 +1118,20 @@ function FichaRapidaCard({ desvio }: { desvio: DesvioDetalleType }) {
           <p className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-3)]">
             Duracion
           </p>
-          <p className="mt-0.5 text-[13px] font-semibold text-[var(--color-text-1)]">
-            {formatDuration(desvio.fecha_inicio, desvio.fecha_fin)}
+          <p className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--color-text-1)]">
+            {sinFin ? (
+              <>
+                <InfinityIcon
+                  size={12}
+                  strokeWidth={2.2}
+                  className="text-[var(--color-accent)]"
+                  aria-hidden
+                />
+                <span>Indefinida</span>
+              </>
+            ) : (
+              formatDuration(desvio.fecha_inicio, desvio.fecha_fin)
+            )}
           </p>
         </div>
         <div>
