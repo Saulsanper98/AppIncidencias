@@ -12,7 +12,11 @@ const prisma = new PrismaClient();
 const DRY = process.argv.includes("--dry");
 
 // Mantener en sincronía con src/lib/ux-exclusions.ts
-const EXCLUDED_EMAILS = ["saul@movilidadgc.org"];
+const EXCLUDED_EMAILS = [
+  "saul@movilidadgc.org",
+  "jefedesala@movilidadgc.org",
+  "read@movilidadgc.org",
+];
 
 async function main() {
   const replacer = (_k, v) => (typeof v === "bigint" ? Number(v) : v);

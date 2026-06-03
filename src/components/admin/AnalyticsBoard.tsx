@@ -24,6 +24,7 @@ import {
   Bus,
   CalendarDays,
   CheckCircle2,
+  ChevronRight,
   Clock,
   Eye,
   Filter,
@@ -40,6 +41,8 @@ import {
   Sparkles,
   Sun,
   Sunrise,
+  Network,
+  Route,
   Timer,
   TrendingDown,
   TrendingUp,
@@ -70,6 +73,7 @@ type Summary = {
     completes: number;
     avg_ms: number;
     median_ms: number;
+    timed_samples: number;
   }[];
   by_shift: { shift: string; events: number; visits: number; creates: number }[];
   ranking: {
@@ -96,7 +100,46 @@ type Summary = {
     mttr_minutes: number;
     median_resolution_minutes: number;
     by_priority: { priority: string; n: number; resolved: number }[];
+    mttr_by_priority: { priority: string; median_minutes: number; samples: number }[];
+    worst_sla_overrun_minutes: number;
     top_buses: { busId: string; n: number }[];
+  };
+  fleet: {
+    by_bus: {
+      busId: string;
+      operator: string | null;
+      municipio: string | null;
+      total: number;
+      resolved: number;
+      open: number;
+      sla_breached: number;
+    }[];
+    by_linea: { linea: string; total: number; resolved: number; open: number; buses: number }[];
+    by_operator: {
+      operator: string;
+      total: number;
+      resolved: number;
+      open: number;
+      buses: number;
+    }[];
+  };
+  state_durations: {
+    state: string;
+    avg_minutes: number;
+    median_minutes: number;
+    samples: number;
+  }[];
+  response_time: {
+    avg_minutes: number;
+    median_minutes: number;
+    samples: number;
+    by_user: {
+      userId: string;
+      name: string | null;
+      avg_minutes: number;
+      median_minutes: number;
+      samples: number;
+    }[];
   };
   trends: {
     events: Trend;
@@ -172,6 +215,10 @@ export function AnalyticsBoard() {
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   /** Filtro por rol para la sección de ranking. */
   const [roleFilter, setRoleFilter] = useState<"all" | string>("all");
+  /** Tab activo en la card "Incidencias por flota". */
+  const [fleetTab, setFleetTab] = useState<"bus" | "linea" | "operator">("bus");
+  /** Cuántas filas mostrar en la tabla de flota (paginación simple). */
+  const [fleetLimit, setFleetLimit] = useState(15);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -362,7 +409,7 @@ export function AnalyticsBoard() {
       ) : null}
 
       {/* ───── FUNNELS + TIEMPO CREACIÓN ───── */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <Card
           title="Embudos de flujos clave"
           Icon={Filter}
@@ -382,23 +429,30 @@ export function AnalyticsBoard() {
         </Card>
 
         <Card
-          title="Tiempo de creación de ticket"
+          title="Tickets creados por usuario"
           Icon={Hourglass}
-          subtitle="Mediana por usuario · barra comparativa"
+          subtitle="Todos los creadores · mediana de tiempo en formulario cuando hay telemetría"
         >
           {!data || data.ticket_create_by_user.length === 0 ? (
-            <EmptyHint text="Aún no hay creaciones." />
+            <EmptyHint text="Aún no hay creaciones en este rango." />
           ) : (
             (() => {
-              const max = Math.max(
-                ...data.ticket_create_by_user.map((u) => u.median_ms),
+              const maxByCount = Math.max(
+                ...data.ticket_create_by_user.map((u) => u.completes),
                 1,
               );
               return (
-                <ul className="space-y-2">
-                  {data.ticket_create_by_user.slice(0, 8).map((u) => {
-                    const pct = Math.round((u.median_ms / max) * 100);
-                    const fast = u.median_ms <= max * 0.45;
+                <ul
+                  className={cn(
+                    "space-y-2",
+                    data.ticket_create_by_user.length > 8
+                      ? "max-h-[480px] overflow-y-auto pr-1"
+                      : "",
+                  )}
+                >
+                  {data.ticket_create_by_user.map((u) => {
+                    const pct = Math.round((u.completes / maxByCount) * 100);
+                    const hasTime = u.timed_samples > 0 && u.median_ms > 0;
                     return (
                       <li
                         key={u.userId ?? u.name ?? "anon"}
@@ -413,26 +467,30 @@ export function AnalyticsBoard() {
                               </p>
                               <p className="text-[10.5px] text-[var(--color-text-3)]">
                                 {u.completes} ticket{u.completes === 1 ? "" : "s"}
+                                {hasTime ? ` · ${u.timed_samples} con tiempo medido` : ""}
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="font-mono text-[13.5px] font-bold tabular-nums text-[var(--color-text-1)]">
-                              {formatDuration(u.median_ms)}
-                            </p>
-                            <p className="text-[10px] text-[var(--color-text-3)]">
-                              media {formatDuration(u.avg_ms)}
-                            </p>
+                            {hasTime ? (
+                              <>
+                                <p className="font-mono text-[13.5px] font-bold tabular-nums text-[var(--color-text-1)]">
+                                  {formatDuration(u.median_ms)}
+                                </p>
+                                <p className="text-[10px] text-[var(--color-text-3)]">
+                                  media {formatDuration(u.avg_ms)}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-[10.5px] italic text-[var(--color-text-3)]">
+                                sin tiempo medido
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
                           <div
-                            className={cn(
-                              "h-full rounded-full",
-                              fast
-                                ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
-                                : "bg-gradient-to-r from-amber-500 to-orange-400",
-                            )}
+                            className="h-full rounded-full bg-gradient-to-r from-violet-500 via-indigo-500 to-sky-500"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -447,7 +505,7 @@ export function AnalyticsBoard() {
       </div>
 
       {/* ───── TIEMPO POR SECCIÓN + POR TURNO ───── */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <Card
           title="Tiempo de uso por sección"
           Icon={Layers}
@@ -677,7 +735,7 @@ export function AnalyticsBoard() {
       </Card>
 
       {/* ───── BÚSQUEDAS + ERRORES ───── */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <Card
           title="Top búsquedas (Ctrl+K)"
           Icon={Search}
@@ -756,7 +814,7 @@ export function AnalyticsBoard() {
       </div>
 
       {/* ───── BLOQUE NUEVO: SLA / MTTR ───── */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <Card
           title="Cumplimiento de SLA"
           Icon={ShieldCheck}
@@ -782,45 +840,50 @@ export function AnalyticsBoard() {
         </Card>
 
         <Card
-          title="Buses con más incidencias"
+          title="Incidencias por flota"
           Icon={Bus}
-          subtitle="Top 10 del rango"
+          subtitle="Drill-down completo: bus, línea u operador"
         >
-          {!data || data.tickets.top_buses.length === 0 ? (
-            <EmptyHint text="Sin tickets en este rango." />
+          {data ? (
+            <FleetDrilldown
+              fleet={data.fleet}
+              activeTab={fleetTab}
+              onTabChange={(t) => {
+                setFleetTab(t);
+                setFleetLimit(15);
+              }}
+              limit={fleetLimit}
+              onShowMore={() => setFleetLimit((n) => n + 25)}
+            />
           ) : (
-            <ul className="space-y-1.5">
-              {data.tickets.top_buses.map((b, i) => {
-                const max = data.tickets.top_buses[0]?.n ?? 1;
-                const pct = Math.round((b.n / max) * 100);
-                return (
-                  <li key={b.busId} className="flex items-center gap-2 text-[12px]">
-                    <span className="w-5 text-right font-mono text-[10.5px] text-[var(--color-text-3)]">
-                      #{i + 1}
-                    </span>
-                    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--color-surface-2)] text-[var(--color-text-2)]">
-                      <Bus size={11} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="truncate font-mono font-semibold text-[var(--color-text-1)]">
-                          {b.busId}
-                        </span>
-                        <span className="shrink-0 font-mono tabular-nums text-[var(--color-text-2)]">
-                          {b.n}
-                        </span>
-                      </div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-orange-500 to-rose-500"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <EmptyHint text="Cargando…" />
+          )}
+        </Card>
+      </div>
+
+      {/* ───── BLOQUE NUEVO: TIEMPO POR ESTADO + RESPONSIVIDAD ───── */}
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <Card
+          title="Tiempo medio en cada estado"
+          Icon={Hourglass}
+          subtitle="Dónde se atascan los tickets antes de pasar al siguiente estado"
+        >
+          {data ? (
+            <StateDurationsPanel rows={data.state_durations} />
+          ) : (
+            <EmptyHint text="Cargando…" />
+          )}
+        </Card>
+
+        <Card
+          title="Responsividad del equipo"
+          Icon={Zap}
+          subtitle="Tiempo desde que se asigna hasta el primer cambio de estado"
+        >
+          {data ? (
+            <ResponseTimePanel rt={data.response_time} />
+          ) : (
+            <EmptyHint text="Cargando…" />
           )}
         </Card>
       </div>
@@ -839,7 +902,7 @@ export function AnalyticsBoard() {
       </Card>
 
       {/* ───── BLOQUE NUEVO: PRIORIDAD + API ERRORS + ROLES ───── */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <Card
           title="Tickets por prioridad"
           Icon={Gauge}
@@ -967,61 +1030,152 @@ export function AnalyticsBoard() {
 // ─── Sub-componentes ampliados ───────────────────────────────────────────────
 
 function SlaPanel({ tickets }: { tickets: Summary["tickets"] }) {
-  const pct = tickets.sla_total > 0
-    ? Math.round(((tickets.sla_total - tickets.sla_breached) / tickets.sla_total) * 100)
-    : 0;
+  const total = tickets.sla_total;
+  const met = total - tickets.sla_breached;
+  const pct = total > 0 ? Math.round((met / total) * 100) : 0;
   const tone =
     pct >= 90
-      ? { ring: "ring-emerald-500/40", text: "text-emerald-300", bg: "bg-emerald-500/15" }
+      ? {
+          ring: "ring-emerald-500/40",
+          text: "text-emerald-300",
+          bg: "bg-emerald-500/15",
+          stroke: "stroke-emerald-400",
+          glow: "shadow-[0_0_24px_rgba(16,185,129,0.25)]",
+        }
       : pct >= 70
-        ? { ring: "ring-amber-500/40", text: "text-amber-300", bg: "bg-amber-500/15" }
-        : { ring: "ring-[var(--color-error)]/40", text: "text-[var(--color-error)]", bg: "bg-[var(--color-error)]/10" };
-  const r = 38;
+        ? {
+            ring: "ring-amber-500/40",
+            text: "text-amber-300",
+            bg: "bg-amber-500/15",
+            stroke: "stroke-amber-400",
+            glow: "shadow-[0_0_24px_rgba(245,158,11,0.25)]",
+          }
+        : {
+            ring: "ring-[var(--color-error)]/40",
+            text: "text-[var(--color-error)]",
+            bg: "bg-[var(--color-error)]/10",
+            stroke: "stroke-rose-400",
+            glow: "shadow-[0_0_24px_rgba(244,63,94,0.25)]",
+          };
+  const r = 42;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - pct / 100);
+  // Barra apilada: proporción visual cumplidos vs vencidos.
+  const metPct = total > 0 ? (met / total) * 100 : 0;
+  const breachedPct = 100 - metPct;
+  const fmtMin = (m: number) => {
+    if (m < 1) return "<1 min";
+    if (m < 60) return `${Math.round(m)} min`;
+    const h = Math.floor(m / 60);
+    const mm = Math.round(m % 60);
+    if (h < 24) return `${h}h ${mm}m`;
+    const d = Math.floor(h / 24);
+    return `${d}d ${h % 24}h`;
+  };
   return (
-    <div className="flex flex-col items-center gap-3 text-center">
-      <div className="relative">
-        <svg width="100" height="100" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r={r} className="fill-none stroke-[var(--color-surface-3)]" strokeWidth="9" />
-          <circle
-            cx="50"
-            cy="50"
-            r={r}
-            className={cn("fill-none", tone.text)}
-            stroke="currentColor"
-            strokeWidth="9"
-            strokeLinecap="round"
-            strokeDasharray={c}
-            strokeDashoffset={offset}
-            transform="rotate(-90 50 50)"
-            style={{ transition: "stroke-dashoffset 0.8s ease" }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className={cn("font-mono text-2xl font-bold tabular-nums", tone.text)}>
-            {pct}%
-          </span>
+    <div className="flex flex-col gap-4">
+      {/* Donut + número grande */}
+      <div className="flex items-center gap-4">
+        <div className={cn("relative shrink-0 rounded-full", tone.glow)}>
+          <svg width="108" height="108" viewBox="0 0 108 108">
+            <circle cx="54" cy="54" r={r} className="fill-none stroke-[var(--color-surface-3)]" strokeWidth="10" />
+            <circle
+              cx="54"
+              cy="54"
+              r={r}
+              className={cn("fill-none", tone.stroke)}
+              stroke="currentColor"
+              strokeWidth="10"
+              strokeLinecap="round"
+              strokeDasharray={c}
+              strokeDashoffset={offset}
+              transform="rotate(-90 54 54)"
+              style={{ transition: "stroke-dashoffset 0.8s ease" }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className={cn("font-mono text-2xl font-bold leading-none tabular-nums", tone.text)}>
+              {pct}%
+            </span>
+            <span className="mt-1 text-[9px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+              dentro
+            </span>
+          </div>
+        </div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-bold ring-1 ring-inset", tone.ring, tone.bg, tone.text)}>
+            <ShieldCheck size={10} />
+            {met} de {total} a tiempo
+          </div>
+          {tickets.sla_breached > 0 ? (
+            <p className="text-[11px] text-[var(--color-text-2)]">
+              <AlertOctagon size={10} className="-mt-0.5 mr-1 inline text-[var(--color-error)]" />
+              <span className="font-bold text-[var(--color-error)]">{tickets.sla_breached}</span>
+              {" "}fuera de plazo
+            </p>
+          ) : (
+            <p className="text-[11px] text-emerald-300">Sin SLA vencidos. ¡Bien!</p>
+          )}
+          {tickets.worst_sla_overrun_minutes > 0 ? (
+            <p className="text-[10.5px] text-[var(--color-text-3)]">
+              <Clock size={9} className="-mt-0.5 mr-1 inline" />
+              peor retraso: <span className="font-mono font-bold text-[var(--color-text-2)]">
+                {fmtMin(tickets.worst_sla_overrun_minutes)}
+              </span>
+            </p>
+          ) : null}
         </div>
       </div>
-      <div className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset", tone.ring, tone.bg, tone.text)}>
-        <ShieldCheck size={11} />
-        {tickets.sla_total - tickets.sla_breached} de {tickets.sla_total} dentro de SLA
-      </div>
-      {tickets.sla_breached > 0 ? (
-        <p className="text-[11px] text-[var(--color-text-3)]">
-          <AlertOctagon size={10} className="-mt-0.5 mr-1 inline text-[var(--color-error)]" />
-          {tickets.sla_breached} ticket{tickets.sla_breached === 1 ? "" : "s"} fuera de plazo
+
+      {/* Barra apilada cumplidos/vencidos */}
+      {total > 0 ? (
+        <div>
+          <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+            <span className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              A tiempo
+            </span>
+            <span className="flex items-center gap-1">
+              Vencidos
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+            </span>
+          </div>
+          <div className="flex h-2.5 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+              style={{ width: `${metPct}%`, transition: "width 0.8s ease" }}
+            />
+            <div
+              className="h-full bg-gradient-to-r from-rose-500 to-rose-400"
+              style={{ width: `${breachedPct}%`, transition: "width 0.8s ease" }}
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between font-mono text-[10px] tabular-nums text-[var(--color-text-2)]">
+            <span>{met}</span>
+            <span>{tickets.sla_breached}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Footer con tickets abiertos pendientes de cierre — pueden romper SLA */}
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 text-[11px]">
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--color-text-3)]">Pendientes (aún abiertos)</span>
+          <span className="font-mono font-bold tabular-nums text-amber-300">
+            {tickets.open}
+          </span>
+        </div>
+        <p className="mt-0.5 text-[10px] text-[var(--color-text-3)]">
+          No cuentan en el % aún, pero pueden vencer si no se cierran a tiempo.
         </p>
-      ) : (
-        <p className="text-[11px] text-emerald-300">Sin SLA vencidos. ¡Bien!</p>
-      )}
+      </div>
     </div>
   );
 }
 
 function MttrPanel({ tickets }: { tickets: Summary["tickets"] }) {
   const fmt = (mins: number) => {
+    if (mins < 1) return "<1 min";
     if (mins < 60) return `${mins} min`;
     const h = Math.floor(mins / 60);
     const m = mins % 60;
@@ -1030,19 +1184,23 @@ function MttrPanel({ tickets }: { tickets: Summary["tickets"] }) {
     const hr = h % 24;
     return `${d}d ${hr}h`;
   };
+  const maxByPrio = Math.max(
+    ...tickets.mttr_by_priority.map((p) => p.median_minutes),
+    1,
+  );
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+        <div className="rounded-xl border border-[var(--color-border)] bg-emerald-500/10 p-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-200/80">
             Mediana
           </p>
           <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-emerald-300">
             {tickets.median_resolution_minutes > 0 ? fmt(tickets.median_resolution_minutes) : "—"}
           </p>
         </div>
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+        <div className="rounded-xl border border-[var(--color-border)] bg-sky-500/10 p-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-200/80">
             Media
           </p>
           <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-sky-300">
@@ -1050,20 +1208,419 @@ function MttrPanel({ tickets }: { tickets: Summary["tickets"] }) {
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-2 text-center">
+
+      {/* MTTR por prioridad — útil para detectar si los críticos no se priorizan */}
+      {tickets.mttr_by_priority.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+            Mediana por prioridad
+          </p>
+          <ul className="space-y-1">
+            {tickets.mttr_by_priority.map((p) => {
+              const meta = getPriorityColor(p.priority);
+              const pct = Math.round((p.median_minutes / maxByPrio) * 100);
+              return (
+                <li key={p.priority} className="space-y-0.5">
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="flex items-center gap-1.5">
+                      <span className={cn("h-2 w-2 rounded-full", meta.dot)} />
+                      <span className={cn("font-bold uppercase tracking-wider", meta.text)}>
+                        {p.priority}
+                      </span>
+                      <span className="font-mono text-[9.5px] text-[var(--color-text-3)]">
+                        ({p.samples})
+                      </span>
+                    </span>
+                    <span className="font-mono font-bold tabular-nums text-[var(--color-text-1)]">
+                      {fmt(p.median_minutes)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
+                    <div
+                      className={cn("h-full rounded-full", meta.bar)}
+                      style={{ width: `${pct}%`, transition: "width 0.8s ease" }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-3 gap-1.5 text-center">
         <div className="rounded-lg bg-emerald-500/10 px-2 py-1.5">
-          <p className="text-[10px] uppercase tracking-wider text-emerald-200/80">Resueltos</p>
-          <p className="font-mono text-base font-bold text-emerald-300">{tickets.resolved}</p>
+          <p className="text-[9px] uppercase tracking-wider text-emerald-200/80">Resueltos</p>
+          <p className="font-mono text-sm font-bold text-emerald-300">{tickets.resolved}</p>
         </div>
         <div className="rounded-lg bg-amber-500/10 px-2 py-1.5">
-          <p className="text-[10px] uppercase tracking-wider text-amber-200/80">Creados</p>
-          <p className="font-mono text-base font-bold text-amber-300">{tickets.created}</p>
+          <p className="text-[9px] uppercase tracking-wider text-amber-200/80">Creados</p>
+          <p className="font-mono text-sm font-bold text-amber-300">{tickets.created}</p>
         </div>
         <div className="rounded-lg bg-rose-500/10 px-2 py-1.5">
-          <p className="text-[10px] uppercase tracking-wider text-rose-200/80">Abiertos</p>
-          <p className="font-mono text-base font-bold text-rose-300">{tickets.open}</p>
+          <p className="text-[9px] uppercase tracking-wider text-rose-200/80">Abiertos</p>
+          <p className="font-mono text-sm font-bold text-rose-300">{tickets.open}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FleetDrilldown({
+  fleet,
+  activeTab,
+  onTabChange,
+  limit,
+  onShowMore,
+}: {
+  fleet: Summary["fleet"];
+  activeTab: "bus" | "linea" | "operator";
+  onTabChange: (t: "bus" | "linea" | "operator") => void;
+  limit: number;
+  onShowMore: () => void;
+}) {
+  const tabs: { id: typeof activeTab; label: string; Icon: typeof Bus; count: number }[] = [
+    { id: "bus", label: "Buses", Icon: Bus, count: fleet.by_bus.length },
+    { id: "linea", label: "Líneas", Icon: Route, count: fleet.by_linea.length },
+    { id: "operator", label: "Operadores", Icon: Network, count: fleet.by_operator.length },
+  ];
+  const rows: { key: string; primary: string; secondary?: string; total: number; resolved: number; open: number; extra?: string; sla?: number }[] = (() => {
+    if (activeTab === "bus") {
+      return fleet.by_bus.map((b) => ({
+        key: b.busId,
+        primary: b.busId,
+        secondary: [b.operator, b.municipio].filter(Boolean).join(" · ") || undefined,
+        total: b.total,
+        resolved: b.resolved,
+        open: b.open,
+        sla: b.sla_breached,
+      }));
+    }
+    if (activeTab === "linea") {
+      return fleet.by_linea.map((l) => ({
+        key: l.linea,
+        primary: l.linea,
+        total: l.total,
+        resolved: l.resolved,
+        open: l.open,
+        extra: `${l.buses} bus${l.buses === 1 ? "" : "es"}`,
+      }));
+    }
+    return fleet.by_operator.map((o) => ({
+      key: o.operator,
+      primary: o.operator,
+      total: o.total,
+      resolved: o.resolved,
+      open: o.open,
+      extra: `${o.buses} bus${o.buses === 1 ? "" : "es"}`,
+    }));
+  })();
+  const max = rows[0]?.total ?? 1;
+  const visible = rows.slice(0, limit);
+
+  if (rows.length === 0) {
+    return <EmptyHint text="Sin tickets en este rango." />;
+  }
+  return (
+    <div className="space-y-3">
+      <div className="inline-flex w-full overflow-x-auto rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-1">
+        {tabs.map((t) => {
+          const Icon = t.Icon;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onTabChange(t.id)}
+              className={cn(
+                "inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-semibold transition-all",
+                activeTab === t.id
+                  ? "bg-gradient-to-br from-[var(--color-accent)] to-violet-600 text-white shadow"
+                  : "text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+              )}
+            >
+              <Icon size={12} />
+              {t.label}
+              <span className="rounded-full bg-black/15 px-1.5 text-[10px] font-mono tabular-nums">
+                {t.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px]">
+          <thead className="text-left text-[10px] uppercase tracking-widest text-[var(--color-text-3)]">
+            <tr className="border-b border-[var(--color-border)]">
+              <th className="px-2 py-1.5">#</th>
+              <th className="px-2 py-1.5">{activeTab === "bus" ? "Bus" : activeTab === "linea" ? "Línea" : "Operador"}</th>
+              <th className="px-2 py-1.5 text-right">Total</th>
+              <th className="px-2 py-1.5 text-right">Resueltos</th>
+              <th className="px-2 py-1.5 text-right">Abiertos</th>
+              {activeTab === "bus" ? <th className="px-2 py-1.5 text-right">SLA</th> : <th className="px-2 py-1.5 text-right">Buses</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((r, i) => {
+              const pct = Math.round((r.total / max) * 100);
+              return (
+                <tr
+                  key={r.key + i}
+                  className="border-b border-[var(--color-border)]/60 transition-colors hover:bg-[var(--color-surface-2)]/40"
+                >
+                  <td className="px-2 py-1.5 font-mono text-[var(--color-text-3)]">{i + 1}</td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-2)] text-[var(--color-text-2)]">
+                        {activeTab === "bus" ? <Bus size={11} /> : activeTab === "linea" ? <Route size={11} /> : <Network size={11} />}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-mono font-semibold text-[var(--color-text-1)]">
+                          {r.primary}
+                        </p>
+                        {r.secondary ? (
+                          <p className="truncate text-[10px] text-[var(--color-text-3)]">
+                            {r.secondary}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-orange-500 to-rose-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono font-bold tabular-nums text-[var(--color-text-1)]">
+                    {r.total}
+                  </td>
+                  <td className="px-2 py-1.5 text-right">
+                    <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-emerald-300">
+                      {r.resolved}
+                    </span>
+                  </td>
+                  <td className="px-2 py-1.5 text-right">
+                    {r.open > 0 ? (
+                      <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-amber-300">
+                        {r.open}
+                      </span>
+                    ) : (
+                      <span className="text-[var(--color-text-3)]">—</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono tabular-nums text-[var(--color-text-3)]">
+                    {activeTab === "bus"
+                      ? r.sla && r.sla > 0
+                        ? <span className="text-[var(--color-error)]">{r.sla}</span>
+                        : "—"
+                      : r.extra ?? ""}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {rows.length > limit ? (
+        <div className="flex justify-center pt-1">
+          <button
+            type="button"
+            onClick={onShowMore}
+            className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-1 text-[11px] font-semibold text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
+          >
+            Mostrar más
+            <ChevronRight size={11} />
+            <span className="font-mono text-[10px] text-[var(--color-text-3)]">
+              · {rows.length - limit} restantes
+            </span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Tiempo medio que un ticket pasa EN cada estado antes de transicionar.
+ * Útil para detectar dónde se atasca el flujo (p.ej. mucho tiempo en
+ * `esperando_repuesto` indica problemas de stock).
+ */
+function StateDurationsPanel({ rows }: { rows: Summary["state_durations"] }) {
+  if (rows.length === 0) {
+    return (
+      <EmptyHint text="Sin transiciones registradas en este rango. Necesita al menos un ticket que haya cambiado de estado." />
+    );
+  }
+  const stateMeta: Record<
+    string,
+    { label: string; dot: string; bar: string; Icon: typeof Bus }
+  > = {
+    abierto: { label: "Abierto", dot: "bg-rose-500", bar: "from-rose-500 to-rose-400", Icon: AlertOctagon },
+    en_proceso: { label: "En proceso", dot: "bg-amber-500", bar: "from-amber-500 to-orange-400", Icon: Activity },
+    esperando_repuesto: { label: "Esperando repuesto", dot: "bg-sky-500", bar: "from-sky-500 to-cyan-400", Icon: Clock },
+    resuelto: { label: "Resuelto", dot: "bg-emerald-500", bar: "from-emerald-500 to-emerald-400", Icon: CheckCircle2 },
+  };
+  const fmt = (m: number) => {
+    if (m < 1) return "<1 min";
+    if (m < 60) return `${Math.round(m)} min`;
+    const h = Math.floor(m / 60);
+    const mm = Math.round(m % 60);
+    if (h < 24) return `${h}h ${mm}m`;
+    const d = Math.floor(h / 24);
+    const hr = h % 24;
+    return `${d}d ${hr}h`;
+  };
+  const max = Math.max(...rows.map((r) => r.avg_minutes), 1);
+  return (
+    <ul className="space-y-2.5">
+      {rows.map((r) => {
+        const meta = stateMeta[r.state] ?? {
+          label: r.state,
+          dot: "bg-slate-500",
+          bar: "from-slate-500 to-slate-400",
+          Icon: Clock,
+        };
+        const pct = Math.round((r.avg_minutes / max) * 100);
+        return (
+          <li
+            key={r.state}
+            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className={cn("h-2.5 w-2.5 rounded-full", meta.dot)} />
+                <span className="text-[12.5px] font-semibold text-[var(--color-text-1)]">
+                  {meta.label}
+                </span>
+                <span className="rounded-full bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-text-3)]">
+                  {r.samples} muestras
+                </span>
+              </div>
+              <div className="text-right">
+                <p className="font-mono text-[14px] font-bold tabular-nums text-[var(--color-text-1)]">
+                  {fmt(r.median_minutes)}
+                </p>
+                <p className="font-mono text-[10px] text-[var(--color-text-3)]">
+                  media {fmt(r.avg_minutes)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
+              <div
+                className={cn("h-full rounded-full bg-gradient-to-r", meta.bar)}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * Responsividad del equipo: tiempo desde que se asigna un ticket hasta el
+ * primer cambio de estado posterior. Muestra global + ranking por técnico.
+ */
+function ResponseTimePanel({ rt }: { rt: Summary["response_time"] }) {
+  if (rt.samples === 0) {
+    return (
+      <EmptyHint text="Sin asignaciones seguidas de cambios de estado en este rango." />
+    );
+  }
+  const fmt = (m: number) => {
+    if (m < 1) return "<1 min";
+    if (m < 60) return `${Math.round(m)} min`;
+    const h = Math.floor(m / 60);
+    const mm = Math.round(m % 60);
+    if (h < 24) return `${h}h ${mm}m`;
+    const d = Math.floor(h / 24);
+    const hr = h % 24;
+    return `${d}d ${hr}h`;
+  };
+  const fastest = rt.by_user[0];
+  const slowest = rt.by_user[rt.by_user.length - 1];
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-[var(--color-border)] bg-emerald-500/10 p-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-200/80">
+            Mediana global
+          </p>
+          <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-emerald-300">
+            {fmt(rt.median_minutes)}
+          </p>
+          <p className="mt-0.5 text-[10px] text-emerald-200/60">{rt.samples} respuestas</p>
+        </div>
+        <div className="rounded-xl border border-[var(--color-border)] bg-sky-500/10 p-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-200/80">
+            Media global
+          </p>
+          <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-sky-300">
+            {fmt(rt.avg_minutes)}
+          </p>
+          <p className="mt-0.5 text-[10px] text-sky-200/60">a primer cambio</p>
+        </div>
+      </div>
+
+      {rt.by_user.length > 0 ? (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+            <span>Top por mediana</span>
+            <span>menor = más rápido</span>
+          </div>
+          <ul className="space-y-1">
+            {rt.by_user.slice(0, 6).map((u, i) => {
+              const max = Math.max(...rt.by_user.map((x) => x.median_minutes), 1);
+              const pct = Math.round((u.median_minutes / max) * 100);
+              const isFast = i === 0 && rt.by_user.length > 1;
+              return (
+                <li
+                  key={u.userId}
+                  className="rounded-lg border border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/30 px-2.5 py-1.5"
+                >
+                  <div className="flex items-center gap-2 text-[11.5px]">
+                    <Avatar name={u.name} small />
+                    <span className="min-w-0 flex-1 truncate font-medium text-[var(--color-text-1)]">
+                      {u.name ?? "Sin sesión"}
+                      {isFast ? (
+                        <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-300">
+                          <Zap size={8} /> top
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="shrink-0 font-mono tabular-nums text-[var(--color-text-2)]">
+                      {fmt(u.median_minutes)}
+                    </span>
+                    <span className="w-12 shrink-0 text-right font-mono text-[10px] text-[var(--color-text-3)]">
+                      {u.samples}×
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
+                    <div
+                      className={cn(
+                        "h-full rounded-full",
+                        isFast
+                          ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                          : "bg-gradient-to-r from-sky-500 to-violet-500",
+                      )}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {rt.by_user.length >= 2 && fastest && slowest && fastest.userId !== slowest.userId ? (
+            <p className="text-[10.5px] text-[var(--color-text-3)]">
+              <Zap size={10} className="-mt-0.5 mr-1 inline text-emerald-300" />
+              {fastest.name} responde {Math.round(slowest.median_minutes / Math.max(fastest.median_minutes, 1))}× más rápido que {slowest.name}.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
