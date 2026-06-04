@@ -386,14 +386,44 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
       .filter((section) => section.items.length > 0);
   }, [sessionUser]);
 
+  // Bloquea el scroll del body mientras el drawer movil esta abierto, asi
+  // el contenido de la pagina detras no se mueve al hacer scroll dentro del
+  // menu. Tambien cierra el menu si la pantalla pasa a desktop (>= md) por
+  // un giro/redimension, evitando estados raros.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = () => {
+      if (mq.matches) setOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => {
+      document.body.style.overflow = prev;
+      mq.removeEventListener("change", onChange);
+    };
+  }, [open]);
+
   return (
     <>
+      {/* Boton hamburguesa flotante (solo movil). Cuadrado de 44x44 — el
+          minimo recomendado por Apple HIG para targets tactiles — para que
+          se vea limpio en cualquier ancho. Se sincroniza con el padding-left
+          de los headers de las paginas via pl-14 md:pl-0. Respeta el
+          safe-area del iPhone para no quedar tapado por la status bar. */}
       <button
+        type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="fixed left-4 top-4 z-50 inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text-1)] shadow-lg backdrop-blur md:hidden"
+        aria-label={open ? "Cerrar menu" : "Abrir menu"}
+        aria-expanded={open}
+        style={{
+          top: "calc(env(safe-area-inset-top, 0px) + 0.625rem)",
+          left: "calc(env(safe-area-inset-left, 0px) + 0.75rem)",
+        }}
+        className="fixed z-50 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/95 text-[var(--color-text-1)] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)] backdrop-blur transition-colors hover:bg-[var(--color-surface-2)] active:scale-[0.97] md:hidden"
       >
-        <Menu size={16} />
-        Menu
+        {open ? <ChevronLeft size={18} /> : <Menu size={18} />}
       </button>
 
       <AnimatePresence>
@@ -403,7 +433,7 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-30 bg-black/60 md:hidden"
+            className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
             aria-label="Cerrar menú"
           />
         )}
@@ -411,11 +441,13 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
 
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 flex h-full min-h-screen flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] transition-all duration-200 ease-in-out",
+          "fixed left-0 top-0 z-40 flex h-full min-h-screen flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl shadow-black/40 transition-all duration-200 ease-in-out md:shadow-none",
           open ? "translate-x-0" : "-translate-x-full",
           "md:sticky md:translate-x-0",
           expanded ? "overflow-hidden" : "overflow-visible",
-          expanded ? "w-60 md:w-60" : "w-60 md:w-16",
+          // En movil el drawer siempre se ve EXPANDIDO con un ancho mas
+          // generoso (18rem) — el modo "icon-only" solo aplica en desktop.
+          expanded ? "w-[18rem] md:w-60" : "w-[18rem] md:w-16",
         )}
       >
         <div className="flex-shrink-0 px-3 pb-2 pt-4">

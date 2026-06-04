@@ -1320,26 +1320,31 @@ export function MapaView() {
   const mapLayoutKey = `${presentationMode ? 1 : 0}-${mapaMuro ? 1 : 0}-${mobileTab}-${filtersMenuOpen ? 1 : 0}`;
 
   return (
-    <div className={cn("flex h-full min-h-0 w-full min-w-0 flex-1 flex-col", mapaMuro ? "gap-2" : "gap-3")}>
+    // Movil: hero ultra-compacto. Ocultamos badge CCMGC, descripcion y
+    // barra de controles secundaria para liberar verticales y que la
+    // bandeja/mapa de abajo puedan respirar (en un iPhone 13 Pro el
+    // header completo se comia ~280px del viewport util). El chevron de
+    // migas ya dice donde esta el usuario.
+    <div className={cn("flex h-full min-h-0 w-full min-w-0 flex-1 flex-col", mapaMuro ? "gap-2" : "gap-2 sm:gap-3")}>
       {!mapaMuro ? (
-      <header className="relative shrink-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/25 p-4 shadow-sm">
+      <header className="relative shrink-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/25 p-2.5 shadow-sm sm:p-4">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
         />
-        <div className="relative flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/20">
-              <MapPinned size={18} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
+        <div className="relative flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
+          <div className="flex w-full min-w-0 items-center gap-2.5 sm:flex-1 sm:items-start sm:gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/20 sm:h-10 sm:w-10 sm:rounded-xl">
+              <MapPinned size={16} strokeWidth={1.7} className="text-[var(--color-accent)] sm:h-[18px] sm:w-[18px]" aria-hidden />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-3)]">
+            <div className="min-w-0 flex-1">
+              <div className="hidden items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-3)] sm:flex">
                 <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold text-[var(--color-text-3)]">
                   CCMGC
                 </span>
                 Vista operativa
               </div>
-              <h1 className="mt-0.5 flex items-center gap-2 text-[20px] font-semibold tracking-tight text-[var(--color-text-1)]">
+              <h1 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-[var(--color-text-1)] sm:mt-0.5 sm:text-[20px]">
                 Mapa operativo
                 <FeedbackTargetButton id="mapa/vista-operativa" label="Mapa operativo de incidencias" />
               </h1>
@@ -1350,25 +1355,25 @@ export function MapaView() {
                 </span>
                 ) o coordenadas GPS si el ticket las tiene. Pulsa un marcador o una fila para centrar.
               </p>
-              <p className="mt-0.5 text-[11.5px] text-[var(--color-text-3)] sm:hidden">
-                Municipio o GPS; toca marcador o fila de la lista.
-              </p>
+              {/* Chips KPI compactos. En movil bajamos los paddings y el
+                  espacio para que las 3 metricas quepan en una sola
+                  linea junto al titulo. */}
               {data ? (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <div className="mt-1.5 flex flex-wrap items-center gap-1 sm:mt-2 sm:gap-1.5">
                   {urgentCount > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-error-light)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-error)] ring-1 ring-[var(--color-error)]/30">
-                      <span className="num-tabular text-[12px] font-bold">{urgentCount}</span>
-                      <span className="uppercase tracking-wide opacity-80">Urgentes / SLA</span>
+                    <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-error-light)] px-1 py-0.5 text-[10px] font-semibold text-[var(--color-error)] ring-1 ring-[var(--color-error)]/30 sm:px-1.5 sm:text-[10.5px]">
+                      <span className="num-tabular text-[11px] font-bold sm:text-[12px]">{urgentCount}</span>
+                      <span className="uppercase tracking-wide opacity-80">SLA</span>
                     </span>
                   ) : null}
-                  <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10.5px] font-medium text-[var(--color-text-2)] ring-1 ring-[var(--color-border)]">
-                    <span className="num-tabular text-[12px] font-semibold text-[var(--color-text-1)]">{nVisible}</span>
-                    <span className="uppercase tracking-wide opacity-80">En mapa</span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-surface-2)] px-1 py-0.5 text-[10px] font-medium text-[var(--color-text-2)] ring-1 ring-[var(--color-border)] sm:px-1.5 sm:text-[10.5px]">
+                    <span className="num-tabular text-[11px] font-semibold text-[var(--color-text-1)] sm:text-[12px]">{nVisible}</span>
+                    <span className="uppercase tracking-wide opacity-80">Mapa</span>
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10.5px] font-medium text-[var(--color-text-2)] ring-1 ring-[var(--color-border)]">
-                    <span className="num-tabular text-[12px] font-semibold text-[var(--color-text-1)]">{sortedFilteredList.length}</span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-surface-2)] px-1 py-0.5 text-[10px] font-medium text-[var(--color-text-2)] ring-1 ring-[var(--color-border)] sm:px-1.5 sm:text-[10.5px]">
+                    <span className="num-tabular text-[11px] font-semibold text-[var(--color-text-1)] sm:text-[12px]">{sortedFilteredList.length}</span>
                     <span className="uppercase tracking-wide opacity-80">
-                      En lista{listSearch.trim() ? "*" : ""}
+                      Lista{listSearch.trim() ? "*" : ""}
                     </span>
                   </span>
                   <span className="hidden text-[10.5px] text-[var(--color-text-3)] sm:inline">
@@ -1378,7 +1383,10 @@ export function MapaView() {
               ) : null}
             </div>
           </div>
-          <div className="relative flex shrink-0 flex-wrap items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] p-1 shadow-sm">
+          {/* Barra de controles secundarios: oculta en movil (los atajos
+              de teclado no aplican, "Enfoque/Panel" duplica los tabs
+              Bandeja/Mapa, y "Ir a bandeja" se accede desde el menu). */}
+          <div className="relative hidden shrink-0 flex-wrap items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] p-1 shadow-sm sm:flex">
             <button
               type="button"
               onClick={() => setPresentationMode((v) => !v)}
@@ -1480,9 +1488,12 @@ export function MapaView() {
         </div>
       ) : null}
 
+      {/* Tabs compactos en movil: alto 36px en vez de 40px para ganar
+          espacio vertical. Quitamos el mb-2 (el gap del flex padre ya
+          separa) y bajamos el padding interno. */}
       <div
         className={cn(
-          "mb-2 flex gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 lg:hidden",
+          "flex shrink-0 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 lg:hidden",
           mapaMuro && "hidden",
         )}
       >
@@ -1490,7 +1501,7 @@ export function MapaView() {
           type="button"
           onClick={() => setMobileTab("panel")}
           className={cn(
-            "min-h-10 flex-1 rounded-lg px-2 text-sm font-medium transition-colors",
+            "min-h-9 flex-1 rounded-lg px-2 text-[13px] font-medium transition-colors",
             mobileTab === "panel"
               ? "bg-[var(--color-accent-light)] text-[var(--color-text-1)]"
               : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
@@ -1502,7 +1513,7 @@ export function MapaView() {
           type="button"
           onClick={() => setMobileTab("map")}
           className={cn(
-            "min-h-10 flex-1 rounded-lg px-2 text-sm font-medium transition-colors",
+            "min-h-9 flex-1 rounded-lg px-2 text-[13px] font-medium transition-colors",
             mobileTab === "map"
               ? "bg-[var(--color-accent-light)] text-[var(--color-text-1)]"
               : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
@@ -1523,8 +1534,13 @@ export function MapaView() {
             "flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
             mapaMuro
               ? "gap-4 p-4 lg:max-h-[min(calc(100dvh-2rem),2160px)] lg:min-w-[480px] lg:w-[min(40vw,1680px)] lg:max-w-[min(40vw,1680px)] lg:shrink-0 lg:font-medium lg:text-[clamp(1.35rem,min(0.32vw+0.75rem),2.5rem)] lg:leading-relaxed lg:antialiased min-[2200px]:lg:text-[clamp(1.5rem,min(0.28vw+1rem),2.75rem)]"
-              : "flex-1 gap-2 p-3 lg:max-h-[min(calc(100dvh-10.5rem),900px)] lg:w-[min(20rem,28vw)] lg:max-w-[min(20rem,28vw)] lg:shrink-0",
-            "max-h-[min(52vh,520px)] max-lg:min-h-0",
+              : "flex-1 gap-2 p-2.5 sm:p-3 lg:max-h-[min(calc(100dvh-10.5rem),900px)] lg:w-[min(20rem,28vw)] lg:max-w-[min(20rem,28vw)] lg:shrink-0",
+            // En movil, cuando solo se muestra esta vista (la otra esta
+            // oculta por los tabs), dejamos que ocupe todo el alto
+            // disponible. Antes tenia max-h-[min(52vh,520px)] que la
+            // limitaba a la mitad de pantalla aun cuando el mapa estaba
+            // oculto, dejando hueco muerto debajo.
+            "max-lg:min-h-0",
             presentationMode && "hidden",
             mobileTab === "map" && !mapaMuro && "max-lg:hidden",
           )}
@@ -1592,7 +1608,7 @@ export function MapaView() {
           <div
             className={cn(
               "flex min-h-0 flex-1 flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/18 lg:min-h-[12rem]",
-              mapaMuro ? "p-3 lg:p-5" : "p-3",
+              mapaMuro ? "p-3 lg:p-5" : "p-2 sm:p-3",
             )}
           >
             <p
@@ -2090,7 +2106,12 @@ export function MapaView() {
         <section
           ref={mapShellRef}
           className={cn(
-            "ccmgc-map-shell relative z-0 flex min-h-0 min-h-[min(280px,42dvh)] w-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[#0f1f3d] shadow-[inset_0_2px_12px_rgba(0,0,0,0.18)] lg:min-h-0",
+            // En movil eliminamos el min-height: el mapa toma TODO el
+            // espacio disponible cuando el tab "Mapa" esta activo
+            // (gracias al flex-1). Antes el min-h de 280px o 42dvh era
+            // util cuando se mostraba junto a la bandeja, pero como en
+            // movil van por tabs ya no aplica.
+            "ccmgc-map-shell relative z-0 flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[#0f1f3d] shadow-[inset_0_2px_12px_rgba(0,0,0,0.18)] lg:min-h-0",
             mobileTab === "panel" && !mapaMuro && "max-lg:hidden",
             presentationMode && "lg:min-h-[min(70dvh,720px)]",
           )}

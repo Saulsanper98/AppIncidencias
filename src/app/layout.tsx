@@ -31,6 +31,15 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#2563eb",
+  // viewportFit cover deja que la app ocupe el "safe area" del iPhone con
+  // notch. initialScale 1 evita el "scroll to fit" inicial. NO bloqueamos
+  // el zoom (userScalable / maximumScale) por accesibilidad: usuarios con
+  // baja vision tienen que poder hacer pinch-to-zoom. Para evitar el zoom
+  // involuntario de iOS al enfocar inputs, los inputs llevan font-size
+  // >= 16px en movil via globals.css.
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

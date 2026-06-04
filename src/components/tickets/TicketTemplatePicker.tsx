@@ -226,7 +226,7 @@ export function TicketTemplatePicker({ form, setForm, sessionUser }: Props) {
                             <button
                               type="button"
                               onClick={() => deleteTemplate(tpl)}
-                              className="rounded p-1 text-[var(--color-text-3)] opacity-0 transition-opacity hover:bg-[var(--color-surface-2)] hover:text-[var(--color-error)] group-hover:opacity-100"
+                              className="rounded p-1 text-[var(--color-text-3)] opacity-60 transition-opacity hover:bg-[var(--color-surface-2)] hover:text-[var(--color-error)] focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
                               title="Eliminar plantilla"
                               aria-label="Eliminar plantilla"
                             >

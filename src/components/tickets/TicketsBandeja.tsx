@@ -191,7 +191,10 @@ export function TicketsBandeja({
   };
 
   return (
-    <div className="ccmgc-card mb-4 p-4">
+    // En movil bajamos a p-3 para no duplicar padding sobre el contenedor
+    // padre (motion.article p-3) y dejar mas ancho real a las cards de
+    // tickets de dentro.
+    <div className="ccmgc-card mb-4 p-3 sm:p-4">
       <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-[var(--color-border)] pb-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
           <Inbox size={16} strokeWidth={1.7} aria-hidden />
@@ -409,7 +412,10 @@ export function TicketsBandeja({
             </div>
           </div>
 
-          <div className="space-y-3 md:hidden">
+          {/* space-y-3.5 (14px) en movil da una separacion visual entre
+              cards mas clara que el 12px del space-y-3, sin gastar mucho
+              alto. En md+ usamos 3 (12px) para mantener la densidad. */}
+          <div className="space-y-3.5 md:hidden md:space-y-3">
             {filteredTickets.map((ticket) => {
               const isLastViewedMobile = ticket.id === lastViewedTicketId;
               return (
@@ -417,15 +423,15 @@ export function TicketsBandeja({
                 key={ticket.id}
                 aria-current={isLastViewedMobile ? "true" : undefined}
                 className={cn(
-                  "rounded-xl border bg-[var(--color-surface)] transition-colors duration-200 ease-out even:bg-[var(--color-surface-2)]/35",
-                  bandejaCompacta ? "p-3" : "p-4",
+                  "rounded-2xl border bg-[var(--color-surface)] shadow-[0_2px_6px_-4px_rgba(0,0,0,0.4)] transition-colors duration-200 ease-out",
+                  bandejaCompacta ? "p-3.5" : "p-4",
                   isLastViewedMobile
                     ? "border-[var(--color-accent)]/50 ring-1 ring-[var(--color-accent)]/25"
                     : "border-[var(--color-border)]",
                 )}
               >
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
+                <div className="mb-2.5 flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <p className="font-mono text-caption text-[var(--color-text-3)]">{ticket.id.slice(-8).toUpperCase()}</p>
                       <Link
@@ -438,11 +444,11 @@ export function TicketsBandeja({
                       </Link>
                     </div>
                     <Link href={`/tickets/${ticket.id}`} onClick={() => markTicketVisited(ticket.id)}>
-                      <h4 className="mt-0.5 truncate text-sm font-semibold tracking-tight text-[var(--color-text-1)] transition-colors hover:text-[var(--color-accent)]">
+                      <h4 className="mt-1 line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-[var(--color-text-1)] transition-colors hover:text-[var(--color-accent)] sm:line-clamp-1 sm:truncate sm:text-sm">
                         {ticket.title}
                       </h4>
                     </Link>
-                    <p className="text-caption">
+                    <p className="mt-0.5 text-caption leading-snug">
                       {ticket.busId} · {ticket.operator} · {ticket.subsubtipo ?? ticket.assetType}
                     </p>
                   </div>
@@ -480,8 +486,8 @@ export function TicketsBandeja({
                     })()}
                   </div>
                 </div>
-                <p className="mb-3 line-clamp-2 text-sm text-[var(--color-text-2)]">{ticket.description}</p>
-                <div className="mb-3 flex flex-wrap items-center gap-3 text-caption">
+                <p className="mb-3 line-clamp-2 text-[13.5px] leading-relaxed text-[var(--color-text-2)] sm:text-sm sm:leading-snug">{ticket.description}</p>
+                <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-caption">
                   <span className="flex min-w-0 flex-1 items-center gap-1">
                     <Clock3 size={11} className="shrink-0" />
                     {(() => {
@@ -521,13 +527,16 @@ export function TicketsBandeja({
                   </span>
                 </div>
                 {getAllowedTransitions(role, ticket.status).length > 0 && (
+                  // Botones de transicion: en movil son target tactil
+                  // (min-h-9 = 36px) con padding lateral 2.5; en desktop
+                  // mantienen el aspecto compacto original.
                   <div className="flex flex-wrap gap-1.5 border-t border-[var(--color-border)] pt-3">
                     {getAllowedTransitions(role, ticket.status).map((nextStatus) => (
                       <button
                         key={`${ticket.id}-${nextStatus}`}
                         type="button"
                         onClick={() => onOpenStatusChange(ticket.id, nextStatus)}
-                        className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-text-2)] transition-all duration-150 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]"
+                        className="inline-flex min-h-9 items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-2.5 py-1 text-[11.5px] font-medium text-[var(--color-text-2)] transition-all duration-150 hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)] sm:min-h-0 sm:bg-transparent sm:px-2 sm:text-[11px] sm:font-normal"
                       >
                         → {statusMap[nextStatus]}
                       </button>

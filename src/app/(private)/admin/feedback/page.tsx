@@ -30,7 +30,7 @@ export default async function AdminFeedbackPage() {
 
       {/* Page header */}
       <div
-        className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-5"
+        className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-4 sm:px-6 sm:py-5"
         style={{ background: "radial-gradient(ellipse at 85% 50%, rgba(37,99,235,0.08) 0%, transparent 55%), var(--color-surface)" }}
       >
         <div className="flex items-start justify-between gap-4">

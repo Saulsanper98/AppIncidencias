@@ -179,13 +179,17 @@ export default async function AdminHomePage() {
   return (
     <div className="space-y-5">
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-5 shadow-sm">
+      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
         />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
+        {/* En movil apilamos vertical (col): titulo arriba, KPIs debajo.
+            En tablet+ volvemos al layout horizontal con flex-wrap. Esto
+            evita que los KPIs colapsen el ancho del titulo a 0 y rompan
+            el texto palabra-por-palabra. */}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/20">
               <ShieldCheck size={18} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
             </div>

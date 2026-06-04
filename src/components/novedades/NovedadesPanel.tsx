@@ -166,7 +166,30 @@ export function NovedadesPanel({
 
   const filtered = useMemo(() => {
     if (!items) return [];
-    return items.filter((a) => (tab === "avisos" ? a.kind === "aviso" : a.kind === "novedad"));
+    // Filtra por kind y reordena en el cliente. El backend ya ordena con
+    // `orderBy [pinned desc, publishedAt desc, createdAt desc]`, pero
+    // SQLite con DateTime guardado de forma mixta (TEXT vs INTEGER en
+    // distintas filas, fruto de migraciones antiguas) puede ordenar
+    // lexicograficamente y dar resultados inesperados. Hacerlo aqui con
+    // Date.parse normaliza ambos formatos y garantiza el orden estricto
+    // por fecha (mas reciente primero).
+    const list = items.filter((a) =>
+      tab === "avisos" ? a.kind === "aviso" : a.kind === "novedad",
+    );
+    const ts = (value: string | null | undefined): number => {
+      if (!value) return 0;
+      const n = Date.parse(value);
+      return Number.isNaN(n) ? 0 : n;
+    };
+    return [...list].sort((a, b) => {
+      // 1) Anclados primero (independiente de fecha).
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      // 2) Por publishedAt descendente; si falta, usa createdAt como
+      //    fallback para que los borradores aun se ordenen razonablemente.
+      const ta = ts(a.publishedAt) || ts(a.createdAt);
+      const tb = ts(b.publishedAt) || ts(b.createdAt);
+      return tb - ta;
+    });
   }, [items, tab]);
 
   const startCreate = (kind: AnnouncementKind) => {
@@ -364,13 +387,14 @@ export function NovedadesPanel({
   return (
     <div className="space-y-5">
       {/* Hero */}
-      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-sky-500/[0.08] p-5 shadow-sm">
+      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-sky-500/[0.08] p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-sky-500/15 blur-3xl"
         />
-        <div className="relative flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
+        {/* Movil: titulo + acciones apilados; tablet+: horizontal. */}
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/12 text-sky-300 ring-1 ring-sky-500/25">
               <Megaphone size={18} strokeWidth={1.7} aria-hidden />
             </div>

@@ -140,7 +140,7 @@ export default async function KbArticlePage({
         {/* Contenido principal */}
         <div className="min-w-0 space-y-4">
           {/* Hero header */}
-          <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface-1)] via-[var(--color-surface-1)] to-[var(--color-accent-light)]/30 p-5">
+          <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface-1)] via-[var(--color-surface-1)] to-[var(--color-accent-light)]/30 p-4 sm:p-5">
             <div
               aria-hidden
               className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
@@ -212,7 +212,7 @@ export default async function KbArticlePage({
           </header>
 
           {/* Cuerpo del artículo */}
-          <section className="ccmgc-card p-6">
+          <section className="ccmgc-card p-4 sm:p-6">
             <MarkdownView source={article.contentMd} />
           </section>
 

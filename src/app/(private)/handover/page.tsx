@@ -684,8 +684,10 @@ function HandoverTimelineCard({
       )}
     >
       <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", tone.bar)} />
-      <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 pl-5">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
+      {/* Movil: avatar+texto arriba, botonera abajo para que las
+          acciones no aplasten el resumen del pase. */}
+      <div className="flex flex-col gap-3 px-4 py-3 pl-5 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
           {/* Avatar/Iniciales del autor */}
           <div
             className={cn(
@@ -807,10 +809,13 @@ function HandoverTimelineCard({
               <UserCheck size={12} className="mr-1" aria-hidden /> Firmar recepción
             </Button>
           ) : null}
+          {/* En tactil no hay "hover", asi que en movil mostramos el boton
+              siempre con opacidad media para que sea accesible. En desktop
+              mantenemos el patron original (aparece al hover de la fila). */}
           <button
             type="button"
             onClick={onDelete}
-            className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-3)] opacity-0 transition-opacity hover:text-[var(--color-error)] group-hover:opacity-100 focus:opacity-100"
+            className="inline-flex min-h-[28px] items-center gap-1 rounded text-[10px] text-[var(--color-text-3)] opacity-70 transition-opacity hover:text-[var(--color-error)] focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
             title="Eliminar pase"
           >
             <Trash2 size={10} aria-hidden /> Eliminar

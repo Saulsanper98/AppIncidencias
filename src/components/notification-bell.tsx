@@ -102,10 +102,32 @@ export function NotificationBell() {
         ) : null}
       </button>
       {open ? (
-        <div
-          className="absolute right-0 top-full z-50 mt-2 w-[min(100vw-2rem,22rem)] max-h-[min(70vh,24rem)] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg"
-          role="menu"
-        >
+        <>
+          {/* Backdrop semi-opaco solo en movil: oscurece el resto de la
+              pagina para que el panel destaque y al tocar fuera del panel
+              cierre la capa. En sm+ no hace falta: el dropdown clasico
+              esta anclado al boton. */}
+          <button
+            type="button"
+            aria-label="Cerrar notificaciones"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] sm:hidden"
+          />
+          <div
+            // En movil usamos position: fixed anclado al borde derecho del
+            // viewport (no del boton) para que el panel se vea entero sin
+            // que asome contenido por la derecha. En sm+ vuelve al
+            // comportamiento dropdown absoluto bajo la campana.
+            //
+            // Estilos para diferenciarlo del header (que es del mismo
+            // color base):
+            //  - bg-[var(--color-surface-2)] = un tono mas claro que el
+            //    surface base usado en el header.
+            //  - border-2 + accent ring => marco visible.
+            //  - shadow-2xl con offset vertical para "elevar" el panel.
+            className="fixed left-2 right-2 top-[calc(env(safe-area-inset-top,0px)+3.5rem)] z-50 mx-auto max-h-[min(70vh,24rem)] w-auto overflow-hidden rounded-xl border-2 border-[var(--color-border-strong,var(--color-accent))]/35 bg-[var(--color-surface-2)] shadow-[0_18px_45px_-12px_rgba(0,0,0,0.6),0_8px_18px_-8px_rgba(0,0,0,0.45)] ring-1 ring-[var(--color-accent)]/15 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem]"
+            role="menu"
+          >
           <div className="flex items-start justify-between gap-2 border-b border-[var(--color-border)] px-3 py-2">
             <div className="min-w-0">
               <p className="text-xs font-medium text-[var(--color-text-1)]">Notificaciones</p>
@@ -135,7 +157,11 @@ export function NotificationBell() {
                       href={item.href}
                       role="menuitem"
                       onClick={() => setOpen(false)}
-                      className="block px-3 py-2.5 text-left text-sm text-[var(--color-text-1)] transition-colors hover:bg-[var(--color-surface-2)]"
+                      // Hover usa un tono distinto al fondo del panel
+                      // (que ya es surface-2 para destacar sobre el
+                      // header). surface-3 nos da el siguiente nivel
+                      // visual sin perder contraste con el texto.
+                      className="block px-3 py-2.5 text-left text-sm text-[var(--color-text-1)] transition-colors hover:bg-[var(--color-surface-3)]"
                     >
                       <span className="line-clamp-2">{item.label}</span>
                       <span className="mt-0.5 block text-[10px] text-[var(--color-text-3)]">
@@ -150,7 +176,8 @@ export function NotificationBell() {
               </ul>
             )}
           </div>
-        </div>
+          </div>
+        </>
       ) : null}
     </div>
   );

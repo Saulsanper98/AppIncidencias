@@ -272,7 +272,7 @@ const HeroSearch = forwardRef<HTMLInputElement, HeroSearchProps>(function HeroSe
   ref,
 ) {
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface-1)] via-[var(--color-surface-1)] to-[var(--color-accent-light)]/40 p-5 shadow-sm">
+    <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface-1)] via-[var(--color-surface-1)] to-[var(--color-accent-light)]/40 p-4 shadow-sm sm:p-5">
       <div
         aria-hidden
         className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"

@@ -786,13 +786,14 @@ export function CatalogAdminPanel() {
   return (
     <div className="space-y-5">
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-emerald-500/[0.08] p-5 shadow-sm">
+      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-emerald-500/[0.08] p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-500/15 blur-3xl"
         />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
+        {/* Movil: titulo + KPIs apilados; tablet+: horizontal. */}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 ring-1 ring-emerald-500/25 text-emerald-300">
               <Boxes size={18} strokeWidth={1.7} aria-hidden />
             </div>

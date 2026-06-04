@@ -181,7 +181,7 @@ function KpiCard({
   return (
     <article
       className={cn(
-        "ccmgc-card group relative overflow-hidden p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg",
+        "ccmgc-card group relative overflow-hidden p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-5",
         primary && "ccmgc-card-accent",
         staggerIndex && `ccmgc-stagger-in ccmgc-stagger-in-${staggerIndex}`,
       )}
@@ -285,7 +285,10 @@ function IncidentCard({ ticket }: { ticket: ActiveIncident }) {
   return (
     <Link
       href={`/tickets/${ticket.id}`}
-      className="group flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3.5 transition-all duration-150 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-2)]/40 hover:shadow-md hover:shadow-black/15"
+      // gap-2 + px-3 en movil para que el contenido respire sin que el
+      // badge ni el chevron pisen el texto del ticket. En sm+ volvemos al
+      // espaciado original.
+      className="group flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3 transition-all duration-150 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-2)]/40 hover:shadow-md hover:shadow-black/15 sm:gap-3 sm:px-4 sm:py-3.5"
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -304,13 +307,13 @@ function IncidentCard({ ticket }: { ticket: ActiveIncident }) {
           {ticket.busId} · {ticket.assetType} · {ticket.operator}
         </p>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1.5">
+      <div className="flex shrink-0 flex-col items-end gap-1">
         <Badge variant={STATUS_VARIANT[ticket.status] ?? "neutral"}>
           {STATUS_LABEL[ticket.status] ?? ticket.status}
         </Badge>
         {expired ? (
           <span
-            className="num-tabular text-xs font-semibold text-[var(--color-error)]"
+            className="num-tabular whitespace-nowrap text-[11px] font-semibold text-[var(--color-error)] sm:text-xs"
             title={`SLA vencido hace ${formatRemaining(slaMin)}`}
           >
             SLA vencido
@@ -318,7 +321,7 @@ function IncidentCard({ ticket }: { ticket: ActiveIncident }) {
         ) : (
           <span
             className={cn(
-              "num-tabular flex items-center gap-1 text-xs",
+              "num-tabular flex items-center gap-1 whitespace-nowrap text-[11px] sm:text-xs",
               urgent ? "font-semibold text-[var(--color-error)]" :
               nearby ? "text-[var(--color-warning)]" :
               "text-[var(--color-text-3)]",
@@ -331,7 +334,9 @@ function IncidentCard({ ticket }: { ticket: ActiveIncident }) {
           </span>
         )}
       </div>
-      <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-[var(--color-text-3)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-accent)]" />
+      {/* Chevron oculto en movil: ocupa 14-26px (con gap) y la card ya
+          tiene hover/tap claro; en sm+ vuelve para el affordance visual. */}
+      <ChevronRight size={14} strokeWidth={1.5} className="hidden shrink-0 text-[var(--color-text-3)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--color-accent)] sm:block" />
     </Link>
   );
 }
@@ -786,7 +791,7 @@ export function Dashboard() {
           <div className="grid min-h-0 gap-4 lg:grid-cols-[1fr_340px] lg:items-start">
 
             {/* Incidents */}
-            <article className="ccmgc-card ccmgc-stagger-in ccmgc-stagger-in-5 p-5">
+            <article className="ccmgc-card ccmgc-stagger-in ccmgc-stagger-in-5 p-4 sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-2">
                 <div>
                   <h3 className="text-base font-semibold text-[var(--color-text-1)]">Incidencias activas</h3>
@@ -851,21 +856,23 @@ export function Dashboard() {
              *  `h-[380px]` en mobile y `lg:h-[460px]` en desktop: la curva
              *  se ve siempre y no se estira con la columna vecina.
              */}
-            <article className="ccmgc-card ccmgc-stagger-in ccmgc-stagger-in-5 flex h-[380px] flex-col p-5 lg:h-[460px]">
+            <article className="ccmgc-card ccmgc-stagger-in ccmgc-stagger-in-5 flex h-[380px] flex-col p-4 sm:p-5 lg:h-[460px]">
               <div className="mb-3 shrink-0">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2">
-                    <div>
+                  <div className="flex min-w-0 flex-1 items-start gap-2">
+                    <div className="min-w-0">
                       <h3 className="text-base font-semibold text-[var(--color-text-1)]">Tendencia</h3>
                       <p className="mt-0.5 text-xs text-[var(--color-text-3)]">Últimos {trendDays} días</p>
                     </div>
                     <FeedbackTargetButton id="dashboard/tendencia-tickets" label="Gráfico de tendencia de tickets" className="mt-0.5" />
                   </div>
-                  <div className="flex gap-0.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-1">
+                  {/* shrink-0 en el grupo de tabs para que no se aplaste si
+                      el titulo crece. */}
+                  <div className="flex shrink-0 gap-0.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-1">
                     {([7, 14, 30] as const).map((d) => (
                       <button key={d} type="button" onClick={() => setTrendDays(d)}
                         className={cn(
-                          "rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all duration-150",
+                          "rounded-lg px-2 py-1 text-[11px] font-medium transition-all duration-150 sm:px-2.5",
                           trendDays === d
                             ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-text-1)]"
                             : "text-[var(--color-text-3)] hover:text-[var(--color-text-2)]",
@@ -898,7 +905,11 @@ export function Dashboard() {
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="relative min-h-[180px] flex-1 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={trend ?? []} margin={{ top: 8, right: 4, left: -24, bottom: 0 }}>
+                    {/* margin right=12: Recharts oculta el ultimo tick si
+                        este sobresale del area de dibujo. Aumentando el
+                        margen derecho damos espacio al label "Jue" / "30
+                        nov" para que se vea entero en movil. */}
+                    <AreaChart data={trend ?? []} margin={{ top: 8, right: 12, left: -24, bottom: 0 }}>
                       <defs>
                         <linearGradient id="gradCreados" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#DC2626" stopOpacity={0.22} />
@@ -910,8 +921,21 @@ export function Dashboard() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.07)" vertical={false} />
-                      <XAxis dataKey="day" tick={{ fill: "var(--color-text-3)", fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: "var(--color-text-3)", fontSize: 10 }} axisLine={false} tickLine={false} />
+                      {/* interval=preserveStartEnd asegura que el primer
+                          y ultimo dia siempre se rendericen aunque haya
+                          colision con vecinos. Con 14d / 30d Recharts
+                          quitaba ticks intermedios pero al menos los
+                          extremos quedan visibles. minTickGap=4 reduce el
+                          umbral para 7d. */}
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fill: "var(--color-text-3)", fontSize: 10 }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                        minTickGap={4}
+                      />
+                      <YAxis tick={{ fill: "var(--color-text-3)", fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
                       <Tooltip
                         contentStyle={{
                           background: "var(--color-surface-3)",
@@ -954,7 +978,7 @@ export function Dashboard() {
           <div className="ccmgc-stagger-in ccmgc-stagger-in-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 
             {/* Map */}
-            <Link href="/mapa" className="ccmgc-card group flex min-h-[220px] flex-col p-5">
+            <Link href="/mapa" className="ccmgc-card group flex min-h-[220px] flex-col p-4 sm:p-5">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-accent-light)]">
@@ -994,7 +1018,7 @@ export function Dashboard() {
             <RecentHandoversCard />
 
             {/* Knowledge base */}
-            <article className="ccmgc-card min-h-[220px] p-5">
+            <article className="ccmgc-card min-h-[220px] p-4 sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
@@ -1031,7 +1055,7 @@ export function Dashboard() {
             {/* Estados de tickets (mini-funnel): muestra conteo por estado
              *  con barras horizontales proporcionales al máximo. Cubre el
              *  hueco del antiguo "Flujo de ticketing" (lista plana sin datos). */}
-            <article className="ccmgc-card min-h-[220px] p-5">
+            <article className="ccmgc-card min-h-[220px] p-4 sm:p-5">
               <div className="mb-4 flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
                   <Wrench size={14} strokeWidth={1.5} className="text-[var(--color-text-3)]" />
@@ -1105,15 +1129,17 @@ function ShiftLoadCard({
     nowHour >= 6 && nowHour < 14 ? "M" : nowHour >= 14 && nowHour < 22 ? "T" : "N";
 
   return (
-    <article className="ccmgc-card ccmgc-stagger-in ccmgc-stagger-in-5 flex flex-col p-5">
+    <article className="ccmgc-card ccmgc-stagger-in ccmgc-stagger-in-5 flex flex-col p-4 sm:p-5">
       <header className="mb-3 flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-[var(--color-text-1)]">Carga por turno</h3>
           <p className="text-[11px] text-[var(--color-text-3)]">
             Tickets creados hoy · {total} en total
           </p>
         </div>
-        <div className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-text-3)]">
+        {/* shrink-0 + whitespace-nowrap: en movil el chip se cortaba a
+            "AHORA · TARD..." porque el chip podia comprimirse. */}
+        <div className="shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--color-text-3)]">
           Ahora · {SHIFT_META[currentShift].label}
         </div>
       </header>

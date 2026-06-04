@@ -278,52 +278,86 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
       />
 
       <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="ccmgc-table w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-[var(--color-surface-2)]/85 backdrop-blur">
-              <tr className="text-left text-[11px] uppercase tracking-[0.06em] text-[var(--color-text-3)]">
-                <Th>Referencia</Th>
-                <Th>Via</Th>
-                <Th>Fechas</Th>
-                <Th>Lineas</Th>
-                <Th>Sentido</Th>
-                <Th>Estado</Th>
-                <Th>Origen</Th>
-                <Th>Acciones</Th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)]/70">
-              <AnimatePresence initial={false}>
-                {items.map((d) => (
-                  <Row
-                    key={d.id}
-                    desvio={d}
-                    canManage={canManage}
-                    acting={Boolean(acting[d.id])}
-                    onConfirm={() => void handleConfirm(d.id)}
-                    onReactivate={() => void handleReactivate(d.id)}
-                  />
-                ))}
-              </AnimatePresence>
-              {!loading && items.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
-                    <EmptyState filtersActive={filtersActive} onReset={resetFilters} />
-                  </td>
+        {/* Vista TABLA solo en md+ (8 columnas no caben en movil sin
+            scroll horizontal incomodo). En movil usamos las cards de
+            abajo. */}
+        <div className="hidden md:block">
+          <div className="overflow-x-auto">
+            <table className="ccmgc-table w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-[var(--color-surface-2)]/85 backdrop-blur">
+                <tr className="text-left text-[11px] uppercase tracking-[0.06em] text-[var(--color-text-3)]">
+                  <Th>Referencia</Th>
+                  <Th>Via</Th>
+                  <Th>Fechas</Th>
+                  <Th>Lineas</Th>
+                  <Th>Sentido</Th>
+                  <Th>Estado</Th>
+                  <Th>Origen</Th>
+                  <Th>Acciones</Th>
                 </tr>
-              ) : null}
-              {loading && items.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center">
-                    <span className="inline-flex items-center gap-2 text-sm text-[var(--color-text-3)]">
-                      <Loader2 size={14} className="animate-spin" />
-                      Cargando desvios{"\u2026"}
-                    </span>
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]/70">
+                <AnimatePresence initial={false}>
+                  {items.map((d) => (
+                    <Row
+                      key={d.id}
+                      desvio={d}
+                      canManage={canManage}
+                      acting={Boolean(acting[d.id])}
+                      onConfirm={() => void handleConfirm(d.id)}
+                      onReactivate={() => void handleReactivate(d.id)}
+                    />
+                  ))}
+                </AnimatePresence>
+                {!loading && items.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-12 text-center">
+                      <EmptyState filtersActive={filtersActive} onReset={resetFilters} />
+                    </td>
+                  </tr>
+                ) : null}
+                {loading && items.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center">
+                      <span className="inline-flex items-center gap-2 text-sm text-[var(--color-text-3)]">
+                        <Loader2 size={14} className="animate-spin" />
+                        Cargando desvios{"\u2026"}
+                      </span>
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Vista CARDS para movil (mismo conjunto de datos, layout vertical). */}
+        <div className="space-y-2 p-2 md:hidden">
+          <AnimatePresence initial={false}>
+            {items.map((d) => (
+              <MobileCard
+                key={d.id}
+                desvio={d}
+                canManage={canManage}
+                acting={Boolean(acting[d.id])}
+                onConfirm={() => void handleConfirm(d.id)}
+                onReactivate={() => void handleReactivate(d.id)}
+              />
+            ))}
+          </AnimatePresence>
+          {!loading && items.length === 0 ? (
+            <div className="px-2 py-10 text-center">
+              <EmptyState filtersActive={filtersActive} onReset={resetFilters} />
+            </div>
+          ) : null}
+          {loading && items.length === 0 ? (
+            <div className="px-2 py-8 text-center">
+              <span className="inline-flex items-center gap-2 text-sm text-[var(--color-text-3)]">
+                <Loader2 size={14} className="animate-spin" />
+                Cargando desvios{"\u2026"}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <Pagination
@@ -711,6 +745,132 @@ function FilterBar({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Tarjeta compacta para listar desvios en MOVIL. Replica visualmente la
+ * fila de la tabla pero apilando la informacion en bloques verticales.
+ */
+function MobileCard({
+  desvio,
+  canManage,
+  acting,
+  onConfirm,
+  onReactivate,
+}: {
+  desvio: DesvioResumen;
+  canManage: boolean;
+  acting: boolean;
+  onConfirm: () => void;
+  onReactivate: () => void;
+}) {
+  const isPendiente = desvio.estado === "PENDIENTE";
+  const isActivo = desvio.estado === "ACTIVO";
+  const isResuelto = desvio.estado === "RESUELTO";
+  const isIndefVivo = desvio.sin_fecha_fin && (isPendiente || isActivo);
+  const canQuickReactivate = isResuelto && desvio.sin_fecha_fin && canManage;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      className={cn(
+        "relative overflow-hidden rounded-xl border bg-[var(--color-surface)] p-3 shadow-sm",
+        isIndefVivo
+          ? "border-[rgba(124,58,237,0.30)] bg-[rgba(124,58,237,0.04)]"
+          : isPendiente
+            ? "border-[rgba(217,119,6,0.30)] bg-[rgba(217,119,6,0.05)]"
+            : "border-[var(--color-border)]",
+      )}
+    >
+      {isIndefVivo ? (
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-1 bg-[#7c3aed]"
+        />
+      ) : null}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-mono text-[11px] text-[var(--color-text-3)]">
+            {desvio.referencia}
+          </p>
+          <Link
+            href={`/desvios/${desvio.id}`}
+            className="mt-0.5 block truncate text-[14px] font-semibold text-[var(--color-text-1)] hover:text-[var(--color-accent)]"
+          >
+            {desvio.via}
+          </Link>
+          <p className="mt-0.5 truncate text-[11.5px] text-[var(--color-text-3)]">
+            {desvio.tramo}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <EstadoBadge estado={desvio.estado} size="sm" />
+          <OrigenBadge origen={desvio.origen} size="sm" />
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11.5px] text-[var(--color-text-2)]">
+        <FechasCell
+          inicio={desvio.fecha_inicio}
+          fin={desvio.fecha_fin}
+          estimada={desvio.hora_fin_estimada}
+          sinFin={desvio.sin_fecha_fin}
+        />
+        <SentidoChip sentido={desvio.sentido} />
+      </div>
+
+      {desvio.lineas_afectadas.length > 0 ? (
+        <div className="mt-2">
+          <LineasChips lineas={desvio.lineas_afectadas} />
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[var(--color-border)]/60 pt-2.5">
+        {isPendiente && canManage ? (
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={acting}
+            className="inline-flex h-9 items-center gap-1 rounded-md bg-[var(--color-success)] px-2.5 text-[11.5px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {acting ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+            Confirmar
+          </button>
+        ) : null}
+        {canQuickReactivate ? (
+          <button
+            type="button"
+            onClick={onReactivate}
+            disabled={acting}
+            className="inline-flex h-9 items-center gap-1 rounded-md bg-[#7c3aed] px-2.5 text-[11.5px] font-semibold text-white shadow-sm transition-opacity hover:bg-[#6d28d9] disabled:opacity-60"
+          >
+            {acting ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
+            Reactivar
+          </button>
+        ) : null}
+        <Link
+          href={`/desvios/${desvio.id}`}
+          className="ml-auto inline-flex h-9 items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 text-[11.5px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)]"
+        >
+          Detalle
+          <ChevronRight size={12} />
+        </Link>
+        {desvio.pdf_path ? (
+          <a
+            href={desvio.pdf_path}
+            target="_blank"
+            rel="noreferrer"
+            title="Ver PDF original"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)]"
+          >
+            <FileText size={12} />
+          </a>
+        ) : null}
+      </div>
+    </motion.div>
   );
 }
 

@@ -840,7 +840,9 @@ export function ReadOnlyTicketsViewer() {
             exit={{ opacity: 0, y: 20 }}
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
             title="Volver al principio"
-            className="fixed bottom-6 right-6 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-[var(--color-accent)]/40 bg-[var(--color-accent)] text-white shadow-2xl shadow-[var(--color-accent)]/30 hover:scale-105 active:scale-95"
+            // bottom-24 para apilarse ENCIMA del FAB de feedback (que vive
+            // en bottom-4/6 y mide ~48px). z-50 para asegurar visibilidad.
+            className="fixed bottom-24 right-3 z-50 inline-flex h-12 w-12 items-center justify-center rounded-full border border-[var(--color-accent)]/40 bg-[var(--color-accent)] text-white shadow-2xl shadow-[var(--color-accent)]/30 hover:scale-105 active:scale-95 sm:bottom-24 sm:right-6"
           >
             <ArrowUp size={20} />
           </motion.button>

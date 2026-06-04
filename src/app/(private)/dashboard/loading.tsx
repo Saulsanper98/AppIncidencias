@@ -1,6 +1,6 @@
 export default function DashboardLoading() {
   return (
-    <div className="flex min-h-[40vh] flex-col gap-4 p-6">
+    <div className="flex min-h-[40vh] flex-col gap-4 p-4 sm:p-6">
       <div className="h-9 w-48 max-w-full rounded-lg bg-[var(--color-surface-2)] motion-safe:animate-pulse" />
       <div className="h-32 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-4">
         <div className="h-4 w-[min(60%,20rem)] rounded bg-[var(--color-surface-2)] motion-safe:animate-pulse" />

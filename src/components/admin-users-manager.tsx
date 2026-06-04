@@ -865,13 +865,15 @@ export function AdminUsersManager() {
       </p>
 
       {/* HERO unificado con KPIs */}
-      <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-violet-500/[0.06] p-5 shadow-sm">
+      <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-violet-500/[0.06] p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-violet-500/15 blur-3xl"
         />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
+        {/* En movil apilamos para que los KPIs no aplasten el titulo: ver
+            comentario equivalente en /admin/page.tsx. */}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-500/12 ring-1 ring-violet-400/25 text-violet-300">
               <Users size={20} strokeWidth={1.7} aria-hidden />
             </div>
@@ -1031,48 +1033,56 @@ export function AdminUsersManager() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--color-border)] pt-4">
-          <span className="self-center text-caption text-[var(--color-text-3)]">{t.filterState}:</span>
-          {(["all", "active", "inactive"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setFilterActive(v)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150",
-                filterActive === v
-                  ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)] ring-1 ring-[var(--color-accent)]/35"
-                  : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
-              )}
-            >
-              {v === "all" ? t.chipAll : v === "active" ? t.chipActive : t.chipInactive}
-            </button>
-          ))}
-          <span className="ml-2 self-center text-caption text-[var(--color-text-3)]">{t.filterRole}:</span>
-          {(["all", "conductor", "tecnico_campo", "gestor_centro_control"] as const).map((v) => {
-            const active = filterRole === v;
-            const tone = v === "all" ? null : roleTone(v);
-            return (
+        {/* En movil mostramos cada grupo de filtros (Estado y Rol) en su
+            propia fila para que la etiqueta y sus chips queden juntos y
+            no se mezclen entre si (antes con un solo flex-wrap el "Rol:"
+            podia caer al final de la primera fila y separarse de sus chips). */}
+        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--color-border)] pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-caption text-[var(--color-text-3)]">{t.filterState}:</span>
+            {(["all", "active", "inactive"] as const).map((v) => (
               <button
                 key={v}
                 type="button"
-                onClick={() => setFilterRole(v)}
+                onClick={() => setFilterActive(v)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150",
-                  tone === null
-                    ? active
-                      ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)] ring-1 ring-[var(--color-accent)]/35"
-                      : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]"
-                    : active
-                      ? tone.pillActive
-                      : tone.pillIdle,
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150",
+                  filterActive === v
+                    ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)] ring-1 ring-[var(--color-accent)]/35"
+                    : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
                 )}
               >
-                {tone ? <span className={cn("h-1.5 w-1.5 rounded-full", tone.dot)} aria-hidden /> : null}
-                {v === "all" ? t.chipAll : userRoleLabel(v, locale)}
+                {v === "all" ? t.chipAll : v === "active" ? t.chipActive : t.chipInactive}
               </button>
-            );
-          })}
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:ml-2">
+            <span className="text-caption text-[var(--color-text-3)]">{t.filterRole}:</span>
+            {(["all", "conductor", "tecnico_campo", "gestor_centro_control"] as const).map((v) => {
+              const active = filterRole === v;
+              const tone = v === "all" ? null : roleTone(v);
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setFilterRole(v)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150",
+                    tone === null
+                      ? active
+                        ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)] ring-1 ring-[var(--color-accent)]/35"
+                        : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]"
+                      : active
+                        ? tone.pillActive
+                        : tone.pillIdle,
+                  )}
+                >
+                  {tone ? <span className={cn("h-1.5 w-1.5 rounded-full", tone.dot)} aria-hidden /> : null}
+                  {v === "all" ? t.chipAll : userRoleLabel(v, locale)}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

@@ -343,7 +343,7 @@ function Header({
           )}
           aria-hidden
         />
-        <div className="flex flex-wrap items-start justify-between gap-4 p-5 pl-6">
+        <div className="flex flex-col gap-4 p-4 pl-5 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:p-5 sm:pl-6">
           <div className="flex min-w-0 items-start gap-4">
             <div
               className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_25%,transparent)]"

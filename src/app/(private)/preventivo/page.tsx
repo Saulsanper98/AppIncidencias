@@ -337,13 +337,14 @@ export default function PreventivoPage() {
     <div className="space-y-4">
       <AnomalousBusesBanner />
       {/* HERO del mes */}
-      <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-5 shadow-sm">
+      <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
         />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
+        {/* Movil: titulo + nav-mes apilados; tablet+: horizontal. */}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/25">
               <CalendarDays size={20} className="text-[var(--color-accent)]" aria-hidden />
             </div>
@@ -495,8 +496,114 @@ export default function PreventivoPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
         {/* Calendario */}
-        <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
-          <div className="mb-2 grid grid-cols-7 text-center text-[10px] font-semibold uppercase tracking-widest">
+        <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 sm:p-3">
+          {/* Vista AGENDA para movil: lista vertical de los dias con tareas
+              del mes en curso. Mucho mas legible que un grid 7x6 a 320px. */}
+          <ul className="space-y-2 md:hidden">
+            {(() => {
+              const days = grid
+                .filter((d) => d.inMonth)
+                .map((d) => ({
+                  ...d,
+                  tasks: tasksByDay.get(ymd(d.date)) ?? [],
+                  key: ymd(d.date),
+                }));
+              const withTasks = days.filter((d) => d.tasks.length > 0);
+              if (loading && !data) {
+                return Array.from({ length: 5 }, (_, i) => (
+                  <li
+                    key={i}
+                    className="h-20 animate-pulse rounded-lg bg-[var(--color-surface-2)]/60"
+                  />
+                ));
+              }
+              if (withTasks.length === 0) {
+                return (
+                  <li className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-6 text-center text-[12px] text-[var(--color-text-3)]">
+                    Sin revisiones programadas este mes.
+                  </li>
+                );
+              }
+              return withTasks.map(({ date, tasks, key }) => {
+                const isToday = key === todayKey;
+                const dia = date.getUTCDate();
+                const dow = (date.getUTCDay() + 6) % 7;
+                return (
+                  <li
+                    key={key}
+                    className={cn(
+                      "rounded-xl border bg-[var(--color-surface)] p-2.5",
+                      isToday
+                        ? "border-[var(--color-accent)]/55 bg-[var(--color-accent-light)]/40 ring-1 ring-[var(--color-accent)]/30"
+                        : "border-[var(--color-border)]",
+                    )}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex h-9 w-9 items-center justify-center rounded-full text-[13px] font-bold tabular-nums",
+                            isToday
+                              ? "bg-[var(--color-accent)] text-white"
+                              : "bg-[var(--color-surface-2)] text-[var(--color-text-1)]",
+                          )}
+                        >
+                          {dia}
+                        </span>
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                            {DAY_LABELS[dow]} {MONTH_LABELS[date.getUTCMonth()].slice(0, 3)}
+                          </p>
+                          <p className="text-[12.5px] font-semibold text-[var(--color-text-1)]">
+                            {tasks.length} revisi{tasks.length === 1 ? "ón" : "ones"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <ul className="space-y-1">
+                      {tasks.map((task) => {
+                        const tone = ASSET_TONE[task.assetType];
+                        return (
+                          <li key={task.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveTask(task);
+                                setRescheduleValue(task.scheduledAt?.slice(0, 10) ?? "");
+                              }}
+                              className={cn(
+                                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] font-medium ring-1 transition-all active:scale-[0.98]",
+                                statusColor(task.status),
+                              )}
+                            >
+                              <span
+                                className={cn("h-2 w-2 shrink-0 rounded-full", tone.dot)}
+                                aria-hidden
+                              />
+                              <span className="min-w-0 flex-1 truncate">
+                                <span className="font-semibold">{task.busId}</span>{" "}
+                                <span className="text-[var(--color-text-3)]">
+                                  · {ASSET_LABEL[task.assetType]}
+                                </span>
+                              </span>
+                              <ChevronRight
+                                size={13}
+                                className="shrink-0 text-[var(--color-text-3)]"
+                                aria-hidden
+                              />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                );
+              });
+            })()}
+          </ul>
+
+          {/* Cabecera de dias - solo desktop. */}
+          <div className="mb-2 hidden grid-cols-7 text-center text-[10px] font-semibold uppercase tracking-widest md:grid">
             {DAY_LABELS.map((d, i) => {
               const isWeekendCol = i === 5 || i === 6;
               return (
@@ -512,7 +619,7 @@ export default function PreventivoPage() {
             })}
           </div>
           {loading && !data ? (
-            <div className="grid grid-cols-7 gap-1">
+            <div className="hidden grid-cols-7 gap-1 md:grid">
               {Array.from({ length: 42 }, (_, i) => (
                 <div
                   key={i}
@@ -521,7 +628,7 @@ export default function PreventivoPage() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-7 gap-1">
+            <div className="hidden grid-cols-7 gap-1 md:grid">
               {grid.map(({ date, inMonth }, idx) => {
                 const key = ymd(date);
                 const dayTasks = tasksByDay.get(key) ?? [];
@@ -631,8 +738,9 @@ export default function PreventivoPage() {
             </div>
           )}
 
-          {/* Leyenda */}
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--color-border)] pt-2 text-[10px] text-[var(--color-text-3)]">
+          {/* Leyenda — solo desktop: en movil cada chip de la agenda ya
+              lleva su propio color y la del calendario clasico no aplica. */}
+          <div className="mt-3 hidden flex-wrap items-center justify-between gap-2 border-t border-[var(--color-border)] pt-2 text-[10px] text-[var(--color-text-3)] md:flex">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold uppercase tracking-widest">Activos</span>
               {ALL_ASSETS.map((a) => (

@@ -192,7 +192,7 @@ export function TicketRelationsCard({ ticketId }: { ticketId: string }) {
   }, [relations]);
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 transition-shadow duration-200 hover:shadow-md">
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-6">
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-subheading">
           <Link2 size={16} className="text-[var(--color-text-3)]" aria-hidden />

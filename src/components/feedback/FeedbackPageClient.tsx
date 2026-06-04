@@ -26,12 +26,12 @@ export function FeedbackPageClient() {
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
       {/* Panel izquierdo: formulario */}
-      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
+      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6">
         <FeedbackForm onSuccess={() => setRefreshKey((k) => k + 1)} />
       </section>
 
       {/* Panel derecho: mis envíos */}
-      <aside className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+      <aside className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-5">
         <header className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">

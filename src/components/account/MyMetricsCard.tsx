@@ -65,7 +65,7 @@ export function MyMetricsCard() {
 
   if (loading) {
     return (
-      <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
+      <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6">
         <div className="mb-3 h-4 w-40 animate-pulse rounded bg-[var(--color-surface-2)]" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
@@ -92,7 +92,7 @@ export function MyMetricsCard() {
   return (
     <section
       aria-labelledby="my-metrics-heading"
-      className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6"
+      className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6"
     >
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2

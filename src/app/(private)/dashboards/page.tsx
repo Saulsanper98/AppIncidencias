@@ -177,13 +177,14 @@ export default function DashboardsPage() {
     <div className="space-y-5">
       <SectionTabs preset="dashboard" />
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-fuchsia-500/[0.08] p-5 shadow-sm">
+      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-fuchsia-500/[0.08] p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-fuchsia-500/15 blur-3xl"
         />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
+        {/* Movil: titulo + KPIs apilados; tablet+: layout horizontal. */}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-fuchsia-500/12 text-fuchsia-300 ring-1 ring-fuchsia-500/25">
               <LayoutDashboard size={18} strokeWidth={1.7} aria-hidden />
             </div>
@@ -475,7 +476,7 @@ function DashboardCard({
               e.stopPropagation();
               onDelete();
             }}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-[var(--color-text-3)] opacity-0 transition-all hover:border-[var(--color-error)]/30 hover:bg-[var(--color-error-light)] hover:text-[var(--color-error)] group-hover:opacity-100"
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-[var(--color-text-3)] opacity-70 transition-all hover:border-[var(--color-error)]/30 hover:bg-[var(--color-error-light)] hover:text-[var(--color-error)] focus:opacity-100 md:h-7 md:w-7 md:opacity-0 md:group-hover:opacity-100"
           >
             <Trash2 size={13} aria-hidden />
           </button>

@@ -292,7 +292,7 @@ export function KbAdminPanel() {
   return (
     <div className="space-y-5">
       {/* ── HERO con glow ──────────────────────────────────────────────── */}
-      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-sky-500/[0.07] p-5 shadow-sm">
+      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-sky-500/[0.07] p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-sky-500/15 blur-3xl"
@@ -301,8 +301,9 @@ export function KbAdminPanel() {
           aria-hidden
           className="pointer-events-none absolute -bottom-16 left-1/3 h-40 w-40 rounded-full bg-violet-500/10 blur-3xl"
         />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
+        {/* Movil: titulo + acciones apilados; tablet+: horizontal. */}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-500/12 ring-1 ring-sky-400/30 text-sky-300">
               <Sparkles size={20} strokeWidth={1.7} aria-hidden />
             </div>

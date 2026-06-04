@@ -44,7 +44,7 @@ export function StatusChangeModal({
         aria-modal="true"
         aria-labelledby="status-change-modal-title"
         className={cn(
-          "w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-xl",
+          "w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-xl sm:p-5",
         )}
         onClick={(e) => e.stopPropagation()}
       >

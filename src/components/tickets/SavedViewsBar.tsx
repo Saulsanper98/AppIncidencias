@@ -162,7 +162,7 @@ export function SavedViewsBar({ currentQuery, onApply }: Props) {
           <button
             type="button"
             onClick={() => handleDelete(v)}
-            className="rounded p-0.5 text-[var(--color-text-3)] opacity-0 transition-opacity hover:text-[var(--color-error)] group-hover:opacity-100"
+            className="rounded p-0.5 text-[var(--color-text-3)] opacity-60 transition-opacity hover:text-[var(--color-error)] focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
             aria-label={`Eliminar vista ${v.name}`}
             title="Eliminar vista"
           >

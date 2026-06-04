@@ -227,7 +227,7 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[var(--color-surface-2)] rounded-2xl border border-[var(--color-border)] p-6 w-full max-w-md max-h-[85vh] overflow-hidden shadow-2xl">
+      <div className="bg-[var(--color-surface-2)] rounded-2xl border border-[var(--color-border)] p-4 w-full max-w-md max-h-[85vh] overflow-hidden shadow-2xl sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-subheading">Añadir widget</h2>
           <button

@@ -457,7 +457,10 @@ export function TicketsModule() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1], delay: 0.02 }}
-          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm transition-shadow duration-200 hover:shadow-md xl:col-span-7"
+          // En movil reducimos a p-3 para que el contenido respire (el
+          // padding del <main> y el de la card interna `ccmgc-card p-4`
+          // sumaban 36px laterales y dejaba las cards de tickets pegadas).
+          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-5 xl:col-span-7"
           aria-describedby="tickets-inbox-hint"
         >
           <p id="tickets-inbox-hint" className="sr-only">
@@ -860,15 +863,19 @@ export function TicketsModule() {
             </div>
           </div>
 
-          <div className="mb-3 flex items-center justify-end gap-2">
+          {/* Barra de atajos: en movil hace flex-wrap y los botones tienen
+              min-h 36px para target tactil; en desktop mantiene el aspecto
+              compacto original. mb mas amplio (4) en movil para separarlo
+              visualmente de la card de bandeja que viene debajo. */}
+          <div className="mb-4 flex flex-wrap items-center justify-end gap-2 sm:mb-3">
             {(t.role === "tecnico_campo" || t.role === "gestor_centro_control") ? (
               <button
                 type="button"
                 onClick={() => t.setQuickTicketOpen(true)}
                 title="Crear un ticket rápido a partir de una plantilla (atajo: Q)"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] px-2 py-1 text-[11px] font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)] hover:text-white"
+                className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] px-2.5 py-1 text-[11.5px] font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)] hover:text-white sm:min-h-0 sm:text-[11px]"
               >
-                <Zap size={11} strokeWidth={1.8} aria-hidden />
+                <Zap size={12} strokeWidth={1.8} aria-hidden />
                 Ticket rápido
                 <kbd className="ml-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-1)] px-1 font-mono text-[9px] text-[var(--color-text-3)]">Q</kbd>
               </button>
@@ -878,7 +885,7 @@ export function TicketsModule() {
               onClick={() => t.setShortcutsOpen((v) => !v)}
               title={"Atajos: / filtra estado \u00B7 N nuevo \u00B7 Q r\u00E1pido \u00B7 ? ayuda \u00B7 Esc cerrar"}
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+                "inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11.5px] font-medium transition-colors sm:min-h-0 sm:text-[11px]",
                 t.shortcutsOpen
                   ? "border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] text-[var(--color-accent)]"
                   : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
@@ -886,7 +893,7 @@ export function TicketsModule() {
               aria-expanded={t.shortcutsOpen}
               aria-controls="tickets-shortcuts-panel"
             >
-              <Keyboard size={11} strokeWidth={1.8} aria-hidden />
+              <Keyboard size={12} strokeWidth={1.8} aria-hidden />
               Atajos
               <kbd className="ml-0.5 rounded border border-[var(--color-border)] bg-[var(--color-surface-1)] px-1 font-mono text-[9px] text-[var(--color-text-3)]">?</kbd>
             </button>

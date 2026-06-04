@@ -680,7 +680,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
             aria-modal="true"
             aria-labelledby="logout-confirm-title"
             ref={logoutDialogRef}
-            className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl"
+            className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-xl sm:p-6"
           >
             <h3 id="logout-confirm-title" className="text-heading">
               {t.logoutConfirmTitle}

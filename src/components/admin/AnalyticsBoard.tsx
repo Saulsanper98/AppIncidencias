@@ -920,17 +920,17 @@ export function AnalyticsBoard() {
                     key={p.priority}
                     className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2"
                   >
-                    <div className="flex items-center justify-between text-[12.5px]">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2 text-[12.5px]">
+                      <div className="flex min-w-0 items-center gap-2">
                         <span
-                          className={cn("h-2.5 w-2.5 rounded-full", priorityColor.dot)}
+                          className={cn("h-2.5 w-2.5 shrink-0 rounded-full", priorityColor.dot)}
                         />
-                        <span className={cn("font-bold uppercase tracking-wider", priorityColor.text)}>
+                        <span className={cn("truncate font-bold uppercase tracking-wider", priorityColor.text)}>
                           {p.priority}
                         </span>
                       </div>
-                      <span className="font-mono text-[var(--color-text-2)]">
-                        {p.resolved} / {p.n} · {pct}%
+                      <span className="shrink-0 whitespace-nowrap font-mono text-[12px] text-[var(--color-text-2)]">
+                        {p.resolved}/{p.n} · {pct}%
                       </span>
                     </div>
                     <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--color-surface-3)]">
@@ -959,7 +959,15 @@ export function AnalyticsBoard() {
             </div>
           ) : (
             <ul className="space-y-1.5">
-              {data.api_errors.slice(0, 10).map((e, i) => (
+              {data.api_errors.slice(0, 10).map((e, i) => {
+                // Acortamos los IDs largos del medio (`/api/tickets/<cuid>/x`)
+                // para que en movil se vean los segmentos clave (recurso +
+                // accion final) sin escupir un cuid de 25 chars.
+                const shortPath = e.path.replace(
+                  /\/((?:c[a-z0-9]{8,})|(?:[0-9a-f]{8}-[0-9a-f-]+))(?=\/|$)/g,
+                  (_, id: string) => `/${id.slice(0, 4)}…${id.slice(-3)}`,
+                );
+                return (
                 <li
                   key={`${e.path}-${e.status}-${i}`}
                   className="flex items-start gap-2 rounded-lg border border-[var(--color-error)]/15 bg-[var(--color-error)]/5 px-2.5 py-1.5"
@@ -975,15 +983,19 @@ export function AnalyticsBoard() {
                     {e.status}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-mono text-[11.5px] text-[var(--color-text-1)]">
-                      {e.path}
+                    <p
+                      className="truncate font-mono text-[11.5px] text-[var(--color-text-1)]"
+                      title={e.path}
+                    >
+                      {shortPath}
                     </p>
                     <p className="text-[10px] text-[var(--color-text-3)]">
                       {e.n}× · ~{e.avg_ms} ms · {timeAgo(new Date(e.last_at))}
                     </p>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </Card>
@@ -1189,21 +1201,23 @@ function MttrPanel({ tickets }: { tickets: Summary["tickets"] }) {
     1,
   );
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
+      {/* Tiles "Mediana / Media": numero ajustable con text-xl en movil y
+          text-2xl en sm+ para no desbordar cuando el formato es "12h 34m". */}
       <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-xl border border-[var(--color-border)] bg-emerald-500/10 p-3 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-200/80">
+        <div className="min-w-0 rounded-xl border border-[var(--color-border)] bg-emerald-500/10 p-3 text-center">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-emerald-200/80">
             Mediana
           </p>
-          <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-emerald-300">
+          <p className="mt-1 truncate font-mono text-xl font-bold tabular-nums text-emerald-300 sm:text-2xl">
             {tickets.median_resolution_minutes > 0 ? fmt(tickets.median_resolution_minutes) : "—"}
           </p>
         </div>
-        <div className="rounded-xl border border-[var(--color-border)] bg-sky-500/10 p-3 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-200/80">
+        <div className="min-w-0 rounded-xl border border-[var(--color-border)] bg-sky-500/10 p-3 text-center">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-widest text-sky-200/80">
             Media
           </p>
-          <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-sky-300">
+          <p className="mt-1 truncate font-mono text-xl font-bold tabular-nums text-sky-300 sm:text-2xl">
             {tickets.mttr_minutes > 0 ? fmt(tickets.mttr_minutes) : "—"}
           </p>
         </div>
@@ -1248,17 +1262,20 @@ function MttrPanel({ tickets }: { tickets: Summary["tickets"] }) {
         </div>
       ) : null}
 
+      {/* Tiles inferiores: usamos px-1 + tracking-normal (no wider) +
+          min-w-0 para que "Abiertos" (label mas largo) entre sin truncarse
+          en pantallas estrechas. */}
       <div className="grid grid-cols-3 gap-1.5 text-center">
-        <div className="rounded-lg bg-emerald-500/10 px-2 py-1.5">
-          <p className="text-[9px] uppercase tracking-wider text-emerald-200/80">Resueltos</p>
+        <div className="min-w-0 rounded-lg bg-emerald-500/10 px-1 py-1.5">
+          <p className="truncate text-[9.5px] uppercase text-emerald-200/80">Resueltos</p>
           <p className="font-mono text-sm font-bold text-emerald-300">{tickets.resolved}</p>
         </div>
-        <div className="rounded-lg bg-amber-500/10 px-2 py-1.5">
-          <p className="text-[9px] uppercase tracking-wider text-amber-200/80">Creados</p>
+        <div className="min-w-0 rounded-lg bg-amber-500/10 px-1 py-1.5">
+          <p className="truncate text-[9.5px] uppercase text-amber-200/80">Creados</p>
           <p className="font-mono text-sm font-bold text-amber-300">{tickets.created}</p>
         </div>
-        <div className="rounded-lg bg-rose-500/10 px-2 py-1.5">
-          <p className="text-[9px] uppercase tracking-wider text-rose-200/80">Abiertos</p>
+        <div className="min-w-0 rounded-lg bg-rose-500/10 px-1 py-1.5">
+          <p className="truncate text-[9.5px] uppercase text-rose-200/80">Abiertos</p>
           <p className="font-mono text-sm font-bold text-rose-300">{tickets.open}</p>
         </div>
       </div>
@@ -1489,16 +1506,16 @@ function StateDurationsPanel({ rows }: { rows: Summary["state_durations"] }) {
             className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2.5"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className={cn("h-2.5 w-2.5 rounded-full", meta.dot)} />
-                <span className="text-[12.5px] font-semibold text-[var(--color-text-1)]">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", meta.dot)} />
+                <span className="truncate text-[12.5px] font-semibold text-[var(--color-text-1)]">
                   {meta.label}
                 </span>
-                <span className="rounded-full bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-text-3)]">
-                  {r.samples} muestras
+                <span className="shrink-0 rounded-full bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-text-3)]">
+                  {r.samples}
                 </span>
               </div>
-              <div className="text-right">
+              <div className="shrink-0 text-right">
                 <p className="font-mono text-[14px] font-bold tabular-nums text-[var(--color-text-1)]">
                   {fmt(r.median_minutes)}
                 </p>
@@ -1678,8 +1695,14 @@ function Card({
 }) {
   return (
     <section
+      // min-w-0 + overflow-hidden: como las Cards viven dentro de grids
+      // de hasta 3 columnas en desktop, en movil (1 col) cualquier
+      // descendiente con contenido largo (font-mono numeros grandes,
+      // chips, tablas) puede empujar el ancho de la card mas alla del
+      // viewport. Lo contenemos aqui de forma generica para no tener que
+      // cazar el patron en cada panel interior.
       className={cn(
-        "rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5",
+        "min-w-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5",
         className,
       )}
     >

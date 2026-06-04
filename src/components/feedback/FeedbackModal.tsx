@@ -91,7 +91,7 @@ export function FeedbackModal({ open, target, onClose }: Props) {
               </div>
 
               {/* Body */}
-              <div className="max-h-[80dvh] overflow-y-auto p-5">
+              <div className="max-h-[80dvh] overflow-y-auto p-4 sm:p-5">
                 <FeedbackForm
                   prefillTarget={target ?? undefined}
                   onSuccess={onClose}

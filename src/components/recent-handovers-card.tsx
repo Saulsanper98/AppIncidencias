@@ -87,7 +87,7 @@ export function RecentHandoversCard() {
   const loading = items === null;
 
   return (
-    <article className="ccmgc-card flex min-h-[220px] flex-col p-5">
+    <article className="ccmgc-card flex min-h-[220px] flex-col p-4 sm:p-5">
       <header className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">

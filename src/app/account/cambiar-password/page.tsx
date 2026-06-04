@@ -29,8 +29,8 @@ export default async function ChangePasswordPage({ searchParams }: PageProps) {
   const nextParam = typeof params.next === "string" ? params.next : Array.isArray(params.next) ? params.next[0] : null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
-      <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-lg">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12 sm:px-6">
+      <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-lg sm:p-6">
         <ChangePasswordForm
           userName={user.name}
           userEmail={user.email}

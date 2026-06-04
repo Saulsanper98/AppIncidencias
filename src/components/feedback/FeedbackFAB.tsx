@@ -92,7 +92,19 @@ export function FeedbackFAB() {
   if (pathname?.startsWith("/feedback")) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[150] flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
+    // z-40: por debajo del header (z-20) y del sidebar drawer (z-40, sin
+    // chocar porque el sidebar cubre toda la izquierda) pero permite que
+    // otros FABs especificos (scroll-top de la vista de lectura) puedan
+    // posicionarse encima con z-50 sin que el feedback los oculte.
+    // Variables env() para respetar el "safe area" del iPhone con notch /
+    // home bar sin tapar el FAB.
+    <div
+      className="pointer-events-none fixed z-40 flex flex-col items-end gap-2"
+      style={{
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 1rem)",
+        right: "calc(env(safe-area-inset-right, 0px) + 0.75rem)",
+      }}
+    >
       {/* Tooltip de descubrimiento la primera vez */}
       {showHint ? (
         <motion.div

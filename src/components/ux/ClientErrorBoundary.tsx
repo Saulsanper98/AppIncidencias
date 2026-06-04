@@ -52,7 +52,7 @@ export class ClientErrorBoundary extends Component<{ children: ReactNode }, Stat
     if (this.state.hasError) {
       return (
         <div className="flex min-h-[60vh] items-center justify-center px-4">
-          <div className="max-w-md rounded-2xl border border-[var(--color-error)]/40 bg-[var(--color-error-light)] p-6 text-center">
+          <div className="max-w-md rounded-2xl border border-[var(--color-error)]/40 bg-[var(--color-error-light)] p-4 text-center sm:p-6">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-error)]/20">
               <AlertTriangle size={22} className="text-[var(--color-error)]" />
             </div>

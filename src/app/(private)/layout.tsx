@@ -23,6 +23,7 @@ import type { SessionUser } from "@/lib/domain";
 import { useTrackPageVisits } from "@/lib/ux-telemetry";
 import { ClientErrorBoundary } from "@/components/ux/ClientErrorBoundary";
 import type { FeedbackPrefillTarget } from "@/components/feedback/FeedbackForm";
+import { cn } from "@/lib/utils";
 
 function MapaMuroUrlSync({ setMapaMuro }: { setMapaMuro: (value: boolean) => void }) {
   const pathname = usePathname();
@@ -213,40 +214,63 @@ export default function PrivateLayout({
         <header
           className={
             inventoryControlRoom
-              ? "sticky top-0 z-20 flex h-11 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]/90 px-3 backdrop-blur-md md:px-4"
-              : "sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 px-4 backdrop-blur-md md:px-6"
+              ? // En movil reservamos pl-14 para que el boton hamburguesa
+                // flotante del sidebar (fixed left-4 top-4, 44px) no tape
+                // los breadcrumbs ni la primera accion del header.
+                "sticky top-0 z-20 flex h-11 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]/90 pl-14 pr-3 backdrop-blur-md md:pl-4 md:pr-4"
+              : "sticky top-0 z-20 flex h-14 items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 pl-14 pr-3 backdrop-blur-md sm:gap-3 md:pl-4 md:pr-4 lg:pl-6 lg:pr-6"
           }
         >
           <nav
             aria-label="Migas de pan"
-            className="flex min-w-0 max-w-[min(100%,52rem)] flex-wrap items-center gap-1.5 text-[13px] md:max-w-none"
+            // flex-nowrap en movil para evitar que las migas salten a 2
+            // lineas y se salgan del header (h-14). Los crumbs intermedios
+            // (todo menos el penultimo y el ultimo) se ocultan con
+            // hidden sm:inline, dejando un breadcrumb compacto del tipo
+            // "Tickets > Bandeja..." en lugar del trail completo.
+            className="flex min-w-0 max-w-[min(100%,52rem)] flex-nowrap items-center gap-1.5 overflow-hidden text-[13px] sm:flex-wrap md:max-w-none"
           >
             {breadcrumbs.map((crumb, index) => {
               const isLast = index === breadcrumbs.length - 1;
+              const isPenultimate = index === breadcrumbs.length - 2;
+              // En movil mostramos solo el penultimo (como enlace de
+              // retroceso) y el ultimo (pagina actual). El root "CCMGC" y
+              // los niveles intermedios se ocultan con hidden sm:inline
+              // para liberar ancho horizontal.
+              const mobileVisible = isLast || isPenultimate;
               return (
                 <Fragment key={`${crumb.label}-${index}`}>
                   {index > 0 ? (
                     <ChevronRight
                       size={13}
                       strokeWidth={1.5}
-                      className="shrink-0 text-[var(--color-text-3)]/60"
+                      className={
+                        (mobileVisible && !isPenultimate
+                          ? "inline"
+                          : "hidden sm:inline") +
+                        " shrink-0 text-[var(--color-text-3)]/60"
+                      }
                       aria-hidden
                     />
                   ) : null}
                   {crumb.href && !isLast ? (
                     <Link
                       href={crumb.href}
-                      className="shrink-0 text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)]"
+                      className={
+                        (mobileVisible ? "inline-flex" : "hidden sm:inline-flex") +
+                        " min-w-0 shrink-0 max-w-[10rem] truncate text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)] sm:max-w-none"
+                      }
                     >
                       {crumb.label}
                     </Link>
                   ) : (
                     <span
-                      className={
+                      className={cn(
                         isLast
-                          ? "min-w-0 max-w-[16rem] truncate font-semibold text-[var(--color-text-1)] sm:max-w-[24rem] md:max-w-[32rem]"
-                          : "min-w-0 truncate text-[var(--color-text-3)]"
-                      }
+                          ? "min-w-0 flex-1 truncate font-semibold text-[var(--color-text-1)] sm:flex-none sm:max-w-[24rem] md:max-w-[32rem]"
+                          : "min-w-0 shrink-0 truncate text-[var(--color-text-3)]",
+                        mobileVisible ? "inline" : "hidden sm:inline",
+                      )}
                       title={isLast ? crumb.label : undefined}
                       aria-current={isLast ? "page" : undefined}
                     >
@@ -295,14 +319,23 @@ export default function PrivateLayout({
         )}
         <main
           id="main-content"
+          // overflow-y-auto + overflow-x-hidden: bloqueamos scroll
+          // horizontal global del shell. Cualquier tabla o panel que
+          // realmente necesite scroll horizontal debe envolverse en
+          // overflow-x-auto local; asi un panel mal medido no rompe la
+          // pagina entera ni provoca que la barra inferior aparezca en
+          // movil cuando un descendiente se sale por la derecha.
           className={
             inventoryControlRoom
-              ? "flex-1 overflow-auto px-3 pb-3 pt-2 md:px-4 md:pb-4 md:pt-3"
+              ? "min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-2 md:px-4 md:pb-4 md:pt-3"
               : mapaMuroChrome
-                ? "flex min-h-0 flex-1 flex-col overflow-hidden px-1 pb-1 pt-1 sm:px-2 sm:pb-2 sm:pt-2"
+                ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-1 pb-1 pt-1 sm:px-2 sm:pb-2 sm:pt-2"
               : isMapaRoute
-                ? "flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-4"
-                : "flex-1 overflow-auto px-6 pb-6 pt-4"
+                ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-3 sm:px-4 md:px-6 md:pb-6 md:pt-4"
+                // Padding reducido en movil para no robar 48px (px-6) que en
+                // pantallas de 320px son el 15% del ancho. En tablets y
+                // desktop volvemos al ritmo de 24px.
+                : "min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-3 sm:px-4 md:px-6 md:pb-6 md:pt-4"
           }
         >
           <ClientErrorBoundary>{children}</ClientErrorBoundary>

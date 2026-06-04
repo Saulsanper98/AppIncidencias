@@ -777,19 +777,19 @@ export default function TicketDetailPage() {
         <div className={cn("h-9 w-40 rounded-lg bg-[var(--color-surface-2)]", sk)} />
         <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
           <div className="flex flex-col gap-4">
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 p-5">
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 p-4 sm:p-5">
               <div className={cn("mb-3 h-4 w-32 rounded bg-[var(--color-surface-3)]", sk)} />
               <div className={cn("mb-2 h-9 w-full max-w-md rounded-lg bg-[var(--color-surface-3)]", sk)} />
               <div className={cn("mb-4 h-4 w-full rounded bg-[var(--color-surface-3)]/70", sk)} />
               <div className={cn("h-16 w-full rounded-lg bg-[var(--color-surface-3)]/50", sk)} />
             </div>
-            <div className="min-h-[12rem] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 p-5">
+            <div className="min-h-[12rem] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 p-4 sm:p-5">
               <div className={cn("mb-4 h-5 w-28 rounded bg-[var(--color-surface-3)]", sk)} />
               <div className={cn("h-24 rounded-lg bg-[var(--color-surface-3)]/60", sk)} />
             </div>
           </div>
           <div className="flex flex-col gap-3">
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 p-5">
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 p-4 sm:p-5">
               <div className={cn("mb-3 h-5 w-24 rounded bg-[var(--color-surface-3)]", sk)} />
               <div className="space-y-2">
                 <div className={cn("h-10 rounded-lg bg-[var(--color-surface-3)]/70", sk)} />
@@ -885,7 +885,7 @@ export default function TicketDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="min-w-0 space-y-4">
-          <div className="min-h-0 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 transition-shadow duration-200 hover:shadow-md">
+          <div className="min-h-0 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-6">
             <div className="mb-3 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div className="min-w-0 flex-1 md:pr-2">
                 <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -1119,7 +1119,7 @@ export default function TicketDetailPage() {
 
           <div
             className={cn(
-              "flex flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 transition-shadow duration-200 hover:shadow-md",
+              "flex flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-6",
               !activityFew && "min-h-[14rem]",
               activityFew && ticket.comments.length > 0 && "min-h-0",
             )}
@@ -1347,7 +1347,7 @@ export default function TicketDetailPage() {
             ) : null}
           </div>
 
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 transition-shadow duration-200 hover:shadow-md">
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-6">
             <h2 className="mb-4 flex items-center gap-2 text-subheading">
               <Paperclip size={16} className="text-[var(--color-text-3)]" aria-hidden />
               Adjuntos
@@ -1543,7 +1543,7 @@ export default function TicketDetailPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 transition-shadow duration-200 hover:shadow-md">
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-6">
             <h2 className="mb-4 flex items-center gap-2 text-subheading">
               <BusIcon size={16} className="text-[var(--color-text-3)]" aria-hidden />
               Historial por bus
@@ -1582,7 +1582,7 @@ export default function TicketDetailPage() {
 
         <div className="flex min-h-0 flex-col gap-3 overflow-visible lg:sticky lg:top-16 lg:max-h-[calc(100vh-4.75rem)]">
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain pb-8 pr-0.5 [scrollbar-gutter:stable]">
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 transition-shadow duration-200 hover:shadow-md">
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-5">
               <h2 className="mb-3 text-subheading">Detalles</h2>
               {/* "Vehicle hero card": resaltamos el bus afectado como dato
                    principal con icono prominente, y abajo operadora/municipio
@@ -1768,7 +1768,7 @@ export default function TicketDetailPage() {
               return (
                 <div
                   className={cn(
-                    "rounded-xl border p-5 transition-shadow duration-200 hover:shadow-md",
+                    "rounded-xl border p-4 transition-shadow duration-200 hover:shadow-md sm:p-5",
                     overdue
                       ? "border-[var(--color-error)]/35 bg-gradient-to-br from-[var(--color-error-light)]/40 via-[var(--color-surface)] to-[var(--color-surface)] shadow-[inset_3px_0_0_var(--color-error)]"
                       : "border-[var(--color-border)] bg-[var(--color-surface)]",
@@ -1868,7 +1868,7 @@ export default function TicketDetailPage() {
           </div>
 
           {sessionUser ? (
-            <div className="relative z-10 min-h-[8.5rem] shrink-0 overflow-visible rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[0_-4px_24px_rgba(0,0,0,0.12)] transition-shadow duration-200 hover:shadow-md lg:shadow-sm">
+            <div className="relative z-10 min-h-[8.5rem] shrink-0 overflow-visible rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[0_-4px_24px_rgba(0,0,0,0.12)] transition-shadow duration-200 hover:shadow-md sm:p-5 lg:shadow-sm">
               <h2 className="mb-3 flex items-center gap-2 text-subheading">
                 <MoreHorizontal size={18} className="text-[var(--color-text-3)]" aria-hidden />
                 Acciones
@@ -1951,7 +1951,7 @@ export default function TicketDetailPage() {
           ) : null}
 
           {!sessionUser ? (
-            <div className="shrink-0 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-center">
+            <div className="shrink-0 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-center sm:p-5">
               <Lock size={24} className="mx-auto mb-2 text-[var(--color-text-3)]" />
               <p className="text-sm text-[var(--color-text-2)]">Inicia sesión para gestionar este ticket</p>
               <Link href="/login" className="mt-3 inline-block text-sm text-[var(--color-accent)] hover:underline">

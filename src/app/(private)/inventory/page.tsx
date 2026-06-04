@@ -1241,7 +1241,7 @@ export default function InventoryPage() {
                     <li key={item.partCode}>
                       <article
                         className={cn(
-                          "relative flex h-full cursor-default flex-col rounded-xl border bg-[var(--color-surface)] p-5 shadow-sm outline-none transition-[border-color,box-shadow] duration-200 focus-within:ring-2 focus-within:ring-[var(--color-accent)] print:break-inside-avoid motion-reduce:transition-none",
+                          "relative flex h-full cursor-default flex-col rounded-xl border bg-[var(--color-surface)] p-4 shadow-sm outline-none transition-[border-color,box-shadow] duration-200 focus-within:ring-2 focus-within:ring-[var(--color-accent)] sm:p-5 print:break-inside-avoid motion-reduce:transition-none",
                           isAgotado
                             ? "border-[var(--color-error)] ring-1 ring-[var(--color-error)]/30"
                             : isBajo

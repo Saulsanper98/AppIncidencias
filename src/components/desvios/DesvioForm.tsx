@@ -287,7 +287,7 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
             }
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:grid-cols-2">
             <Field label="Fecha inicio" error={fieldErrors.fecha_inicio} required>
               <Input
                 type="date"
@@ -648,29 +648,35 @@ function ParadasEditor({
       ) : (
         <ul className="space-y-2">
           {paradas.map((p, idx) => (
-            <li key={idx} className="grid grid-cols-12 items-center gap-2">
-              <div className="col-span-7">
+            // En movil apilamos: nombre + (codigo y boton borrar al lado),
+            // asi cada parada ocupa solo 2 filas en lugar de scrollear
+            // horizontalmente cuando el campo "Nombre" es largo.
+            <li
+              key={idx}
+              className="flex flex-col gap-2 rounded-lg border border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/40 p-2 sm:grid sm:grid-cols-12 sm:items-center sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0"
+            >
+              <div className="sm:col-span-7">
                 <Input
                   value={p.nombre}
                   placeholder="Nombre"
                   onChange={(e) => update(idx, { nombre: e.target.value })}
                 />
               </div>
-              <div className="col-span-4">
-                <Input
-                  value={p.codigo}
-                  placeholder="Codigo"
-                  onChange={(e) => update(idx, { codigo: e.target.value })}
-                />
-              </div>
-              <div className="col-span-1 flex justify-end">
+              <div className="flex items-center gap-2 sm:col-span-5">
+                <div className="flex-1 sm:max-w-none">
+                  <Input
+                    value={p.codigo}
+                    placeholder="Codigo"
+                    onChange={(e) => update(idx, { codigo: e.target.value })}
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => remove(idx)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-3)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-error)]"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[var(--color-text-3)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-error)] sm:h-8 sm:w-8"
                   aria-label="Eliminar parada"
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={14} />
                 </button>
               </div>
             </li>

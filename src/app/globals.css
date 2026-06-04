@@ -468,6 +468,32 @@ body {
     }
   }
 
+  /* ── Movil: anti-zoom de iOS al focusar inputs ─────────────────────────
+   * iOS Safari hace zoom automatico cuando el font-size de un input es
+   * menor que 16px, lo que provoca reflows molestos y dificulta volver
+   * al layout original. Forzamos 16px en movil para todos los controles
+   * de texto editables, manteniendo el font-size visual con `text-sm`
+   * (14px) en desktop. Solo aplica al "campo" final, no a su label. */
+  @media (max-width: 767px) {
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="password"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="number"],
+    input[type="date"],
+    input[type="time"],
+    input[type="datetime-local"],
+    input[type="month"],
+    input[type="week"],
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+
+
   /* ── Densidad global (compacta / cómoda) ──
    * Activada por el toggle DensityToggle (`html[data-density="compact"]`).
    * Reduce el padding interno de cards y celdas de tabla, y aprieta

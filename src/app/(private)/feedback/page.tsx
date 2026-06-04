@@ -21,7 +21,7 @@ export default async function FeedbackPage() {
       {/* Hero header — el ancho ahora abarca toda la página (2 paneles abajo
        *  en lugar del antiguo max-w-2xl con solo el form). */}
       <div
-        className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6"
+        className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6"
         style={{
           background:
             "radial-gradient(ellipse at 90% 0%, rgba(37,99,235,0.10) 0%, transparent 55%), var(--color-surface)",

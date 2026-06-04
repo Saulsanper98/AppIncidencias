@@ -672,7 +672,7 @@ export function TicketCreateForm({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-      className="flex min-h-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm transition-shadow duration-200 hover:shadow-md xl:col-span-5 xl:min-h-[min(520px,68vh)]"
+      className="flex min-h-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-5 xl:col-span-5 xl:min-h-[min(520px,68vh)]"
       aria-labelledby="tickets-new-form-title"
       aria-describedby="tickets-new-form-summary"
     >

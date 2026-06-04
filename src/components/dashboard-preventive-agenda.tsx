@@ -73,7 +73,7 @@ export function DashboardPreventiveAgenda() {
   }, []);
 
   return (
-    <article className="ccmgc-card flex min-h-[220px] flex-col p-5">
+    <article className="ccmgc-card flex min-h-[220px] flex-col p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-accent-light)]">
           <CalendarClock size={14} className="text-[var(--color-accent)]" />

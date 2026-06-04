@@ -269,7 +269,7 @@ export function FeedbackAttachmentsPicker({ files, onChange, disabled = false }:
                 type="button"
                 onClick={() => removeAt(i)}
                 aria-label={`Quitar ${f.name}`}
-                className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-md bg-black/55 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/75 group-hover/thumb:opacity-100 focus:opacity-100"
+                className="absolute right-1 top-1 inline-flex h-7 w-7 items-center justify-center rounded-md bg-black/55 text-white opacity-100 backdrop-blur-sm transition-opacity hover:bg-black/75 focus:opacity-100 md:h-6 md:w-6 md:opacity-0 md:group-hover/thumb:opacity-100"
               >
                 <Trash2 size={12} />
               </button>

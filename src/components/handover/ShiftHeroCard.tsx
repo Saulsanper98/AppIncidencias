@@ -171,7 +171,7 @@ export function ShiftHeroCard({
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-2xl border bg-gradient-to-br p-5 shadow-sm",
+        "relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-sm sm:p-5",
         current.toneBorder,
         current.toneBg,
       )}
