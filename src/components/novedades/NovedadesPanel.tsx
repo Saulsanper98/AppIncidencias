@@ -110,7 +110,7 @@ export function NovedadesPanel({
   /** Generador automático desde `git log` (reservado al propietario). */
   canAutoDraft?: boolean;
 }) {
-  const [tab, setTab] = useState<Tab>("avisos");
+  const [tab, setTab] = useState<Tab>("novedades");
   const [items, setItems] = useState<Announcement[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice>(null);
@@ -537,7 +537,7 @@ export function NovedadesPanel({
       {/* Tabs + filtro de estado (editor only) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-0.5 text-[12.5px]">
-          {(["avisos", "novedades"] as const).map((value) => (
+          {(["novedades", "avisos"] as const).map((value) => (
             <button
               key={value}
               type="button"
