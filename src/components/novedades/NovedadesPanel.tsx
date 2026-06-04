@@ -166,13 +166,15 @@ export function NovedadesPanel({
 
   const filtered = useMemo(() => {
     if (!items) return [];
-    // Filtra por kind y reordena en el cliente. El backend ya ordena con
-    // `orderBy [pinned desc, publishedAt desc, createdAt desc]`, pero
-    // SQLite con DateTime guardado de forma mixta (TEXT vs INTEGER en
-    // distintas filas, fruto de migraciones antiguas) puede ordenar
-    // lexicograficamente y dar resultados inesperados. Hacerlo aqui con
-    // Date.parse normaliza ambos formatos y garantiza el orden estricto
-    // por fecha (mas reciente primero).
+    // Filtra por kind y reordena en el cliente estrictamente por fecha
+    // descendente (mas reciente primero). NO se aplica el "pinned arriba"
+    // porque el usuario quiere ver siempre el orden cronologico real;
+    // el chip "Fijado" se mantiene visualmente, pero ya no fuerza la
+    // posicion en la lista.
+    //
+    // Hacerlo en cliente garantiza el orden incluso cuando SQLite tiene
+    // DateTime guardado de forma mixta (TEXT vs INTEGER en distintas
+    // filas, fruto de migraciones antiguas) y compara lexicograficamente.
     const list = items.filter((a) =>
       tab === "avisos" ? a.kind === "aviso" : a.kind === "novedad",
     );
@@ -182,10 +184,8 @@ export function NovedadesPanel({
       return Number.isNaN(n) ? 0 : n;
     };
     return [...list].sort((a, b) => {
-      // 1) Anclados primero (independiente de fecha).
-      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-      // 2) Por publishedAt descendente; si falta, usa createdAt como
-      //    fallback para que los borradores aun se ordenen razonablemente.
+      // publishedAt desc; si falta, usa createdAt como fallback para
+      // que los borradores aun se ordenen razonablemente.
       const ta = ts(a.publishedAt) || ts(a.createdAt);
       const tb = ts(b.publishedAt) || ts(b.createdAt);
       return tb - ta;
