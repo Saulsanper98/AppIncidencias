@@ -2927,3 +2927,108 @@ body {
 .account-primary-cta {
   /* Hereda el gradient luminoso ya definido. */
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * DESVIOS PREMIUM
+ *
+ * Pase visual de /desvios (lista) y /desvios/nuevo (form). Reutiliza
+ * patrones existentes (dashboard-hero-title, tickets-kpi-pill,
+ * account-section, login-primary-cta-premium) y solo define el hero
+ * propio del modulo + ajustes para la lista.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Hero del listado / form de desvios: glow ambient sutil. */
+.desvios-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--color-border);
+  background: linear-gradient(
+    135deg,
+    var(--color-surface) 0%,
+    var(--color-surface) 60%,
+    color-mix(in oklab, var(--color-accent) 8%, var(--color-surface)) 100%
+  );
+}
+.desvios-hero::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(56, 132, 255, 0.10) 0%,
+    transparent 35%,
+    transparent 65%,
+    rgba(168, 85, 247, 0.06) 100%
+  );
+  pointer-events: none;
+}
+.desvios-hero::after {
+  content: "";
+  position: absolute;
+  top: -80px;
+  right: -80px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--color-accent) 15%, transparent) 0%,
+    transparent 70%
+  );
+  filter: blur(8px);
+  pointer-events: none;
+}
+.desvios-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Boton "Limpiar archivados" / "Importar PDF": chip secundario refinado
+ * que se diferencia del CTA primario. */
+.desvios-action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: linear-gradient(
+    180deg,
+    var(--color-surface-2) 0%,
+    color-mix(in oklab, var(--color-surface-2) 70%, var(--color-surface)) 100%
+  );
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-2);
+  transition:
+    transform 0.12s var(--ease-out),
+    border-color 0.15s var(--ease-out),
+    color 0.15s var(--ease-out),
+    background-color 0.15s var(--ease-out);
+}
+.desvios-action-chip:hover {
+  transform: translateY(-1px);
+  color: var(--color-text-1);
+  border-color: var(--color-border-hover);
+}
+.desvios-action-chip--danger {
+  border-color: rgba(220, 38, 38, 0.30);
+  color: var(--color-error);
+  background: rgba(220, 38, 38, 0.06);
+}
+.desvios-action-chip--danger:hover {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.45);
+}
+.desvios-action-chip--accent {
+  border-color: color-mix(in oklab, var(--color-accent) 30%, var(--color-border));
+  color: var(--color-accent);
+  background: var(--color-accent-light);
+}
+.desvios-action-chip--accent:hover {
+  background: color-mix(in oklab, var(--color-accent-light) 80%, var(--color-accent) 15%);
+  border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-border-hover));
+}

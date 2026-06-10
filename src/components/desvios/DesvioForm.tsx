@@ -4,9 +4,11 @@ import {
   AlertCircle,
   CalendarClock,
   Check,
+  Edit3,
   Infinity as InfinityIcon,
   Loader2,
   Plus,
+  Route as RouteIcon,
   Save,
   Trash2,
   X,
@@ -194,36 +196,51 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-[var(--color-text-1)]">
-            {titulo}
-          </h1>
-          <p className="text-xs text-[var(--color-text-3)]">
-            {isEdit
-              ? "Solo se pueden editar campos de un desvio en estado PENDIENTE."
-              : "Crea un desvio manual cuando la informacion no llegue por correo."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {onCancelHref ? (
+      <header className="desvios-hero flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
+              {isEdit ? (
+                <Edit3 size={20} strokeWidth={1.7} aria-hidden />
+              ) : (
+                <RouteIcon size={20} strokeWidth={1.7} aria-hidden />
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="dashboard-pretitle">
+                <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+                CCMGC · {isEdit ? "Edición de desvío" : "Nuevo desvío"}
+              </div>
+              <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
+                {titulo}
+              </h1>
+              <p className="mt-1 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
+                {isEdit
+                  ? "Sólo se pueden editar campos de un desvío en estado PENDIENTE."
+                  : "Crea un desvío manual cuando la información no llegue por correo (asfaltado, manifestación, prueba ciclista…)."}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {onCancelHref ? (
+              <button
+                type="button"
+                onClick={() => router.push(onCancelHref)}
+                className="desvios-action-chip"
+              >
+                <X size={14} /> Cancelar
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={() => router.push(onCancelHref)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 text-xs font-medium text-[var(--color-text-2)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)]"
+              onClick={() => void submit()}
+              disabled={submitting}
+              className="login-primary-cta-premium inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-xs font-semibold text-white disabled:opacity-60"
             >
-              <X size={13} /> Cancelar
+              {submitting ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {isEdit ? "Guardar cambios" : "Crear desvío"}
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={submitting}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-4 text-xs font-semibold text-white shadow-md shadow-[var(--color-accent)]/20 transition-all hover:bg-[var(--color-accent-hover)] disabled:opacity-60"
-          >
-            {submitting ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-            {isEdit ? "Guardar cambios" : "Crear desvio"}
-          </button>
+          </div>
         </div>
       </header>
 
@@ -427,11 +444,16 @@ function Section({
   return (
     <section
       className={cn(
-        "space-y-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm",
+        "rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-[var(--color-border-hover)]",
         full ? "lg:col-span-2" : undefined,
       )}
     >
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-3)]">
+      <h2 className="mb-3 inline-flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.16em] text-[var(--color-text-3)]">
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)]"
+          style={{ boxShadow: "0 0 7px color-mix(in oklab, var(--color-accent) 55%, transparent)" }}
+          aria-hidden
+        />
         {title}
       </h2>
       <div className="space-y-3">{children}</div>

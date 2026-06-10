@@ -425,53 +425,62 @@ function Header({
 }) {
   const archivedCount = counts.RESUELTO + counts.CANCELADO;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_25%,transparent)]">
-          <RouteIcon size={18} strokeWidth={1.7} aria-hidden />
+    <header className="desvios-hero flex flex-col gap-4 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
+            <RouteIcon size={20} strokeWidth={1.7} aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <div className="dashboard-pretitle">
+              <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+              CCMGC · Operación
+            </div>
+            <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
+              Desvíos
+            </h1>
+            <p className="mt-1 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
+              Circulares informativas detectadas automáticamente o creadas a mano.
+              Confirma los pendientes, archiva los resueltos.
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-[var(--color-text-1)]">
-            Desvios
-          </h1>
-          <p className="text-xs text-[var(--color-text-3)]">
-            Circulares informativas detectadas automaticamente o creadas a mano.
-          </p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <KpiPill
+            label="Pendientes"
+            value={counts.PENDIENTE}
+            tone="amber"
+            icon={AlertTriangle}
+          />
+          <KpiPill label="Activos" value={counts.ACTIVO} tone="rose" icon={Bus} />
+          <KpiPill
+            label="Resueltos"
+            value={counts.RESUELTO}
+            tone="emerald"
+            icon={CheckCircle2}
+          />
+          {indefinidos > 0 ? (
+            <KpiPill
+              label="Indefinidos"
+              value={indefinidos}
+              tone="violet"
+              icon={InfinityIcon}
+              pulse
+            />
+          ) : null}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <KpiPill
-          label="Pendientes"
-          value={counts.PENDIENTE}
-          tone="amber"
-          icon={AlertTriangle}
-        />
-        <KpiPill label="Activos" value={counts.ACTIVO} tone="rose" icon={Bus} />
-        <KpiPill
-          label="Resueltos"
-          value={counts.RESUELTO}
-          tone="emerald"
-          icon={CheckCircle2}
-        />
-        {indefinidos > 0 ? (
-          <KpiPill
-            label="Indefinidos"
-            value={indefinidos}
-            tone="violet"
-            icon={InfinityIcon}
-            pulse
-          />
-        ) : null}
-
+      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border)]/60 pt-3">
         <button
           type="button"
           onClick={onRefresh}
           disabled={loading}
           title="Refrescar"
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 text-xs font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)] disabled:opacity-60"
+          className="desvios-action-chip disabled:opacity-60"
         >
-          <RefreshCcw size={13} className={cn(loading && "animate-spin")} />
+          <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
           Refrescar
         </button>
 
@@ -486,7 +495,7 @@ function Header({
                 transition={{ duration: 0.12 }}
                 className="flex items-center gap-1.5"
               >
-                <span className="text-[11px] font-medium text-[var(--color-error)]">
+                <span className="text-[11px] font-semibold text-[var(--color-error)]">
                   {"\u00BF"}Borrar {archivedCount}?
                 </span>
                 <button
@@ -500,7 +509,7 @@ function Header({
                   ) : (
                     <Trash2 size={13} />
                   )}
-                  Si, limpiar
+                  Sí, limpiar
                 </button>
                 <button
                   type="button"
@@ -521,11 +530,11 @@ function Header({
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.12 }}
                 title="Eliminar definitivamente los desvios resueltos y cancelados"
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[rgba(220,38,38,0.30)] bg-[rgba(220,38,38,0.06)] px-3 text-xs font-medium text-[var(--color-error)] transition-colors hover:bg-[rgba(220,38,38,0.10)]"
+                className="desvios-action-chip desvios-action-chip--danger"
               >
-                <Trash2 size={13} />
+                <Trash2 size={14} />
                 Limpiar archivados
-                <span className="ml-0.5 rounded-full bg-[rgba(220,38,38,0.15)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                <span className="ml-0.5 rounded-full bg-[rgba(220,38,38,0.18)] px-1.5 py-0.5 text-[10px] font-bold tabular-nums">
                   {archivedCount}
                 </span>
               </motion.button>
@@ -538,9 +547,9 @@ function Header({
             type="button"
             onClick={onImport}
             title="Subir manualmente una Circular Informativa en PDF"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 text-xs font-semibold text-[var(--color-text-2)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]"
+            className="desvios-action-chip"
           >
-            <UploadCloud size={13} />
+            <UploadCloud size={14} />
             Importar PDF
           </button>
         ) : null}
@@ -548,14 +557,14 @@ function Header({
         {canCreate ? (
           <Link
             href="/desvios/nuevo"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3.5 text-xs font-semibold text-white shadow-md shadow-[var(--color-accent)]/20 transition-all hover:bg-[var(--color-accent-hover)] hover:shadow-[var(--color-accent)]/30"
+            className="login-primary-cta-premium ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-xs font-semibold text-white"
           >
-            <Plus size={13} />
-            Nuevo desvio
+            <Plus size={14} strokeWidth={2.2} />
+            Nuevo desvío
           </Link>
         ) : null}
       </div>
-    </div>
+    </header>
   );
 }
 
@@ -573,56 +582,24 @@ function KpiPill({
   /** Anima el punto indicador (usado para los desvios indefinidos vivos). */
   pulse?: boolean;
 }) {
-  const map: Record<typeof tone, { dot: string; text: string; border: string; ring: string }> = {
-    amber: {
-      dot: "bg-[#d97706]",
-      text: "text-[#d97706]",
-      border: "border-[rgba(217,119,6,0.30)]",
-      ring: "ring-[rgba(217,119,6,0.45)]",
-    },
-    rose: {
-      dot: "bg-[#dc2626]",
-      text: "text-[#dc2626]",
-      border: "border-[rgba(220,38,38,0.30)]",
-      ring: "ring-[rgba(220,38,38,0.45)]",
-    },
-    emerald: {
-      dot: "bg-[#059669]",
-      text: "text-[#059669]",
-      border: "border-[rgba(5,150,105,0.30)]",
-      ring: "ring-[rgba(5,150,105,0.45)]",
-    },
-    violet: {
-      dot: "bg-[#7c3aed]",
-      text: "text-[#7c3aed]",
-      border: "border-[rgba(124,58,237,0.32)]",
-      ring: "ring-[rgba(124,58,237,0.45)]",
-    },
+  // Mapeo a CSS vars del sistema (alineado con tickets-kpi-pill que ya usan
+  // dashboard, tickets y reportes para consistencia visual).
+  const toneVar: Record<typeof tone, string> = {
+    amber: "var(--color-warning)",
+    rose: "var(--color-error)",
+    emerald: "var(--color-success)",
+    violet: "#a855f7",
   };
-  const c = map[tone];
+  const Wrap = pulse ? motion.span : "span";
   return (
-    <span
-      className={cn(
-        "inline-flex h-9 items-center gap-1.5 rounded-full border bg-[var(--color-surface-2)]/55 px-3 text-[11px] font-medium text-[var(--color-text-2)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
-        c.border,
-      )}
+    <Wrap
+      className={cn("tickets-kpi-pill", pulse && "tickets-kpi-pill--pulse")}
+      style={{ ["--pill-tone" as string]: toneVar[tone] }}
     >
-      <span className="relative inline-flex h-1.5 w-1.5">
-        {pulse ? (
-          <span
-            className={cn(
-              "absolute inset-0 animate-ping rounded-full opacity-70",
-              c.dot,
-            )}
-            aria-hidden
-          />
-        ) : null}
-        <span className={cn("relative h-1.5 w-1.5 rounded-full", c.dot)} aria-hidden />
-      </span>
-      <Icon size={12} strokeWidth={1.8} className={c.text} />
-      <span className="text-[var(--color-text-3)]">{label}</span>
-      <strong className={cn("font-semibold tabular-nums", c.text)}>{value}</strong>
-    </span>
+      <Icon size={12} strokeWidth={1.9} />
+      <span className="tickets-kpi-pill-value">{value}</span>
+      <span className="tickets-kpi-pill-label">{label}</span>
+    </Wrap>
   );
 }
 
