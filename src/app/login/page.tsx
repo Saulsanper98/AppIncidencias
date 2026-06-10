@@ -17,20 +17,22 @@ export default function LoginPage() {
         <LoginDebugGrid />
       </Suspense>
       <LoginCardMotion>
-        <Card className="login-card-shell login-card-elevation login-card-responsive-width login-card-surface-transition w-full border border-white/[0.1] bg-[var(--color-surface)]/95 p-8 ring-1 ring-white/[0.06] backdrop-blur-sm motion-reduce:hover:transform-none sm:p-10">
-          <LoginHero />
-          <Suspense
-            fallback={
-              <div
-                className="h-28 rounded-xl bg-[var(--color-surface-2)]/80 motion-safe:animate-pulse motion-reduce:animate-none"
-                aria-hidden
-              />
-            }
-          >
-            <AccessGateway guestTicketsUrl={guestTicketsUrl} />
-          </Suspense>
-          <LoginCardFooter />
-        </Card>
+        <div className="login-card-glow login-card-responsive-width w-full">
+          <Card className="login-card-shell login-card-premium login-card-elevation login-card-surface-transition w-full border border-white/[0.08] bg-[var(--color-surface)]/95 p-8 ring-1 ring-white/[0.06] backdrop-blur-md motion-reduce:hover:transform-none sm:p-10">
+            <LoginHero />
+            <Suspense
+              fallback={
+                <div
+                  className="h-28 rounded-xl bg-[var(--color-surface-2)]/80 motion-safe:animate-pulse motion-reduce:animate-none"
+                  aria-hidden
+                />
+              }
+            >
+              <AccessGateway guestTicketsUrl={guestTicketsUrl} />
+            </Suspense>
+            <LoginCardFooter />
+          </Card>
+        </div>
       </LoginCardMotion>
     </LoginAmbientShell>
   );

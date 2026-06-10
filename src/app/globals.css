@@ -1037,3 +1037,320 @@ body {
     animation: none;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * LOGIN PREMIUM
+ *
+ * Capa visual adicional sobre el login original. Las clases base
+ * (.login-card-shell, .login-card-elevation, .login-hero-title, etc.)
+ * siguen vivas y aportan tamaños/sombras "estándar"; aquí refinamos
+ * para que el conjunto se sienta mas premium y profesional:
+ *  - glow exterior cinematografico detras de la tarjeta
+ *  - borde con degradado y "edge highlight" superior tipo glass
+ *  - eyebrow ACCESO OPERATIVO con dot pulsante verde
+ *  - divider con degradado en vez de border-bottom plano
+ *  - halo del logo en dos capas
+ *  - CTA primario con gradiente azul y glow tintado
+ *  - pill de estado "Sistema operativo" en el footer
+ *  - orb ambient extra (cyan) + vi�eta vertical
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Glow exterior cinematografico detras de la tarjeta */
+.login-card-glow {
+  position: relative;
+}
+.login-card-glow::before {
+  content: "";
+  position: absolute;
+  inset: -28px;
+  border-radius: 36px;
+  background:
+    radial-gradient(60% 50% at 50% 0%, rgba(56, 132, 255, 0.22), transparent 70%),
+    radial-gradient(45% 45% at 100% 100%, rgba(16, 185, 129, 0.14), transparent 70%),
+    radial-gradient(50% 45% at 0% 100%, rgba(56, 189, 248, 0.10), transparent 70%);
+  filter: blur(28px);
+  opacity: 0.85;
+  z-index: -1;
+  pointer-events: none;
+}
+[data-login-chrono="night"] .login-card-glow::before {
+  background:
+    radial-gradient(60% 50% at 50% 0%, rgba(56, 132, 255, 0.30), transparent 70%),
+    radial-gradient(45% 45% at 100% 100%, rgba(16, 185, 129, 0.16), transparent 70%),
+    radial-gradient(50% 45% at 0% 100%, rgba(56, 189, 248, 0.12), transparent 70%);
+}
+
+/* Tarjeta premium: bordes mas redondeados, borde con degradado y
+ * "edge highlight" superior tipo glass. Coexiste con .login-card-shell
+ * (que aporta border-radius base de 16px) sobreescribiendolo a 22px. */
+.login-card-premium {
+  position: relative;
+  border-radius: 22px !important;
+  background:
+    linear-gradient(180deg,
+      color-mix(in oklab, var(--color-surface) 96%, white 2%) 0%,
+      var(--color-surface) 38%,
+      color-mix(in oklab, var(--color-surface) 92%, black 6%) 100%);
+}
+.login-card-premium::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.06) 24%,
+    rgba(255, 255, 255, 0) 52%,
+    rgba(37, 99, 235, 0.12) 96%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+}
+.login-card-premium::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 100%
+  );
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+/* Eyebrow "OPERATIVO" con dot pulsante verde */
+.login-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px 5px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-success) 32%, var(--color-border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-success-light) 28%, transparent) 0%,
+    color-mix(in oklab, var(--color-success-light) 14%, transparent) 100%
+  );
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-success) 70%, white);
+  white-space: nowrap;
+}
+.login-eyebrow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-success);
+  box-shadow:
+    0 0 0 0 color-mix(in oklab, var(--color-success) 55%, transparent),
+    0 0 9px color-mix(in oklab, var(--color-success) 70%, transparent);
+  animation: login-pulse-dot 2.1s ease-out infinite;
+}
+@keyframes login-pulse-dot {
+  0% {
+    box-shadow:
+      0 0 0 0 color-mix(in oklab, var(--color-success) 55%, transparent),
+      0 0 9px color-mix(in oklab, var(--color-success) 70%, transparent);
+  }
+  60% {
+    box-shadow:
+      0 0 0 7px transparent,
+      0 0 9px color-mix(in oklab, var(--color-success) 70%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0 transparent,
+      0 0 9px color-mix(in oklab, var(--color-success) 70%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-eyebrow-dot { animation: none; }
+}
+
+/* Divider con degradado para sustituir border-bottom plano del hero */
+.login-divider-gradient {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-border) 92%, white 6%) 30%,
+    color-mix(in oklab, var(--color-border) 92%, white 6%) 70%,
+    transparent 100%
+  );
+}
+
+/* Halo del logo: dos capas (interna fria, externa azul-violeta) */
+.login-logo-halo {
+  position: absolute;
+  inset: -22%;
+  border-radius: 999px;
+  background:
+    radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 36%, transparent), transparent 68%),
+    radial-gradient(closest-side, color-mix(in oklab, #38bdf8 26%, transparent), transparent 70%);
+  filter: blur(22px);
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: -1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .login-logo-halo {
+    animation: login-halo-breathe 5.5s ease-in-out infinite;
+  }
+}
+@keyframes login-halo-breathe {
+  0%, 100% { opacity: 0.75; transform: scale(1); }
+  50%      { opacity: 0.95; transform: scale(1.05); }
+}
+
+/* Pretitle "ACCESO OPERATIVO" con un mini punto azul */
+.login-pretitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-text-3) 86%, white);
+}
+.login-pretitle-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-accent) 88%, white);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--color-accent) 62%, transparent);
+}
+
+/* CTA primario premium con gradiente y glow tintado */
+.login-primary-cta-premium {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-accent) 92%, white 8%) 0%,
+    var(--color-accent) 55%,
+    color-mix(in oklab, var(--color-accent) 88%, black 14%) 100%
+  ) !important;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 60%, white 8%) !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.18) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.18) inset,
+    0 10px 28px -10px color-mix(in oklab, var(--color-accent) 70%, transparent),
+    0 2px 8px -2px rgba(0, 0, 0, 0.35) !important;
+  position: relative;
+  overflow: hidden;
+}
+.login-primary-cta-premium::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.10) 50%,
+    transparent 68%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.55s var(--login-ease-out);
+  pointer-events: none;
+}
+.login-primary-cta-premium:hover::after {
+  transform: translateX(100%);
+}
+.login-primary-cta-premium:disabled {
+  background: color-mix(in oklab, var(--color-accent) 38%, var(--color-surface-2)) !important;
+  box-shadow: none !important;
+  opacity: 0.72;
+}
+.login-primary-cta-premium:disabled::after {
+  display: none;
+}
+
+/* Input premium (contrasena): borde mas fino, focus con halo azul */
+.login-input-premium {
+  background: color-mix(in oklab, var(--color-surface-2) 92%, white 4%) !important;
+  border: 1px solid color-mix(in oklab, var(--color-border) 96%, white 6%) !important;
+  transition:
+    border-color 0.18s var(--login-ease-out),
+    box-shadow 0.18s var(--login-ease-out),
+    background-color 0.18s var(--login-ease-out) !important;
+}
+.login-input-premium:hover {
+  border-color: color-mix(in oklab, var(--color-border-hover) 70%, var(--color-accent) 12%) !important;
+}
+.login-input-premium:focus {
+  border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border)) !important;
+  box-shadow:
+    0 0 0 4px color-mix(in oklab, var(--color-accent) 22%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset !important;
+}
+
+/* Pill de estado del sistema en el footer */
+.login-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-success) 30%, var(--color-border));
+  background: color-mix(in oklab, var(--color-success-light) 22%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--color-success) 70%, white);
+}
+.login-status-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-success);
+  box-shadow: 0 0 7px color-mix(in oklab, var(--color-success) 65%, transparent);
+}
+
+/* Orb cyan extra que flota muy lentamente */
+.login-ambient-orb-extra {
+  position: absolute;
+  width: 32rem;
+  height: 32rem;
+  top: -8rem;
+  right: -10rem;
+  border-radius: 999px;
+  background: radial-gradient(
+    closest-side,
+    rgba(56, 189, 248, 0.18),
+    rgba(56, 189, 248, 0.06) 55%,
+    transparent 78%
+  );
+  filter: blur(8px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .login-ambient-orb-extra {
+    animation: login-orb-float 18s ease-in-out infinite;
+  }
+}
+@keyframes login-orb-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(-2rem, 1.5rem, 0); }
+}
+
+/* Vi�eta vertical sutil para profundidad */
+.login-ambient-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 65% at 50% 50%, transparent 50%, rgba(0, 0, 0, 0.35) 100%);
+  pointer-events: none;
+}

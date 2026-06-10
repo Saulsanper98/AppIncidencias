@@ -1,5 +1,6 @@
 "use client";
 
+import { LifeBuoy, ScrollText } from "lucide-react";
 import { useMemo } from "react";
 
 import { loginCopy, type LoginLocale } from "@/app/login/login-i18n";
@@ -28,10 +29,22 @@ export function LoginCardFooter() {
   const legal = process.env.NEXT_PUBLIC_LEGAL_URL ?? null;
   const supportMail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
   const support = process.env.NEXT_PUBLIC_SUPPORT_URL ?? (supportMail ? `mailto:${supportMail}` : null);
+  const statusLabel = locale === "en" ? "All systems operational" : "Sistema operativo";
 
   return (
-    <footer className="mt-[var(--login-space-footer)] border-t border-[color-mix(in_oklab,var(--color-border)_80%,white_8%)] pt-6 text-center text-caption text-[color-mix(in_oklab,var(--color-text-2)_80%,white)]">
-      <p className="text-[13px] leading-relaxed text-[color-mix(in_oklab,var(--color-text-2)_80%,white)]">
+    <footer className="mt-[var(--login-space-footer)] pt-6 text-center text-caption text-[color-mix(in_oklab,var(--color-text-2)_80%,white)]">
+      <div className="login-divider-gradient mb-5" aria-hidden />
+      {/* Pill de estado del servicio: refuerza la sensacion de "centro
+       *  de control en vivo". Estatica por ahora; se puede enchufar a un
+       *  endpoint /api/health en el futuro sin tocar el layout. */}
+      <div className="flex justify-center">
+        <span className="login-status-pill" aria-label={statusLabel}>
+          <span className="login-status-pill-dot" aria-hidden />
+          {statusLabel}
+        </span>
+      </div>
+
+      <p className="mt-3 text-[12.5px] leading-relaxed text-[color-mix(in_oklab,var(--color-text-2)_80%,white)]">
         <span className="font-medium text-[var(--color-text-1)]">{t.versionLabel}</span> {version}
         <span aria-hidden className="mx-2 text-[var(--color-text-3)]">
           ·
@@ -43,16 +56,18 @@ export function LoginCardFooter() {
         {legal ? (
           <a
             href={legal}
-            className="login-focusable text-[color-mix(in_oklab,var(--color-text-2)_80%,white)] underline-offset-4 transition-colors hover:text-[var(--color-text-1)] hover:underline"
+            className="login-focusable inline-flex items-center gap-1.5 text-[color-mix(in_oklab,var(--color-text-2)_80%,white)] underline-offset-4 transition-colors hover:text-[var(--color-text-1)] hover:underline"
           >
+            <ScrollText size={12} aria-hidden strokeWidth={1.8} />
             {t.legal}
           </a>
         ) : null}
         {support ? (
           <a
             href={support}
-            className="login-focusable text-[color-mix(in_oklab,var(--color-text-2)_80%,white)] underline-offset-4 transition-colors hover:text-[var(--color-text-1)] hover:underline"
+            className="login-focusable inline-flex items-center gap-1.5 text-[color-mix(in_oklab,var(--color-text-2)_80%,white)] underline-offset-4 transition-colors hover:text-[var(--color-text-1)] hover:underline"
           >
+            <LifeBuoy size={12} aria-hidden strokeWidth={1.8} />
             {t.support}
           </a>
         ) : null}

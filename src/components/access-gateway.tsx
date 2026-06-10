@@ -470,7 +470,10 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
 
         <div className="space-y-[var(--login-space-meta)]">
           <div className="login-meta-block items-center text-center">
-            <p className="text-label tracking-wide text-[color-mix(in_oklab,var(--color-text-3)_72%,white)]">{t.operationalAccess}</p>
+            <span className="login-pretitle">
+              <span className="login-pretitle-dot" aria-hidden />
+              {t.operationalAccess}
+            </span>
             <h2 id={`${formId}-heading`} className="text-subheading text-balance text-[var(--color-text-1)]">
               {sessionUser ? t.activeSession(sessionUser.name) : t.signInToManage}
             </h2>
@@ -547,6 +550,12 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                       {t.fieldPasswordLabel}
                     </label>
                     <div className="relative">
+                      <Lock
+                        size={15}
+                        aria-hidden
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]"
+                        strokeWidth={1.8}
+                      />
                       <input
                         ref={passwordInputRef}
                         id="login-password"
@@ -555,12 +564,12 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                         placeholder={t.fieldPasswordPlaceholder}
                         value={passwordInput}
                         onChange={(e) => setPasswordInput(e.target.value)}
-                        className="login-focusable w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 pr-20 text-body text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:border-[color-mix(in_oklab,var(--color-accent)_60%,var(--color-border))] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+                        className="login-focusable login-input-premium w-full rounded-lg pl-10 pr-20 py-2.5 text-body text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((v) => !v)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-caption text-[var(--color-text-3)] hover:text-[var(--color-text-1)]"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-caption font-medium text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)]"
                         aria-label={showPassword ? t.hidePassword : t.showPassword}
                       >
                         {showPassword ? t.hidePassword : t.showPassword}
@@ -582,7 +591,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                 ref={primaryRef}
                 type="button"
                 size="lg"
-                className="login-primary-cta login-focusable login-motion-transform w-full motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0"
+                className="login-primary-cta login-primary-cta-premium login-focusable login-motion-transform w-full motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0"
                 onClick={() => router.push(destAfterLogin)}
                 onMouseEnter={prefetchDashboard}
                 onFocus={prefetchDashboard}
@@ -612,7 +621,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                   ref={primaryRef}
                   type="submit"
                   size="lg"
-                  className="login-primary-cta login-focusable login-motion-transform w-full motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0"
+                  className="login-primary-cta login-primary-cta-premium login-focusable login-motion-transform w-full motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0"
                   disabled={
                     !ready ||
                     loggingIn ||
