@@ -1052,16 +1052,54 @@ export function TicketsModule() {
                     </p>
                     {(t.role === "tecnico_campo" || t.role === "gestor_centro_control") && (
                       <div className="mt-2 space-y-2">
+                        {/* Acciones de cambio de estado. Antes se renderizaban
+                         * como botones con el texto literal del estado
+                         * ("pendiente", "programada", "cancelada") y todos
+                         * compartian el mismo estilo gris neutro, por lo que
+                         * el usuario no entendia que "cancelada" era una
+                         * accion (lo confundia con un chip de estado).
+                         *
+                         * Ahora cada accion tiene:
+                         *   - Verbo explicito en la etiqueta ("Cancelar tarea"
+                         *     en vez de "cancelada").
+                         *   - Tono visual propio (rojo para destructivo, azul
+                         *     para programar, neutro para reabrir).
+                         *   - Confirmacion al cancelar para evitar clicks
+                         *     accidentales sobre acciones destructivas. */}
                         <div className="flex flex-wrap gap-1.5">
-                          {(["pendiente", "programada", "cancelada"] as const)
-                            .filter((s) => s !== task.status)
-                            .map((status) => (
+                          {(
+                            [
+                              { status: "pendiente" as const, label: "Reabrir como pendiente", tone: "neutral" as const },
+                              { status: "programada" as const, label: "Marcar como programada", tone: "accent" as const },
+                              { status: "cancelada" as const, label: "Cancelar tarea", tone: "danger" as const },
+                            ]
+                          )
+                            .filter(({ status }) => status !== task.status)
+                            .map(({ status, label, tone }) => (
                               <button
                                 key={`${task.id}-${status}`}
-                                onClick={() => void t.handleUpdatePreventiveTaskStatus(task.id, status)}
-                                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2 py-1 text-[11px] text-[var(--color-text-2)] transition-all duration-150 hover:border-[var(--color-accent)]/30 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]"
+                                onClick={() => {
+                                  if (
+                                    tone === "danger" &&
+                                    !window.confirm(
+                                      `¿Cancelar esta tarea preventiva (${task.busId} · ${task.assetType})? Podrás reabrirla más tarde si fue por error.`,
+                                    )
+                                  ) {
+                                    return;
+                                  }
+                                  void t.handleUpdatePreventiveTaskStatus(task.id, status);
+                                }}
+                                className={cn(
+                                  "rounded-md border px-2 py-1 text-[11px] font-medium transition-all duration-150",
+                                  tone === "neutral" &&
+                                    "border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-text-2)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
+                                  tone === "accent" &&
+                                    "border-[var(--color-accent)]/35 bg-[var(--color-accent-light)] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/15",
+                                  tone === "danger" &&
+                                    "border-[var(--color-error)]/35 bg-[var(--color-error-light)] text-[var(--color-error)] hover:bg-[var(--color-error)]/15",
+                                )}
                               >
-                                {status}
+                                {label}
                               </button>
                             ))}
                           {task.status !== "completada" && (
@@ -1070,7 +1108,7 @@ export function TicketsModule() {
                                 t.setCompletingTaskId(t.completingTaskId === task.id ? null : task.id);
                                 t.setCompletionNote("");
                               }}
-                              className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-400 transition-all duration-150 hover:bg-emerald-500/20"
+                              className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-400 transition-all duration-150 hover:bg-emerald-500/20"
                             >
                               Completar…
                             </button>
