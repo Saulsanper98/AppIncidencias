@@ -31,8 +31,17 @@ export function LoginHero() {
           className="h-[3.55rem] w-full max-w-[18.25rem] text-[color-mix(in_oklab,var(--color-text-1)_92%,white)] sm:h-[3.9rem] sm:max-w-[19.75rem]"
         />
       </div>
-      <h1 className="login-hero-title text-balance">{t.heroTitle}</h1>
+      <h1 className="login-hero-title login-title-holo text-balance">{t.heroTitle}</h1>
       <p className="login-hero-lead mx-auto mt-2 max-w-prose text-pretty text-[var(--color-text-2)]">{t.heroLead}</p>
+
+      {/* Brand signature minimal estilo "powered by" pero institucional. */}
+      <div className="mt-4 flex justify-center">
+        <span className="login-brand-signature" aria-hidden>
+          <span className="login-brand-signature-line" />
+          Movilidad GC
+          <span className="login-brand-signature-line login-brand-signature-line--right" />
+        </span>
+      </div>
 
       {/* Divider con degradado en lugar del border-bottom plano. */}
       <div className="login-divider-gradient mt-[var(--login-space-header)]" aria-hidden />

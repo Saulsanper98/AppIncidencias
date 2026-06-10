@@ -71,10 +71,10 @@ function OptionAvatar({ avatarUrl, label, size = 28 }: { avatarUrl?: string | nu
 }
 
 const triggerBase =
-  "login-focusable flex w-full min-h-[44px] items-center justify-between gap-2 rounded-xl border border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[var(--color-surface-2)] px-3 py-2.5 text-left text-[13px] leading-5 text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,background-color,box-shadow] duration-150 hover:border-[color-mix(in_oklab,var(--color-border-hover)_70%,var(--color-border))] hover:bg-[color-mix(in_oklab,var(--color-surface-2)_92%,var(--color-surface-3))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--color-accent)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)] data-[open=true]:border-[color-mix(in_oklab,var(--color-accent)_32%,var(--color-border))]";
+  "login-focusable login-listbox-trigger-premium flex w-full min-h-[44px] items-center justify-between gap-2 rounded-xl border border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[var(--color-surface-2)] px-3 py-2.5 text-left text-[13px] leading-5 text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,background-color,box-shadow] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--color-accent)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]";
 
 const listSurface =
-  "login-user-listbox-panel absolute left-0 right-0 top-full z-50 mt-1.5 flex max-h-[min(280px,50vh)] flex-col gap-0.5 overflow-y-auto rounded-xl border border-[color-mix(in_oklab,var(--color-border)_85%,transparent)] bg-[color-mix(in_oklab,var(--color-surface-2)_96%,var(--color-surface))] p-1.5 shadow-[0_18px_48px_-14px_rgba(0,0,0,0.55)] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-[color-mix(in_oklab,var(--color-surface-3)_40%,transparent)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_oklab,var(--color-text-3)_35%,transparent)]";
+  "login-user-listbox-panel login-listbox-panel-premium absolute left-0 right-0 top-full z-50 mt-1.5 flex max-h-[min(280px,50vh)] flex-col gap-0.5 overflow-y-auto rounded-xl border border-[color-mix(in_oklab,var(--color-border)_85%,transparent)] bg-[color-mix(in_oklab,var(--color-surface-2)_96%,var(--color-surface))] p-1.5 shadow-[0_18px_48px_-14px_rgba(0,0,0,0.55)] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-[color-mix(in_oklab,var(--color-surface-3)_40%,transparent)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_oklab,var(--color-text-3)_35%,transparent)]";
 
 function mergeRefs<T>(...refs: (Ref<T> | undefined)[]) {
   return (node: T | null) => {
@@ -169,7 +169,9 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
         >
           <span className="flex min-w-0 flex-1 items-center gap-2.5">
             {hasRichOptions ? (
-              <OptionAvatar avatarUrl={selectedOption?.avatarUrl ?? null} label={selectedLabel} size={32} />
+              <span className="login-avatar-online">
+                <OptionAvatar avatarUrl={selectedOption?.avatarUrl ?? null} label={selectedLabel} size={32} />
+              </span>
             ) : null}
             <span className="flex min-w-0 flex-col">
               <span className="truncate text-[13px] font-medium text-[var(--color-text-1)]">{selectedLabel}</span>
@@ -200,9 +202,9 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
                       optionRefs.current[idx] = el;
                     }}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] leading-snug transition-colors duration-150",
+                      "login-listbox-option flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 pl-3 text-left text-[13px] leading-snug transition-colors duration-150",
                       active
-                        ? "bg-[color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface-3))] font-medium text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_35%,transparent)]"
+                        ? "login-listbox-option--active bg-[color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface-3))] font-medium text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_35%,transparent)]"
                         : "text-[color-mix(in_oklab,var(--color-text-2)_92%,white)] hover:bg-[color-mix(in_oklab,var(--color-surface-3)_70%,transparent)] hover:text-[var(--color-text-1)]",
                     )}
                     onClick={() => {

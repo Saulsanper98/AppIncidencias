@@ -1235,20 +1235,23 @@ body {
   box-shadow: 0 0 8px color-mix(in oklab, var(--color-accent) 62%, transparent);
 }
 
-/* CTA primario premium con gradiente y glow tintado */
+/* CTA primario premium con gradiente y glow tintado.
+ * El gradiente va de un azul vivo (top) a un azul medio (bottom) sin
+ * tirar a negro para que el boton se sienta luminoso y no apagado. */
 .login-primary-cta-premium {
   background: linear-gradient(
     180deg,
-    color-mix(in oklab, var(--color-accent) 92%, white 8%) 0%,
-    var(--color-accent) 55%,
-    color-mix(in oklab, var(--color-accent) 88%, black 14%) 100%
+    color-mix(in oklab, var(--color-accent) 78%, white 22%) 0%,
+    color-mix(in oklab, var(--color-accent) 92%, white 8%) 45%,
+    var(--color-accent) 100%
   ) !important;
-  border: 1px solid color-mix(in oklab, var(--color-accent) 60%, white 8%) !important;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 60%, white 16%) !important;
+  color: white !important;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.18) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.18) inset,
-    0 10px 28px -10px color-mix(in oklab, var(--color-accent) 70%, transparent),
-    0 2px 8px -2px rgba(0, 0, 0, 0.35) !important;
+    0 1px 0 rgba(255, 255, 255, 0.30) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.16) inset,
+    0 14px 34px -10px color-mix(in oklab, var(--color-accent) 80%, transparent),
+    0 4px 12px -2px rgba(0, 0, 0, 0.30) !important;
   position: relative;
   overflow: hidden;
 }
@@ -1353,4 +1356,183 @@ body {
   background:
     radial-gradient(ellipse 80% 65% at 50% 50%, transparent 50%, rgba(0, 0, 0, 0.35) 100%);
   pointer-events: none;
+}
+
+/* Gradiente de texto sutil para "Centro de Control": holo blanco-azulado.
+ * Mantiene legibilidad porque es practicamente blanco con un toque cyan. */
+.login-title-holo {
+  background-image: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    color-mix(in oklab, #ffffff 88%, #cfe2ff 12%) 40%,
+    color-mix(in oklab, #ffffff 70%, #93c5fd 30%) 100%
+  );
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+          color: transparent;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+.light .login-title-holo,
+:root.light .login-title-holo {
+  background: none;
+  -webkit-background-clip: border-box;
+          background-clip: border-box;
+  -webkit-text-fill-color: var(--color-text-1);
+          color: var(--color-text-1);
+  text-shadow: none;
+}
+
+/* Brand signature: micro-tipografia "MOVILIDAD GC" debajo del lead.
+ * Detalle premium estilo "powered by"; muy sutil pero refuerza marca. */
+.login-brand-signature {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-text-3) 70%, white);
+}
+.login-brand-signature-line {
+  display: inline-block;
+  width: 28px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--color-text-3) 70%, white)
+  );
+}
+.login-brand-signature-line--right {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-text-3) 70%, white),
+    transparent
+  );
+}
+
+/* Shell cohesivo para Idioma + AC: pill grande con borde uniforme. */
+.login-segmented-shell {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 4px 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-border) 88%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-surface-2) 88%, white 4%) 0%,
+    color-mix(in oklab, var(--color-surface-2) 72%, transparent) 100%
+  );
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+
+/* Bloque hint sutil bajo el password (info + texto compacto). */
+.login-hint-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--color-border) 60%, transparent);
+  background: color-mix(in oklab, var(--color-surface-2) 40%, transparent);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: color-mix(in oklab, var(--color-text-3) 80%, white);
+}
+.login-hint-block-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: color-mix(in oklab, var(--color-accent) 70%, white);
+}
+
+/* ── Listbox de usuario premium ──
+ * Trigger con dot verde "online" del lado izquierdo del avatar,
+ * gradiente sutil de fondo y ring de accent al abrir.
+ * Opcion activa con barra de acento a la izquierda (estilo macOS). */
+.login-listbox-trigger-premium {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-surface-2) 90%, white 4%) 0%,
+    var(--color-surface-2) 100%
+  ) !important;
+  border-color: color-mix(in oklab, var(--color-border) 92%, white 6%) !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 2px 8px -3px rgba(0, 0, 0, 0.25) !important;
+  transition:
+    background-color 0.18s var(--login-ease-out),
+    border-color 0.18s var(--login-ease-out),
+    box-shadow 0.18s var(--login-ease-out) !important;
+}
+.login-listbox-trigger-premium:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 32%, var(--color-border-hover)) !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 0 0 3px color-mix(in oklab, var(--color-accent) 10%, transparent),
+    0 4px 14px -4px rgba(0, 0, 0, 0.32) !important;
+}
+.login-listbox-trigger-premium[data-open="true"] {
+  border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-border)) !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 0 0 4px color-mix(in oklab, var(--color-accent) 18%, transparent) !important;
+}
+
+/* Avatar wrapper con dot "online" verde abajo a la derecha. */
+.login-avatar-online {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.login-avatar-online::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--color-success);
+  border: 2px solid var(--color-surface-2);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--color-success) 55%, transparent);
+}
+
+/* Panel del listbox con sombra/contraste premium. */
+.login-listbox-panel-premium {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-surface-2) 98%, white 2%) 0%,
+    color-mix(in oklab, var(--color-surface-2) 94%, var(--color-surface)) 100%
+  ) !important;
+  border-color: color-mix(in oklab, var(--color-border) 92%, white 6%) !important;
+  box-shadow:
+    0 24px 64px -16px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset !important;
+  backdrop-filter: blur(8px);
+}
+
+/* Opcion del listbox con micro detalles: hover lift y, para la activa,
+ * barra de acento a la izquierda + ring sutil. */
+.login-listbox-option {
+  position: relative;
+}
+.login-listbox-option--active::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-accent) 70%, white 20%),
+    var(--color-accent)
+  );
+  box-shadow: 0 0 8px color-mix(in oklab, var(--color-accent) 60%, transparent);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { AlertCircle, Info, Loader2, Lock, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -403,59 +403,61 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
         aria-busy={!ready}
         aria-labelledby={`${formId}-heading`}
       >
-        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
-          <span className="login-secondary-text text-caption">{locale === "en" ? "Language" : "Idioma"}</span>
-          <div className="login-segmented flex">
+        <div className="flex justify-center">
+          <div className="login-segmented-shell">
+            <span className="login-secondary-text text-caption">{locale === "en" ? "Language" : "Idioma"}</span>
+            <div className="login-segmented flex">
+              <button
+                ref={langEsRef}
+                type="button"
+                className={cn(
+                  "login-focusable login-segmented-item px-3 py-1 text-xs font-semibold transition-colors",
+                  locale === "es"
+                    ? "bg-[color-mix(in_oklab,var(--color-surface-2)_88%,white)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_rgba(148,163,184,0.22)]"
+                    : "text-[color-mix(in_oklab,var(--color-text-3)_70%,white)] hover:text-[var(--color-text-1)]",
+                )}
+                onClick={() => setLocalePersist("es")}
+                aria-pressed={locale === "es"}
+              >
+                {t.langEs}
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "login-focusable login-segmented-item px-3 py-1 text-xs font-semibold transition-colors",
+                  locale === "en"
+                    ? "bg-[color-mix(in_oklab,var(--color-surface-2)_88%,white)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_rgba(148,163,184,0.22)]"
+                    : "text-[color-mix(in_oklab,var(--color-text-3)_70%,white)] hover:text-[var(--color-text-1)]",
+                )}
+                onClick={() => setLocalePersist("en")}
+                aria-pressed={locale === "en"}
+              >
+                {t.langEn}
+              </button>
+            </div>
             <button
-              ref={langEsRef}
               type="button"
+              aria-pressed={highContrast}
               className={cn(
-                "login-focusable login-segmented-item px-3 py-1 text-xs font-semibold transition-colors",
-                locale === "es"
-                  ? "bg-[color-mix(in_oklab,var(--color-surface-2)_88%,white)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_rgba(148,163,184,0.22)]"
-                  : "text-[color-mix(in_oklab,var(--color-text-3)_70%,white)] hover:text-[var(--color-text-1)]",
+                "login-focusable login-segmented-item px-2 text-[11px] font-semibold transition-colors",
+                highContrast
+                  ? "bg-[color-mix(in_oklab,var(--color-accent)_28%,var(--color-surface-2))] text-[var(--color-text-1)]"
+                  : "bg-[var(--color-surface-2)]/30 text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
               )}
-              onClick={() => setLocalePersist("es")}
-              aria-pressed={locale === "es"}
+              title={t.contrast}
+              onClick={() => {
+                const next = !highContrast;
+                setHighContrast(next);
+                try {
+                  localStorage.setItem(LOGIN_HIGH_CONTRAST_KEY, next ? "1" : "0");
+                } catch {
+                  /* ignore */
+                }
+              }}
             >
-              {t.langEs}
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "login-focusable login-segmented-item px-3 py-1 text-xs font-semibold transition-colors",
-                locale === "en"
-                  ? "bg-[color-mix(in_oklab,var(--color-surface-2)_88%,white)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_rgba(148,163,184,0.22)]"
-                  : "text-[color-mix(in_oklab,var(--color-text-3)_70%,white)] hover:text-[var(--color-text-1)]",
-              )}
-              onClick={() => setLocalePersist("en")}
-              aria-pressed={locale === "en"}
-            >
-              {t.langEn}
+              {t.contrastShort}
             </button>
           </div>
-          <button
-            type="button"
-            aria-pressed={highContrast}
-            className={cn(
-              "login-focusable login-segmented-item px-2 text-[11px] font-semibold transition-colors",
-              highContrast
-                ? "bg-[color-mix(in_oklab,var(--color-accent)_28%,var(--color-surface-2))] text-[var(--color-text-1)]"
-                : "bg-[var(--color-surface-2)]/30 text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
-            )}
-            title={t.contrast}
-            onClick={() => {
-              const next = !highContrast;
-              setHighContrast(next);
-              try {
-                localStorage.setItem(LOGIN_HIGH_CONTRAST_KEY, next ? "1" : "0");
-              } catch {
-                /* ignore */
-              }
-            }}
-          >
-            {t.contrastShort}
-          </button>
         </div>
 
         {authRequired && (
@@ -575,10 +577,13 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                         {showPassword ? t.hidePassword : t.showPassword}
                       </button>
                     </div>
-                    <p id="login-user-hint" className="mt-1.5 text-caption text-[var(--color-text-3)]">
-                      {t.selectorHint}
-                    </p>
-                    <p className="mt-1 text-caption text-[var(--color-text-3)]">{t.forgotPassword}</p>
+                    <div id="login-user-hint" className="login-hint-block">
+                      <Info size={13} aria-hidden strokeWidth={1.8} className="login-hint-block-icon" />
+                      <div className="flex-1 space-y-1">
+                        <p>{t.selectorHint}</p>
+                        <p className="text-[10.5px] opacity-80">{t.forgotPassword}</p>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
               </div>
