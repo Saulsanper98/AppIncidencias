@@ -17,6 +17,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { MyMetricsCard } from "@/components/account/MyMetricsCard";
 import { Button } from "@/components/ui/button";
 import { resolveAccountImageUrl } from "@/lib/account-media";
 import type { UserRole } from "@/lib/domain";
@@ -248,9 +249,9 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      {/* ============ CABECERA: BANNER + AVATAR + IDENTIDAD ============ */}
+      {/* ============ HERO: BANNER + AVATAR LATERAL + IDENTIDAD ============ */}
       <section
-        className="relative overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm"
+        className="account-hero shadow-sm"
         aria-label="Cabecera del perfil"
       >
         <BannerArea
@@ -272,52 +273,83 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
           }}
         />
 
-        {/* Avatar superpuesto */}
-        <div className="relative -mt-16 flex flex-col items-center px-4 pb-6 sm:-mt-20">
-          <AvatarArea
-            url={resolveAccountImageUrl(user.avatarUrl)}
-            initials={initials}
-            uploading={uploading.avatar}
-            onPickFile={() => avatarFileInput.current?.click()}
-            onOpenUrl={() => openUrlEditor("avatar")}
-            onRemove={user.avatarUrl ? () => setRemoteImage("avatar", null) : null}
-          />
-          <input
-            ref={avatarFileInput}
-            type="file"
-            accept={ACCEPT_MIME}
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void uploadFile("avatar", file);
-              event.target.value = "";
-            }}
-          />
-          <h1 className="mt-4 text-center text-2xl font-semibold text-[var(--color-text-1)]">{user.name}</h1>
-          <p className="text-sm text-[var(--color-text-3)]">{user.email}</p>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset",
-                user.isReadOnly
-                  ? "bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-[var(--color-accent)]/30"
-                  : "bg-[var(--color-surface-2)] text-[var(--color-text-2)] ring-[var(--color-border)]",
-              )}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)]" aria-hidden />
-              {user.isReadOnly ? "Solo lectura" : ROLE_LABEL[user.role]}
-            </span>
-            {positionLabel ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-accent-light)] px-3 py-1 text-xs font-medium text-[var(--color-accent)]">
-                {positionLabel}
-              </span>
-            ) : null}
+        {/* Avatar lateral + identidad. Mobile: avatar arriba, info debajo.
+         * Desktop: avatar a la izquierda solapado al banner, info al lado. */}
+        <div className="relative -mt-14 flex flex-col gap-5 px-5 pb-6 sm:-mt-16 sm:flex-row sm:items-end sm:gap-6 sm:px-7 sm:pb-7">
+          <div className="flex flex-col items-center gap-3 sm:items-start">
+            <AvatarArea
+              url={resolveAccountImageUrl(user.avatarUrl)}
+              initials={initials}
+              uploading={uploading.avatar}
+              onPickFile={() => avatarFileInput.current?.click()}
+              onOpenUrl={() => openUrlEditor("avatar")}
+              onRemove={user.avatarUrl ? () => setRemoteImage("avatar", null) : null}
+            />
+            <input
+              ref={avatarFileInput}
+              type="file"
+              accept={ACCEPT_MIME}
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void uploadFile("avatar", file);
+                event.target.value = "";
+              }}
+            />
           </div>
-          {user.bio ? (
-            <p className="mt-3 max-w-md text-center text-sm text-[var(--color-text-2)]">{user.bio}</p>
-          ) : null}
+
+          <div className="min-w-0 flex-1 text-center sm:pt-3 sm:text-left">
+            <div className="dashboard-pretitle justify-center sm:justify-start">
+              <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+              CCMGC · Mi espacio
+            </div>
+            <h1 className="dashboard-hero-title mt-1 text-[24px] font-semibold leading-tight tracking-tight sm:text-[28px]">
+              {user.name}
+            </h1>
+            <p className="mt-1 text-sm text-[var(--color-text-3)]">{user.email}</p>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+              <span
+                className="account-identity-chip"
+                style={
+                  user.isReadOnly
+                    ? { ["--chip-tone" as string]: "var(--color-accent)" }
+                    : { ["--chip-tone" as string]: "var(--color-success)" }
+                }
+              >
+                <span className="account-identity-chip-dot" aria-hidden />
+                {user.isReadOnly ? "Solo lectura" : ROLE_LABEL[user.role]}
+              </span>
+              {positionLabel ? (
+                <span
+                  className="account-identity-chip"
+                  style={{ ["--chip-tone" as string]: "var(--color-accent)" }}
+                >
+                  {positionLabel}
+                </span>
+              ) : null}
+              <span
+                className="account-identity-chip"
+                title="Última conexión registrada"
+                style={{ ["--chip-tone" as string]: "var(--color-text-3)" }}
+              >
+                Último acceso: {formatDate(user.lastLoginAt)}
+              </span>
+            </div>
+            {user.bio ? (
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--color-text-2)]">
+                {user.bio}
+              </p>
+            ) : (
+              <p className="mt-3 max-w-xl text-sm italic text-[var(--color-text-3)]">
+                Añade una biografía corta para que tus compañeros sepan quién eres.
+              </p>
+            )}
+          </div>
         </div>
       </section>
+
+      {/* ============ MIS MÉTRICAS (justo bajo el hero) ============ */}
+      <MyMetricsCard />
 
       {feedback ? (
         <div
@@ -349,12 +381,28 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <form
           onSubmit={submitProfile}
-          className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm sm:p-6"
+          className="account-section"
           aria-label="Información personal"
         >
-          <header className="mb-4 flex items-center gap-2">
-            <UserCircle2 size={18} className="text-[var(--color-accent)]" aria-hidden />
-            <h2 className="text-base font-semibold text-[var(--color-text-1)]">Información personal</h2>
+          <header className="account-section-head">
+            <span
+              className="account-section-icon"
+              style={{ ["--section-tone" as string]: "var(--color-accent)" }}
+              aria-hidden
+            >
+              <UserCircle2 size={18} strokeWidth={1.7} />
+            </span>
+            <div className="min-w-0">
+              <p className="account-section-pretitle">
+                <span
+                  className="account-section-pretitle-dot"
+                  style={{ ["--section-tone" as string]: "var(--color-accent)" }}
+                  aria-hidden
+                />
+                Perfil
+              </p>
+              <h2 className="account-section-title">Información personal</h2>
+            </div>
           </header>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -424,7 +472,7 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
             >
               Descartar
             </Button>
-            <Button type="submit" disabled={!isDirty || saving}>
+            <Button type="submit" disabled={!isDirty || saving} className="login-primary-cta-premium">
               {saving ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="size-4 animate-spin" aria-hidden /> Guardando…
@@ -437,19 +485,35 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
         </form>
 
         <aside
-          className="flex flex-col gap-4 rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm sm:p-6"
+          className="account-section flex flex-col gap-4"
           aria-label="Seguridad y sesión"
         >
-          <header className="flex items-center gap-2">
-            <KeyRound size={18} className="text-[var(--color-accent)]" aria-hidden />
-            <h2 className="text-base font-semibold text-[var(--color-text-1)]">Seguridad</h2>
+          <header className="account-section-head">
+            <span
+              className="account-section-icon"
+              style={{ ["--section-tone" as string]: "var(--color-warning)" }}
+              aria-hidden
+            >
+              <KeyRound size={18} strokeWidth={1.7} />
+            </span>
+            <div className="min-w-0">
+              <p className="account-section-pretitle">
+                <span
+                  className="account-section-pretitle-dot"
+                  style={{ ["--section-tone" as string]: "var(--color-warning)" }}
+                  aria-hidden
+                />
+                Cuenta
+              </p>
+              <h2 className="account-section-title">Seguridad</h2>
+            </div>
           </header>
 
-          <dl className="grid grid-cols-1 gap-3 text-sm">
+          <dl className="grid grid-cols-1 gap-2 text-sm">
             <InfoRow label="Último cambio de contraseña" value={formatDate(user.passwordUpdatedAt)} />
             <InfoRow label="Último inicio de sesión" value={formatDate(user.lastLoginAt)} />
             {user.mustChangePassword ? (
-              <div className="rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning-light)] px-3 py-2 text-xs text-[var(--color-warning)]">
+              <div className="rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning-light)] px-3 py-2 text-xs font-medium text-[var(--color-warning)]">
                 Tu contraseña es temporal. Cámbiala lo antes posible.
               </div>
             ) : null}
@@ -477,14 +541,30 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
 
       {/* ============ PREVIEW EN LA LISTA ============ */}
       <section
-        className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm sm:p-6"
+        className="account-section"
         aria-label="Vista previa en la lista de usuarios"
       >
-        <header className="mb-3 flex items-center gap-2">
-          <ImageIcon size={18} className="text-[var(--color-accent)]" aria-hidden />
-          <h2 className="text-base font-semibold text-[var(--color-text-1)]">Así te verán los demás</h2>
+        <header className="account-section-head">
+          <span
+            className="account-section-icon"
+            style={{ ["--section-tone" as string]: "var(--color-success)" }}
+            aria-hidden
+          >
+            <ImageIcon size={18} strokeWidth={1.7} />
+          </span>
+          <div className="min-w-0">
+            <p className="account-section-pretitle">
+              <span
+                className="account-section-pretitle-dot"
+                style={{ ["--section-tone" as string]: "var(--color-success)" }}
+                aria-hidden
+              />
+              Visibilidad
+            </p>
+            <h2 className="account-section-title">Así te verán los demás</h2>
+          </div>
         </header>
-        <p className="mb-4 text-xs text-[var(--color-text-3)]">
+        <p className="-mt-2 mb-4 text-xs text-[var(--color-text-3)]">
           Vista previa en la barra lateral y en la lista de usuarios.
         </p>
         <div className="flex flex-wrap items-stretch gap-3">
@@ -540,9 +620,9 @@ function Field({
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg bg-[var(--color-surface-2)] px-3 py-2">
-      <dt className="text-xs uppercase tracking-wide text-[var(--color-text-3)]">{label}</dt>
-      <dd className="text-sm text-[var(--color-text-1)]">{value}</dd>
+    <div className="account-info-row">
+      <dt className="account-info-row-label">{label}</dt>
+      <dd className="account-info-row-value">{value}</dd>
     </div>
   );
 }
@@ -642,7 +722,7 @@ function AvatarArea({
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="relative">
-        <div className="rounded-full bg-gradient-to-br from-fuchsia-500 via-amber-300 to-cyan-400 p-[3px] shadow-xl">
+        <div className="account-avatar-ring">
           <div className="rounded-full bg-[var(--color-surface)] p-1">
             {url ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -658,6 +738,9 @@ function AvatarArea({
             )}
           </div>
         </div>
+        {/* Dot decorativo de "sesion activa": solo se pinta a usuarios
+         * autenticados (todo /account requiere login). */}
+        <span className="account-online-dot" aria-hidden title="Sesión activa" />
         {uploading ? (
           <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm">
             <Loader2 className="size-6 animate-spin text-white" aria-hidden />
@@ -693,9 +776,6 @@ function AvatarArea({
           </button>
         ) : null}
       </div>
-      <p className="max-w-xs text-center text-xs text-[var(--color-text-3)]">
-        Acepta GIF animado · PNG · JPG · WebP · hasta {MAX_FILE_MB} MB
-      </p>
     </div>
   );
 }

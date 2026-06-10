@@ -2533,3 +2533,397 @@ body {
   border-radius: 999px;
   box-shadow: 0 0 6px currentColor;
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * ACCOUNT (MI CUENTA) PREMIUM
+ *
+ * La pagina /account era una tarjeta de perfil clasica (banner + avatar
+ * centrado + h1 plano) sin treatment premium. Aqui definimos las
+ * piezas para llevarla al nivel del resto: hero asimetrico con avatar
+ * lateral, KPIs personales con tinte, secciones con head dot azul y un
+ * podio para top tipologias.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Card hero del perfil: banner + ambient glow */
+.account-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.account-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(56, 132, 255, 0.08) 0%,
+    transparent 35%,
+    transparent 65%,
+    rgba(168, 85, 247, 0.06) 100%
+  );
+  pointer-events: none;
+}
+
+/* Ring premium del avatar (sustituye al ring de fuchsia/cyan random) */
+.account-avatar-ring {
+  position: relative;
+  padding: 3px;
+  border-radius: 999px;
+  background: conic-gradient(
+    from 140deg at 50% 50%,
+    color-mix(in oklab, var(--color-accent) 80%, white) 0deg,
+    color-mix(in oklab, var(--color-accent) 30%, transparent) 110deg,
+    color-mix(in oklab, var(--color-success) 65%, white) 220deg,
+    color-mix(in oklab, var(--color-accent) 80%, white) 360deg
+  );
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 12px 30px -16px color-mix(in oklab, var(--color-accent) 65%, transparent);
+}
+.account-avatar-ring::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: inherit;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--color-accent) 22%, transparent) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Dot "online" del avatar (no es un estado real, es decorativo: marca
+ * sesion activa porque para entrar a /account tienes que estar logueado). */
+.account-online-dot {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--color-success);
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--color-success) 65%, transparent);
+}
+
+/* Nombre con gradient holografico (reutiliza dashboard-hero-title pero
+ * con padding distinto). Mantenemos compat con .dashboard-hero-title
+ * por simplicidad. */
+
+/* Chips de identidad (role / position / readonly) */
+.account-identity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--chip-tone, var(--color-surface-2)) 20%, var(--color-surface-2)) 0%,
+    color-mix(in oklab, var(--chip-tone, var(--color-surface-2)) 8%, var(--color-surface-2)) 100%
+  );
+  border: 1px solid color-mix(in oklab, var(--chip-tone, var(--color-border)) 35%, var(--color-border));
+  font-size: 11.5px;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--chip-tone, var(--color-text-2)) 70%, white);
+  white-space: nowrap;
+}
+.account-identity-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--chip-tone, var(--color-accent));
+  box-shadow: 0 0 6px color-mix(in oklab, var(--chip-tone, var(--color-accent)) 55%, transparent);
+}
+
+/* Stat pill personal del hero (Resueltos / SLA / MTTR resumido)
+ * Compacto y luminoso, distinto a los KPI tiles grandes de MyMetricsCard. */
+.account-stat-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--stat-tone, var(--color-surface-2)) 12%, var(--color-surface-2));
+  border: 1px solid color-mix(in oklab, var(--stat-tone, var(--color-border)) 22%, var(--color-border));
+  transition:
+    border-color 0.15s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+.account-stat-pill:hover {
+  border-color: color-mix(in oklab, var(--stat-tone, var(--color-border-hover)) 45%, var(--color-border-hover));
+  transform: translateY(-1px);
+}
+.account-stat-pill-value {
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: color-mix(in oklab, var(--stat-tone, var(--color-text-1)) 90%, white);
+}
+.account-stat-pill-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+
+/* Panel generico (card de seccion: form, seguridad, preview, stats) */
+.account-section {
+  position: relative;
+  border-radius: 22px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  padding: 22px;
+  transition:
+    border-color 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out);
+}
+.account-section:hover {
+  border-color: var(--color-border-hover);
+}
+.account-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.account-section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--section-tone, var(--color-accent)) 14%, var(--color-surface-2));
+  color: color-mix(in oklab, var(--section-tone, var(--color-accent)) 85%, white);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--section-tone, var(--color-accent)) 25%, transparent) inset;
+}
+.account-section-pretitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+.account-section-pretitle-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--section-tone, var(--color-accent));
+  box-shadow: 0 0 7px color-mix(in oklab, var(--section-tone, var(--color-accent)) 55%, transparent);
+}
+.account-section-title {
+  margin-top: 1px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-1);
+  letter-spacing: -0.005em;
+}
+
+/* InfoRow premium para Seguridad: con dot ambiental al lado. */
+.account-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-surface-2) 70%, var(--color-surface-3)) 0%,
+    var(--color-surface-2) 100%
+  );
+  border: 1px solid color-mix(in oklab, var(--color-border) 60%, transparent);
+}
+.account-info-row-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+.account-info-row-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* KPI tile premium para MyMetricsCard (reutiliza patron de reports
+ * pero con tipografia un punto mas compacta porque hay 4 tiles
+ * dentro de una seccion mas estrecha). */
+.account-kpi-tile {
+  position: relative;
+  overflow: hidden;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in oklab, var(--kpi-tone, var(--color-border)) 22%, var(--color-border));
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--kpi-tone, var(--color-surface-2)) 12%, var(--color-surface-2)) 0%,
+    var(--color-surface-2) 70%
+  );
+  transition:
+    transform 0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out);
+}
+.account-kpi-tile::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--kpi-tone, white) 40%, transparent) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+.account-kpi-tile:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--kpi-tone, var(--color-border-hover)) 45%, var(--color-border-hover));
+  box-shadow:
+    0 10px 22px -14px color-mix(in oklab, var(--kpi-tone, black) 40%, transparent);
+}
+.account-kpi-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+.account-kpi-tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--kpi-tone, var(--color-accent)) 12%, var(--color-surface));
+  color: color-mix(in oklab, var(--kpi-tone, var(--color-accent)) 80%, white);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--kpi-tone, var(--color-accent)) 22%, transparent) inset;
+}
+.account-kpi-tile-value {
+  margin-top: 10px;
+  font-size: 26px;
+  line-height: 1.05;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--kpi-tone, var(--color-text-1)) 100%, white) 0%,
+    color-mix(in oklab, var(--kpi-tone, var(--color-text-1)) 78%, transparent) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.account-kpi-tile-value--neutral {
+  background-image: linear-gradient(
+    180deg,
+    var(--color-text-1) 0%,
+    color-mix(in oklab, var(--color-text-1) 70%, transparent) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.account-kpi-tile-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-text-3);
+}
+
+/* Mini link "Ver mis tickets" en KPI de asignados */
+.account-kpi-tile-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-accent);
+  transition: gap 0.15s var(--ease-out);
+}
+.account-kpi-tile-link:hover {
+  gap: 7px;
+}
+
+/* Ranking badge ("Puesto X de Y") con glow segun puesto. Usa
+ * --rank-tone para gold/silver/bronze/neutral. */
+.account-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid color-mix(in oklab, var(--rank-tone, var(--color-accent)) 38%, var(--color-border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--rank-tone, var(--color-accent)) 20%, var(--color-surface-2)) 0%,
+    color-mix(in oklab, var(--rank-tone, var(--color-accent)) 8%, var(--color-surface-2)) 100%
+  );
+  color: color-mix(in oklab, var(--rank-tone, var(--color-accent)) 85%, white);
+  box-shadow: 0 0 18px -8px color-mix(in oklab, var(--rank-tone, var(--color-accent)) 55%, transparent);
+}
+
+/* Top tipologias: lista con barras de progreso suaves. */
+.account-typo-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 10px;
+  transition: background-color 0.15s var(--ease-out);
+}
+.account-typo-row:hover {
+  background: var(--color-surface-2);
+}
+.account-typo-row-bar {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-surface-2) 70%, transparent);
+}
+.account-typo-row-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-accent) 35%, transparent) 0%,
+    var(--color-accent) 100%
+  );
+  box-shadow: 0 0 8px color-mix(in oklab, var(--color-accent) 35%, transparent);
+  transition: width 0.7s var(--ease-out);
+}
+
+/* CTA primario para "Guardar cambios" / "Cambiar contrasena" en /account
+ * (alias semantico de .login-primary-cta-premium para que la pagina no
+ * dependa del login). */
+.account-primary-cta {
+  /* Hereda el gradient luminoso ya definido. */
+}

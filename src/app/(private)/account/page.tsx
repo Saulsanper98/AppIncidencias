@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { AccountProfile } from "@/components/account-profile";
-import { MyMetricsCard } from "@/components/account/MyMetricsCard";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
@@ -69,7 +68,6 @@ export default async function AccountPage() {
           }}
         />
       </Suspense>
-      <MyMetricsCard />
     </div>
   );
 }

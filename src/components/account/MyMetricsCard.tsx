@@ -11,10 +11,14 @@
  *
  * La tarjeta se autodescarga si el endpoint da 401 (visitante sin sesión) o
  * cualquier otro error, evitando emborronar la página de cuenta.
+ *
+ * Pase visual premium: tiles tinted por tono con gradient en el número,
+ * iconos en wrap con glow, ranking badge con podio (gold/silver/bronze) y
+ * top tipologías con barras de progreso.
  */
 
 import { useEffect, useState } from "react";
-import { Award, Clock3, Layers, Target, Trophy } from "lucide-react";
+import { Award, BarChart3, CheckCircle2, Clock3, Layers, Target, Trophy } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -34,6 +38,17 @@ function formatMs(ms: number | null | undefined): string {
   const hours = Math.floor(minutes / 60);
   const rem = minutes % 60;
   return `${hours}h ${rem.toString().padStart(2, "0")}m`;
+}
+
+/**
+ * Devuelve el tinte CSS de la medalla del ranking. Top 3 = oro/plata/bronce
+ * (estilo podio); fuera del top usa el tono accent normal.
+ */
+function rankTone(rank: number | null): string {
+  if (rank === 1) return "#f5b942"; // oro
+  if (rank === 2) return "#b9c3cf"; // plata
+  if (rank === 3) return "#c47e3a"; // bronce
+  return "var(--color-accent)";
 }
 
 export function MyMetricsCard() {
@@ -65,13 +80,13 @@ export function MyMetricsCard() {
 
   if (loading) {
     return (
-      <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6">
-        <div className="mb-3 h-4 w-40 animate-pulse rounded bg-[var(--color-surface-2)]" />
+      <div className="account-section">
+        <div className="mb-4 h-4 w-40 animate-pulse rounded bg-[var(--color-surface-2)]" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-24 animate-pulse rounded-xl bg-[var(--color-surface-2)]/60"
+              className="h-28 animate-pulse rounded-xl bg-[var(--color-surface-2)]/60"
             />
           ))}
         </div>
@@ -80,108 +95,169 @@ export function MyMetricsCard() {
   }
   if (error || !data) return null;
 
-  const slaColor =
+  // Tinte del SLA segun cumplimiento (success / warning / error).
+  const slaToneVar =
     data.slaCompliancePercent == null
-      ? "text-[var(--color-text-2)]"
+      ? undefined
       : data.slaCompliancePercent >= 90
-        ? "text-[var(--color-success)]"
+        ? "var(--color-success)"
         : data.slaCompliancePercent >= 75
-          ? "text-[var(--color-warning)]"
-          : "text-[var(--color-error)]";
+          ? "var(--color-warning)"
+          : "var(--color-error)";
+
+  // Maximo para escalar las barras de top tipologias.
+  const maxTipoCount = Math.max(1, ...data.topTipologias.map((t) => t.count));
 
   return (
-    <section
-      aria-labelledby="my-metrics-heading"
-      className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6"
-    >
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h2
-          id="my-metrics-heading"
-          className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-1)]"
-        >
-          <Trophy size={16} className="text-[var(--color-accent)]" aria-hidden />
-          Mi rendimiento (últimos 30 días)
-        </h2>
+    <section aria-labelledby="my-metrics-heading" className="account-section">
+      <div className="account-section-head flex-wrap justify-between">
+        <div className="flex items-center gap-3">
+          <span
+            className="account-section-icon"
+            style={{ ["--section-tone" as string]: "var(--color-accent)" }}
+            aria-hidden
+          >
+            <BarChart3 size={18} strokeWidth={1.7} />
+          </span>
+          <div className="min-w-0">
+            <p className="account-section-pretitle">
+              <span
+                className="account-section-pretitle-dot"
+                style={{ ["--section-tone" as string]: "var(--color-accent)" }}
+                aria-hidden
+              />
+              Rendimiento
+            </p>
+            <h2 id="my-metrics-heading" className="account-section-title">
+              Mi rendimiento <span className="text-[var(--color-text-3)]">· últimos 30 días</span>
+            </h2>
+          </div>
+        </div>
         {data.ranking.myRank ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-accent-light)] px-2.5 py-1 text-xs font-semibold text-[var(--color-accent)]">
-            <Award size={12} aria-hidden />
+          <span
+            className="account-rank-badge"
+            style={{ ["--rank-tone" as string]: rankTone(data.ranking.myRank) }}
+            title={
+              data.ranking.myRank <= 3
+                ? `Estás en el podio: puesto ${data.ranking.myRank} de ${data.ranking.total}`
+                : `Puesto ${data.ranking.myRank} de ${data.ranking.total}`
+            }
+          >
+            {data.ranking.myRank <= 3 ? (
+              <Trophy size={13} strokeWidth={2} aria-hidden />
+            ) : (
+              <Award size={13} strokeWidth={2} aria-hidden />
+            )}
             Puesto {data.ranking.myRank} de {data.ranking.total}
           </span>
         ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+        <div
+          className="account-kpi-tile"
+          style={{ ["--kpi-tone" as string]: "var(--color-accent)" }}
+        >
+          <p className="account-kpi-tile-head">
+            <span className="account-kpi-tile-icon">
+              <CheckCircle2 size={13} strokeWidth={1.8} aria-hidden />
+            </span>
             Resueltos
           </p>
-          <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--color-text-1)]">
-            {data.resolvedByMe.last30}
-          </p>
-          <p className="mt-0.5 text-[11px] text-[var(--color-text-3)]">
+          <p className="account-kpi-tile-value">{data.resolvedByMe.last30}</p>
+          <p className="account-kpi-tile-hint">
             últimos 30d · {data.resolvedByMe.last7} en 7d · {data.resolvedByMe.last90} en 90d
           </p>
         </div>
 
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+        <div
+          className="account-kpi-tile"
+          style={
+            data.currentlyAssigned > 0
+              ? { ["--kpi-tone" as string]: "var(--color-warning)" }
+              : undefined
+          }
+        >
+          <p className="account-kpi-tile-head">
+            <span className="account-kpi-tile-icon">
+              <Layers size={13} strokeWidth={1.8} aria-hidden />
+            </span>
             Mis asignados ahora
           </p>
-          <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--color-text-1)]">
+          <p
+            className={cn(
+              "account-kpi-tile-value",
+              data.currentlyAssigned === 0 && "account-kpi-tile-value--neutral",
+            )}
+          >
             {data.currentlyAssigned}
           </p>
-          <p className="mt-0.5 text-[11px] text-[var(--color-text-3)]">tickets activos</p>
-          <a
-            href="/tickets?mine=1"
-            className="mt-2 inline-flex items-center text-[11px] font-medium text-[var(--color-accent)] hover:underline"
-          >
-            Ver mis tickets
+          <p className="account-kpi-tile-hint">tickets activos</p>
+          <a href="/tickets?mine=1" className="account-kpi-tile-link">
+            Ver mis tickets →
           </a>
         </div>
 
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
-          <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
-            <Clock3 size={11} aria-hidden /> MTTR medio
+        <div className="account-kpi-tile">
+          <p className="account-kpi-tile-head">
+            <span className="account-kpi-tile-icon">
+              <Clock3 size={13} strokeWidth={1.8} aria-hidden />
+            </span>
+            MTTR medio
           </p>
-          <p className="mt-2 text-2xl font-bold tabular-nums text-[var(--color-text-1)]">
+          <p className="account-kpi-tile-value account-kpi-tile-value--neutral">
             {formatMs(data.mttrMs)}
           </p>
-          <p className="mt-0.5 text-[11px] text-[var(--color-text-3)]">mis tickets resueltos</p>
+          <p className="account-kpi-tile-hint">mis tickets resueltos</p>
         </div>
 
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
-          <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
-            <Target size={11} aria-hidden /> SLA cumplido
+        <div
+          className="account-kpi-tile"
+          style={slaToneVar ? { ["--kpi-tone" as string]: slaToneVar } : undefined}
+        >
+          <p className="account-kpi-tile-head">
+            <span className="account-kpi-tile-icon">
+              <Target size={13} strokeWidth={1.8} aria-hidden />
+            </span>
+            SLA cumplido
           </p>
-          <p className={cn("mt-2 text-2xl font-bold tabular-nums", slaColor)}>
+          <p
+            className={cn(
+              "account-kpi-tile-value",
+              !slaToneVar && "account-kpi-tile-value--neutral",
+            )}
+          >
             {data.slaCompliancePercent == null ? "—" : `${data.slaCompliancePercent}%`}
           </p>
-          <p className="mt-0.5 text-[11px] text-[var(--color-text-3)]">en mis resueltos 30d</p>
+          <p className="account-kpi-tile-hint">en mis resueltos 30d</p>
         </div>
       </div>
 
       {data.topTipologias.length > 0 ? (
-        <div className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/30 p-3">
-          <p className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+        <div className="mt-5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-4">
+          <p className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-3)]">
             <Layers size={11} aria-hidden /> Top tipologías que has atendido
           </p>
-          <ul className="space-y-1">
-            {data.topTipologias.map((tip) => (
-              <li
-                key={`${tip.tipo}-${tip.subtipo}`}
-                className="flex items-center justify-between gap-2 text-sm"
-              >
-                <span className="min-w-0 truncate text-[var(--color-text-2)]">
-                  <span className="font-medium text-[var(--color-text-1)]">{tip.tipo}</span>
-                  {tip.subtipo !== "—" ? (
-                    <span className="text-[var(--color-text-3)]"> · {tip.subtipo}</span>
-                  ) : null}
-                </span>
-                <span className="shrink-0 rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-text-2)]">
-                  {tip.count}
-                </span>
-              </li>
-            ))}
+          <ul className="space-y-0.5">
+            {data.topTipologias.map((tip) => {
+              const pct = Math.round((tip.count / maxTipoCount) * 100);
+              return (
+                <li key={`${tip.tipo}-${tip.subtipo}`} className="account-typo-row text-sm">
+                  <span className="min-w-0 truncate text-[var(--color-text-2)]">
+                    <span className="font-semibold text-[var(--color-text-1)]">{tip.tipo}</span>
+                    {tip.subtipo !== "—" ? (
+                      <span className="text-[var(--color-text-3)]"> · {tip.subtipo}</span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] font-bold tabular-nums text-[var(--color-text-2)]">
+                    {tip.count}
+                  </span>
+                  <div className="account-typo-row-bar">
+                    <div className="account-typo-row-bar-fill" style={{ width: `${pct}%` }} />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
