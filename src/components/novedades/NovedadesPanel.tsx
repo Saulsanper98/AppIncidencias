@@ -164,6 +164,45 @@ export function NovedadesPanel({
   useSseEvent("announcement_updated", () => void load());
   useSseEvent("announcement_deleted", () => void load());
 
+  /**
+   * KPIs del hero. Se calculan en cliente sobre `items` para evitar otra
+   * llamada al servidor. Las metricas que mostramos:
+   *
+   *   - criticos:  avisos con severity=critical vigentes (no expirados)
+   *   - avisos:    total de avisos vigentes (excluye archivados/expirados)
+   *   - novedades: changelog publicado (ultimos 30d) — sirve como "actividad"
+   *   - sinLeer:   anuncios publicados que el usuario aun no marcaste como leidos
+   */
+  const kpis = useMemo(() => {
+    if (!items) {
+      return { criticos: 0, avisos: 0, novedades: 0, sinLeer: 0 };
+    }
+    const now = Date.now();
+    const last30d = now - 30 * 24 * 60 * 60 * 1000;
+    const isVigente = (a: Announcement): boolean => {
+      if (a.status !== "publicado") return false;
+      if (!a.expiresAt) return true;
+      const exp = Date.parse(a.expiresAt);
+      return Number.isNaN(exp) || exp > now;
+    };
+    let criticos = 0;
+    let avisos = 0;
+    let novedades = 0;
+    let sinLeer = 0;
+    for (const a of items) {
+      if (a.kind === "aviso" && isVigente(a)) {
+        avisos += 1;
+        if (a.severity === "critical") criticos += 1;
+      }
+      if (a.kind === "novedad" && a.status === "publicado") {
+        const ts = Date.parse(a.publishedAt ?? a.createdAt ?? "");
+        if (!Number.isNaN(ts) && ts >= last30d) novedades += 1;
+      }
+      if (a.status === "publicado" && !a.isRead) sinLeer += 1;
+    }
+    return { criticos, avisos, novedades, sinLeer };
+  }, [items]);
+
   const filtered = useMemo(() => {
     if (!items) return [];
     // Filtra por kind y reordena en el cliente estrictamente por fecha
@@ -395,23 +434,68 @@ export function NovedadesPanel({
         {/* Movil: titulo + acciones apilados; tablet+: horizontal. */}
         <div className="relative flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
           <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/12 text-sky-300 ring-1 ring-sky-500/25">
-              <Megaphone size={18} strokeWidth={1.7} aria-hidden />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-500/12 text-sky-300 ring-1 ring-sky-500/25">
+              <Megaphone size={20} strokeWidth={1.7} aria-hidden />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-3)]">
-                <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold">
-                  CCMGC
-                </span>
-                Comunicación interna
+              <div className="dashboard-pretitle">
+                <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+                CCMGC · Comunicación interna
               </div>
-              <h1 className="mt-0.5 text-[22px] font-semibold tracking-tight text-[var(--color-text-1)]">
+              <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
                 Novedades y avisos en vivo
               </h1>
-              <p className="mt-0.5 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
+              <p className="mt-1 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
                 Mantente al día de los cambios en la app y de los avisos operativos (reinicios,
                 mantenimientos, incidencias) que publica el centro de control.
               </p>
+              {/* KPI pills propias del modulo. Solo se muestran las que tienen
+               * valor real para no ensuciar el hero cuando la cuenta es 0. */}
+              {(kpis.criticos > 0 || kpis.avisos > 0 || kpis.novedades > 0 || kpis.sinLeer > 0) ? (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  {kpis.criticos > 0 ? (
+                    <span
+                      className="tickets-kpi-pill tickets-kpi-pill--pulse"
+                      style={{ ["--pill-tone" as string]: "var(--color-error)" }}
+                    >
+                      <AlertOctagon size={12} strokeWidth={1.9} />
+                      <span className="tickets-kpi-pill-value">{kpis.criticos}</span>
+                      <span className="tickets-kpi-pill-label">Críticos</span>
+                    </span>
+                  ) : null}
+                  {kpis.avisos > 0 ? (
+                    <span
+                      className="tickets-kpi-pill"
+                      style={{ ["--pill-tone" as string]: "var(--color-warning)" }}
+                    >
+                      <AlertTriangle size={12} strokeWidth={1.9} />
+                      <span className="tickets-kpi-pill-value">{kpis.avisos}</span>
+                      <span className="tickets-kpi-pill-label">Avisos vigentes</span>
+                    </span>
+                  ) : null}
+                  {kpis.novedades > 0 ? (
+                    <span
+                      className="tickets-kpi-pill"
+                      style={{ ["--pill-tone" as string]: "#38bdf8" }}
+                    >
+                      <Sparkles size={12} strokeWidth={1.9} />
+                      <span className="tickets-kpi-pill-value">{kpis.novedades}</span>
+                      <span className="tickets-kpi-pill-label">Novedades 30d</span>
+                    </span>
+                  ) : null}
+                  {kpis.sinLeer > 0 ? (
+                    <span
+                      className="tickets-kpi-pill"
+                      style={{ ["--pill-tone" as string]: "var(--color-accent)" }}
+                      title="Anuncios publicados que aún no has marcado como leídos"
+                    >
+                      <Eye size={12} strokeWidth={1.9} />
+                      <span className="tickets-kpi-pill-value">{kpis.sinLeer}</span>
+                      <span className="tickets-kpi-pill-label">Sin leer</span>
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
           {canEdit ? (
@@ -536,40 +620,40 @@ export function NovedadesPanel({
 
       {/* Tabs + filtro de estado (editor only) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-0.5 text-[12.5px]">
+        <div className="inline-flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-0.5 text-[12.5px] backdrop-blur">
           {(["novedades", "avisos"] as const).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setTab(value)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors",
+                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all duration-150",
                 tab === value
-                  ? "bg-[var(--color-surface)] font-medium text-[var(--color-text-1)] shadow-sm"
-                  : "text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
+                  ? "reports-period-pill--active"
+                  : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
               )}
             >
               {value === "avisos" ? (
-                <Megaphone size={12} strokeWidth={1.8} aria-hidden />
+                <Megaphone size={13} strokeWidth={1.9} aria-hidden />
               ) : (
-                <Sparkles size={12} strokeWidth={1.8} aria-hidden />
+                <Sparkles size={13} strokeWidth={1.9} aria-hidden />
               )}
               {value === "avisos" ? "Avisos en vivo" : "Novedades de la app"}
             </button>
           ))}
         </div>
         {canEdit ? (
-          <div className="inline-flex rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-0.5 text-[11px]">
+          <div className="inline-flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-0.5 text-[11px] backdrop-blur">
             {(["publicado", "todos"] as const).map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setStatusFilter(value)}
                 className={cn(
-                  "rounded px-2 py-1 transition-colors",
+                  "rounded-md px-2.5 py-1 font-semibold transition-all duration-150",
                   statusFilter === value
-                    ? "bg-[var(--color-accent)] text-white"
-                    : "text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
+                    ? "reports-period-pill--active"
+                    : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
                 )}
               >
                 {value === "publicado" ? "Solo publicados" : "Todos (incl. borradores)"}

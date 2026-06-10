@@ -14,7 +14,7 @@
  * En mobile (< lg), los paneles se apilan: form arriba, mis envíos abajo.
  */
 
-import { Inbox } from "lucide-react";
+import { Inbox, MessageSquarePlus } from "lucide-react";
 import { useState } from "react";
 
 import { FeedbackForm } from "@/components/feedback/FeedbackForm";
@@ -26,27 +26,57 @@ export function FeedbackPageClient() {
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
       {/* Panel izquierdo: formulario */}
-      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-6">
+      <section className="account-section">
+        <header className="account-section-head">
+          <span
+            className="account-section-icon"
+            style={{ ["--section-tone" as string]: "var(--color-accent)" }}
+            aria-hidden
+          >
+            <MessageSquarePlus size={18} strokeWidth={1.7} />
+          </span>
+          <div className="min-w-0">
+            <p className="account-section-pretitle">
+              <span
+                className="account-section-pretitle-dot"
+                style={{ ["--section-tone" as string]: "var(--color-accent)" }}
+                aria-hidden
+              />
+              Formulario
+            </p>
+            <h2 className="account-section-title">Nuevo feedback</h2>
+          </div>
+        </header>
         <FeedbackForm onSuccess={() => setRefreshKey((k) => k + 1)} />
       </section>
 
       {/* Panel derecho: mis envíos */}
-      <aside className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-5">
-        <header className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
-              <Inbox size={13} strokeWidth={1.7} className="text-[var(--color-text-3)]" />
-            </div>
-            <h2 className="text-[13.5px] font-semibold text-[var(--color-text-1)]">
-              Mis envíos
-            </h2>
+      <aside className="account-section">
+        <header className="account-section-head">
+          <span
+            className="account-section-icon"
+            style={{ ["--section-tone" as string]: "var(--color-success)" }}
+            aria-hidden
+          >
+            <Inbox size={18} strokeWidth={1.7} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="account-section-pretitle">
+              <span
+                className="account-section-pretitle-dot"
+                style={{ ["--section-tone" as string]: "var(--color-success)" }}
+                aria-hidden
+              />
+              Historial
+            </p>
+            <h2 className="account-section-title">Mis envíos</h2>
           </div>
-          <span className="text-[10.5px] uppercase tracking-wide text-[var(--color-text-3)]">
+          <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-3)]">
             Últimos 30
           </span>
         </header>
 
-        <p className="mb-3 text-[11px] text-[var(--color-text-3)]">
+        <p className="-mt-2 mb-3 text-[11.5px] text-[var(--color-text-3)]">
           Aquí ves el estado de cada feedback que has enviado. Si el equipo deja una
           respuesta, aparece dentro del envío.
         </p>
