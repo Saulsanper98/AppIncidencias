@@ -20,14 +20,32 @@ import { prisma } from "@/lib/prisma";
 import { canPublishAnnouncements } from "@/lib/rbac";
 import { sseBus } from "@/lib/sse-bus";
 
+/**
+ * Schema de creacion de anuncio.
+ *
+ * Notas sobre limites:
+ *   - `bodyMd` 32000 chars: el changelog autogenerado desde `git log`
+ *     puede ser largo cuando hay muchos commits acumulados. Antes el
+ *     limite estaba en 8000 y devolvia 400 silencioso al publicar
+ *     borradores generados automaticamente.
+ *   - `title` 280 chars: subido desde 200 para encajar titulos largos
+ *     del borrador autogenerado ("Novedades del 8 al 10 de junio + N
+ *     mejoras...").
+ *   - `expiresAt`: aceptamos null, undefined, "" (cadena vacia del
+ *     input que limpio el usuario) y datetime ISO. Asi el input
+ *     <type="datetime-local"> puede mandarse vacio sin romper.
+ */
 const createSchema = z.object({
   kind: z.enum(["novedad", "aviso"]),
-  title: z.string().trim().min(3).max(200),
-  bodyMd: z.string().trim().max(8000).optional().default(""),
+  title: z.string().trim().min(3, "El título debe tener al menos 3 caracteres.").max(280, "El título no puede pasar de 280 caracteres."),
+  bodyMd: z.string().trim().max(32000, "El cuerpo del aviso no puede pasar de 32 000 caracteres.").optional().default(""),
   severity: z.enum(["info", "warning", "critical"]).optional().default("info"),
   status: z.enum(["borrador", "publicado", "archivado"]).optional().default("publicado"),
   pinned: z.boolean().optional().default(false),
-  expiresAt: z.string().datetime().nullable().optional(),
+  expiresAt: z
+    .union([z.string().datetime({ message: "La fecha de caducidad no es válida." }), z.literal(""), z.null()])
+    .optional()
+    .transform((value) => (value && value !== "" ? value : null)),
 });
 
 export async function GET(request: Request) {
@@ -100,10 +118,29 @@ export async function POST(request: Request) {
     const payload = await request.json().catch(() => null);
     const parsed = createSchema.safeParse(payload);
     if (!parsed.success) {
-      return NextResponse.json(
-        { message: parsed.error.issues[0]?.message ?? "Datos inválidos" },
-        { status: 400 },
-      );
+      // Mensaje contextualizado: incluye el campo afectado (path) para que
+      // el usuario sepa exactamente que corregir. Antes solo se devolvia
+      // el mensaje generico de Zod ("String must contain at most X
+      // character(s)") sin decir que el problema era, p.ej., el bodyMd.
+      const FIELD_LABEL: Record<string, string> = {
+        kind: "Tipo",
+        title: "Título",
+        bodyMd: "Cuerpo",
+        severity: "Severidad",
+        status: "Estado",
+        pinned: "Fijado",
+        expiresAt: "Caducidad",
+      };
+      const issue = parsed.error.issues[0];
+      const field = issue?.path?.[0];
+      const fieldLabel = typeof field === "string" ? FIELD_LABEL[field] ?? field : undefined;
+      const message =
+        issue?.message
+          ? fieldLabel
+            ? `${fieldLabel}: ${issue.message}`
+            : issue.message
+          : "Datos inválidos";
+      return NextResponse.json({ message, field }, { status: 400 });
     }
     const data = parsed.data;
 

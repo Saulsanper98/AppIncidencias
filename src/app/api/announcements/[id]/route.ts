@@ -15,14 +15,32 @@ import { prisma } from "@/lib/prisma";
 import { canPublishAnnouncements } from "@/lib/rbac";
 import { sseBus } from "@/lib/sse-bus";
 
+/**
+ * Limites alineados con POST /api/announcements (route.ts):
+ *   - title  max 280 (borradores autogenerados pueden ser largos)
+ *   - bodyMd max 32 000 (changelog desde git con muchos commits)
+ *   - expiresAt acepta "", null y ISO datetime (input limpiado)
+ */
 const patchSchema = z.object({
   kind: z.enum(["novedad", "aviso"]).optional(),
-  title: z.string().trim().min(3).max(200).optional(),
-  bodyMd: z.string().trim().max(8000).optional(),
+  title: z
+    .string()
+    .trim()
+    .min(3, "El título debe tener al menos 3 caracteres.")
+    .max(280, "El título no puede pasar de 280 caracteres.")
+    .optional(),
+  bodyMd: z
+    .string()
+    .trim()
+    .max(32000, "El cuerpo del aviso no puede pasar de 32 000 caracteres.")
+    .optional(),
   severity: z.enum(["info", "warning", "critical"]).optional(),
   status: z.enum(["borrador", "publicado", "archivado"]).optional(),
   pinned: z.boolean().optional(),
-  expiresAt: z.string().datetime().nullable().optional(),
+  expiresAt: z
+    .union([z.string().datetime({ message: "La fecha de caducidad no es válida." }), z.literal(""), z.null()])
+    .optional()
+    .transform((value) => (value && value !== "" ? value : value === "" ? null : value)),
 });
 
 export async function GET(
@@ -68,10 +86,28 @@ export async function PATCH(
     const payload = await request.json().catch(() => null);
     const parsed = patchSchema.safeParse(payload);
     if (!parsed.success) {
-      return NextResponse.json(
-        { message: parsed.error.issues[0]?.message ?? "Datos inválidos" },
-        { status: 400 },
-      );
+      // Mensaje con campo afectado (mismo patron que POST). Util sobre
+      // todo en PATCH porque las ediciones suelen acumular cambios y
+      // un 400 generico no decia que campo era el problema.
+      const FIELD_LABEL: Record<string, string> = {
+        kind: "Tipo",
+        title: "Título",
+        bodyMd: "Cuerpo",
+        severity: "Severidad",
+        status: "Estado",
+        pinned: "Fijado",
+        expiresAt: "Caducidad",
+      };
+      const issue = parsed.error.issues[0];
+      const field = issue?.path?.[0];
+      const fieldLabel = typeof field === "string" ? FIELD_LABEL[field] ?? field : undefined;
+      const message =
+        issue?.message
+          ? fieldLabel
+            ? `${fieldLabel}: ${issue.message}`
+            : issue.message
+          : "Datos inválidos";
+      return NextResponse.json({ message, field }, { status: 400 });
     }
     const previous = await prisma.announcement.findUnique({ where: { id } });
     if (!previous) {
