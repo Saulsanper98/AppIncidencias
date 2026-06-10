@@ -2197,3 +2197,339 @@ body {
   background: color-mix(in oklab, var(--alert-tone-light, var(--color-accent-light)) 50%, transparent);
   transform: translateY(-1px);
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * REPORTES PREMIUM
+ *
+ * Vitrina ejecutiva (gestores / direccion). Eleva el hero, los KPIs,
+ * las listas con barras, los podios y el grafico de serie temporal.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Hero del modulo Reportes: glow ambient + radial sutil en esquina. */
+.reports-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: linear-gradient(
+    135deg,
+    var(--color-surface) 0%,
+    var(--color-surface) 55%,
+    color-mix(in oklab, var(--color-accent) 8%, var(--color-surface)) 100%
+  );
+}
+.reports-hero::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(56, 132, 255, 0.10) 0%,
+    transparent 35%,
+    transparent 65%,
+    rgba(56, 189, 248, 0.08) 100%
+  );
+  pointer-events: none;
+}
+.reports-hero::after {
+  content: "";
+  position: absolute;
+  top: -90px;
+  right: -90px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--color-accent) 18%, transparent) 0%,
+    transparent 70%
+  );
+  filter: blur(8px);
+  pointer-events: none;
+}
+.reports-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Periodo activo en el segmented: gradient + glow. */
+.reports-period-pill--active {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-accent) 92%, white 4%) 0%,
+    var(--color-accent) 100%
+  ) !important;
+  color: white !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-accent) 80%, transparent) inset,
+    0 4px 14px -4px color-mix(in oklab, var(--color-accent) 70%, transparent);
+}
+
+/* Boton "Recargar" / "Excel" / "PDF": chip con leve elevacion en hover. */
+.reports-action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: linear-gradient(
+    180deg,
+    var(--color-surface-3) 0%,
+    var(--color-surface-2) 100%
+  );
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-2);
+  transition:
+    transform 0.12s var(--ease-out),
+    border-color 0.15s var(--ease-out),
+    box-shadow 0.15s var(--ease-out);
+}
+.reports-action-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--color-border-hover);
+  color: var(--color-text-1);
+  box-shadow: 0 4px 12px -8px rgba(0, 0, 0, 0.4);
+}
+
+/* KPI Tile premium */
+.reports-kpi-tile {
+  position: relative;
+  overflow: hidden;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in oklab, var(--kpi-tone, var(--color-border)) 22%, var(--color-border));
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--kpi-tone, var(--color-surface)) 10%, var(--color-surface)) 0%,
+    var(--color-surface) 70%
+  );
+  transition:
+    transform 0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out);
+}
+.reports-kpi-tile::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--kpi-tone, white) 35%, transparent) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+.reports-kpi-tile:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--kpi-tone, var(--color-border-hover)) 45%, var(--color-border-hover));
+  box-shadow:
+    0 12px 24px -14px color-mix(in oklab, var(--kpi-tone, black) 45%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--kpi-tone, transparent) 15%, transparent);
+}
+.reports-kpi-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+.reports-kpi-tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--kpi-tone, var(--color-accent)) 12%, var(--color-surface-2));
+  color: color-mix(in oklab, var(--kpi-tone, var(--color-accent)) 80%, white);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--kpi-tone, var(--color-accent)) 22%, transparent) inset;
+  transition: box-shadow 0.18s var(--ease-out);
+}
+.reports-kpi-tile:hover .reports-kpi-tile-icon {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--kpi-tone, var(--color-accent)) 40%, transparent) inset,
+    0 0 14px color-mix(in oklab, var(--kpi-tone, var(--color-accent)) 35%, transparent);
+}
+.reports-kpi-tile-value {
+  margin-top: 10px;
+  font-size: 28px;
+  line-height: 1.05;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--kpi-tone, var(--color-text-1)) 100%, white) 0%,
+    color-mix(in oklab, var(--kpi-tone, var(--color-text-1)) 78%, transparent) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.reports-kpi-tile-value--neutral {
+  background-image: linear-gradient(
+    180deg,
+    var(--color-text-1) 0%,
+    color-mix(in oklab, var(--color-text-1) 70%, transparent) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* CardList (barras de distribucion) premium: barra con gradient. */
+.reports-bar-track {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-surface-2) 80%, transparent);
+}
+.reports-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--bar-tone, var(--color-accent)) 55%, transparent) 0%,
+    var(--bar-tone, var(--color-accent)) 100%
+  );
+  box-shadow: 0 0 10px color-mix(in oklab, var(--bar-tone, var(--color-accent)) 40%, transparent);
+  transition: width 0.7s var(--ease-out);
+}
+
+/* Tarjetas tipo "panel" (serie temporal, lists, top) con head accent. */
+.reports-panel {
+  position: relative;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  padding: 18px;
+  transition:
+    border-color 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out);
+}
+.reports-panel:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: 0 12px 28px -22px rgba(0, 0, 0, 0.4);
+}
+.reports-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+  margin-bottom: 14px;
+}
+.reports-panel-title-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  box-shadow: 0 0 7px color-mix(in oklab, var(--color-accent) 60%, transparent);
+}
+
+/* Podio Top buses / Top tecnicos: medallas oro / plata / bronce */
+.reports-podium-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--color-surface-2);
+  color: var(--color-text-3);
+  border: 1px solid var(--color-border);
+}
+.reports-podium-rank--gold {
+  background: linear-gradient(
+    180deg,
+    #ffe9a8 0%,
+    #f5b942 100%
+  );
+  color: #6b3a00;
+  border-color: rgba(245, 185, 66, 0.55);
+  box-shadow: 0 0 12px rgba(245, 185, 66, 0.35);
+}
+.reports-podium-rank--silver {
+  background: linear-gradient(
+    180deg,
+    #f1f4f8 0%,
+    #b9c3cf 100%
+  );
+  color: #3c4856;
+  border-color: rgba(185, 195, 207, 0.55);
+  box-shadow: 0 0 10px rgba(185, 195, 207, 0.30);
+}
+.reports-podium-rank--bronze {
+  background: linear-gradient(
+    180deg,
+    #f1c89a 0%,
+    #c47e3a 100%
+  );
+  color: #4f2a00;
+  border-color: rgba(196, 126, 58, 0.55);
+  box-shadow: 0 0 10px rgba(196, 126, 58, 0.30);
+}
+.reports-podium-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  transition:
+    background-color 0.15s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+.reports-podium-row:hover {
+  background: var(--color-surface-2);
+  transform: translateX(2px);
+}
+.reports-podium-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-2);
+  color: var(--color-text-2);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--color-border);
+}
+
+/* Grafico serie temporal: necesita estilos para gradient SVG fallback */
+.reports-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: flex-end;
+  font-size: 11px;
+  color: var(--color-text-3);
+}
+.reports-chart-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  box-shadow: 0 0 6px currentColor;
+}

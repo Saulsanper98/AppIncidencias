@@ -74,6 +74,18 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Devuelve la clase CSS de medalla (oro / plata / bronce) para el podio
+ * de las primeras 3 posiciones en Top buses / Top tecnicos. Del 4 en
+ * adelante usa la pill neutra base.
+ */
+function podiumClass(idx: number): string {
+  if (idx === 0) return "reports-podium-rank--gold";
+  if (idx === 1) return "reports-podium-rank--silver";
+  if (idx === 2) return "reports-podium-rank--bronze";
+  return "";
+}
+
 export default function ReportesPage() {
   const [preset, setPreset] = useState<RangePreset>("last30");
   const [customOpen, setCustomOpen] = useState(false);
@@ -127,18 +139,41 @@ export default function ReportesPage() {
       <div className="print:hidden">
         <SectionTabs preset="dashboard" />
       </div>
-      <header className="flex flex-col gap-3 border-b border-[var(--color-border)] pb-4 print:border-0">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <BarChart3 size={20} className="text-[var(--color-accent)]" aria-hidden />
-            <h1 className="text-heading">Reportes operativos</h1>
-            <FeedbackTargetButton id="reportes/operativo" label="Reportes operativos" />
+      <header className="reports-hero flex flex-col gap-4 p-5 print:border-0 print:bg-transparent print:p-0">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/25">
+              <BarChart3 size={20} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <div className="dashboard-pretitle">
+                <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+                CCMGC · Análisis
+              </div>
+              <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                <h1 className="dashboard-hero-title text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
+                  Reportes operativos
+                </h1>
+                <FeedbackTargetButton id="reportes/operativo" label="Reportes operativos" />
+              </div>
+              <p className="mt-1 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
+                Vista ejecutiva del centro de control. Periodo:{" "}
+                <strong className="text-[var(--color-text-2)]">{data?.label ?? "—"}</strong>
+                {data?.since && data?.until ? (
+                  <span className="text-[var(--color-text-3)]">
+                    {" "}
+                    · {data.since.slice(0, 10)} → {data.until.slice(0, 10)} · {data.days} día
+                    {data.days === 1 ? "" : "s"}
+                  </span>
+                ) : null}
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 print:hidden">
             <div
               role="tablist"
               aria-label="Periodo del reporte"
-              className="inline-flex rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5"
+              className="inline-flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-0.5 backdrop-blur"
             >
               {PRESET_BUTTONS.map((p) => (
                 <button
@@ -150,10 +185,10 @@ export default function ReportesPage() {
                   }}
                   aria-pressed={preset === p.id}
                   className={cn(
-                    "rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                    "rounded-md px-3 py-1 text-[11.5px] font-semibold tracking-wide transition-all duration-150",
                     preset === p.id
-                      ? "bg-[var(--color-accent)] text-white shadow"
-                      : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
+                      ? "reports-period-pill--active"
+                      : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
                   )}
                 >
                   {p.label}
@@ -167,14 +202,14 @@ export default function ReportesPage() {
                 }}
                 aria-pressed={preset === "custom"}
                 className={cn(
-                  "ml-0.5 inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                  "ml-0.5 inline-flex items-center gap-1 rounded-md px-3 py-1 text-[11.5px] font-semibold tracking-wide transition-all duration-150",
                   preset === "custom"
-                    ? "bg-[var(--color-accent)] text-white shadow"
-                    : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
+                    ? "reports-period-pill--active"
+                    : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
                 )}
                 title="Elegir día o rango personalizado"
               >
-                <CalendarRange size={12} aria-hidden />
+                <CalendarRange size={13} aria-hidden />
                 Otra fecha…
               </button>
             </div>
@@ -182,34 +217,34 @@ export default function ReportesPage() {
               type="button"
               onClick={load}
               disabled={loading}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 text-xs font-medium text-[var(--color-text-2)] transition-colors hover:bg-[var(--color-surface-2)] disabled:opacity-50"
+              className="reports-action-chip disabled:opacity-50"
               title="Recargar datos"
             >
-              <RefreshCw size={12} className={loading ? "animate-spin" : ""} aria-hidden />
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} aria-hidden />
               Recargar
             </button>
             <a
               href={`/api/reports/operational/export?${reportQuery}`}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 text-xs font-medium text-[var(--color-text-2)] transition-colors hover:bg-[var(--color-surface-2)]"
+              className="reports-action-chip"
               title="Descargar como Excel (.xlsx)"
             >
-              <Download size={12} aria-hidden />
+              <Download size={13} aria-hidden />
               Excel
             </a>
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 text-xs font-medium text-[var(--color-text-2)] transition-colors hover:bg-[var(--color-surface-2)]"
+              className="reports-action-chip"
               title="Imprimir o exportar a PDF (usa el diálogo del navegador)"
             >
-              <Printer size={12} aria-hidden />
+              <Printer size={13} aria-hidden />
               PDF
             </button>
           </div>
         </div>
 
         {customOpen ? (
-          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 print:hidden">
+          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3 backdrop-blur print:hidden">
             <div className="flex flex-col">
               <label className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
                 Desde
@@ -224,7 +259,7 @@ export default function ReportesPage() {
                   if (to && v > to) setTo(v);
                   setPreset("custom");
                 }}
-                className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-xs text-[var(--color-text-1)]"
+                className="h-9 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-xs text-[var(--color-text-1)]"
               />
             </div>
             <div className="flex flex-col">
@@ -240,14 +275,14 @@ export default function ReportesPage() {
                   setTo(e.target.value || from);
                   setPreset("custom");
                 }}
-                className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-xs text-[var(--color-text-1)]"
+                className="h-9 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-xs text-[var(--color-text-1)]"
               />
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => handlePickSingleDay(todayIso())}
-                className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-[11px] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]"
+                className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[11px] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]"
               >
                 Hoy
               </button>
@@ -258,7 +293,7 @@ export default function ReportesPage() {
                   d.setUTCDate(d.getUTCDate() - 1);
                   handlePickSingleDay(d.toISOString().slice(0, 10));
                 }}
-                className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-[11px] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]"
+                className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[11px] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]"
               >
                 Ayer
               </button>
@@ -269,7 +304,7 @@ export default function ReportesPage() {
                   setTo(from);
                   setPreset("custom");
                 }}
-                className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 text-[11px] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]"
+                className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[11px] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]"
                 title="Acota el rango a un único día (el de Desde)"
               >
                 Solo este día
@@ -277,16 +312,6 @@ export default function ReportesPage() {
             </div>
           </div>
         ) : null}
-
-        <p className="text-xs text-[var(--color-text-3)]">
-          Periodo: <strong>{data?.label ?? "—"}</strong>{" "}
-          {data?.since && data?.until ? (
-            <span className="text-[var(--color-text-3)]">
-              ({data.since.slice(0, 10)} → {data.until.slice(0, 10)} · {data.days} día
-              {data.days === 1 ? "" : "s"})
-            </span>
-          ) : null}
-        </p>
       </header>
 
       {error ? (
@@ -307,17 +332,18 @@ export default function ReportesPage() {
           <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Tile
               label="Tickets creados"
-              icon={<ClipboardList size={14} aria-hidden />}
+              icon={<ClipboardList size={14} strokeWidth={1.8} aria-hidden />}
               value={String(data.totals.created)}
             />
             <Tile
               label="Tickets resueltos"
-              icon={<TrendingUp size={14} aria-hidden />}
+              icon={<TrendingUp size={14} strokeWidth={1.8} aria-hidden />}
               value={String(data.totals.resolved)}
+              tone="success"
             />
             <Tile
               label="SLA cumplido"
-              icon={<Target size={14} aria-hidden />}
+              icon={<Target size={14} strokeWidth={1.8} aria-hidden />}
               value={data.totals.slaCompliancePercent == null ? "—" : `${data.totals.slaCompliancePercent}%`}
               tone={
                 data.totals.slaCompliancePercent == null
@@ -331,14 +357,15 @@ export default function ReportesPage() {
             />
             <Tile
               label="MTTR medio"
-              icon={<Clock3 size={14} aria-hidden />}
+              icon={<Clock3 size={14} strokeWidth={1.8} aria-hidden />}
               value={formatMs(data.totals.mttrMs)}
             />
           </section>
 
           {/* Serie temporal */}
-          <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-            <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-1)]">
+          <section className="reports-panel">
+            <h2 className="reports-panel-title">
+              <span className="reports-panel-title-dot" aria-hidden />
               Tickets creados vs resueltos
             </h2>
             <SeriesChart series={data.series} />
@@ -379,57 +406,49 @@ export default function ReportesPage() {
 
           {/* Top buses / Top técnicos */}
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--color-text-1)]">
-                <FileText size={14} className="text-[var(--color-text-3)]" aria-hidden />
+            <div className="reports-panel">
+              <h2 className="reports-panel-title">
+                <FileText size={13} className="text-[var(--color-text-3)]" aria-hidden />
                 Top 10 buses con más incidencia
               </h2>
               {data.topBuses.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-3)]">Sin datos suficientes.</p>
               ) : (
-                <ol className="space-y-1.5">
+                <ol className="space-y-0.5">
                   {data.topBuses.map((b, idx) => (
-                    <li key={b.busId} className="flex items-center justify-between gap-2 text-sm">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[10px] font-semibold text-[var(--color-text-3)]">
-                          {idx + 1}
-                        </span>
+                    <li key={b.busId} className="reports-podium-row text-sm">
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className={cn("reports-podium-rank", podiumClass(idx))}>{idx + 1}</span>
                         <a
                           href={`/tickets?busId=${encodeURIComponent(b.busId)}`}
-                          className="truncate font-mono text-[13px] text-[var(--color-text-1)] hover:underline"
+                          className="truncate font-mono text-[13px] font-medium text-[var(--color-text-1)] hover:text-[var(--color-accent)] hover:underline"
                           title={[b.operator, b.municipio].filter(Boolean).join(" · ")}
                         >
                           {b.busId}
                         </a>
                       </span>
-                      <span className="shrink-0 rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-text-2)]">
-                        {b.count}
-                      </span>
+                      <span className="reports-podium-count-pill">{b.count}</span>
                     </li>
                   ))}
                 </ol>
               )}
             </div>
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--color-text-1)]">
-                <Trophy size={14} className="text-[var(--color-text-3)]" aria-hidden />
+            <div className="reports-panel">
+              <h2 className="reports-panel-title">
+                <Trophy size={13} className="text-[var(--color-warning)]" aria-hidden />
                 Top técnicos por resoluciones
               </h2>
               {data.topTechnicians.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-3)]">Sin datos suficientes.</p>
               ) : (
-                <ol className="space-y-1.5">
+                <ol className="space-y-0.5">
                   {data.topTechnicians.map((t, idx) => (
-                    <li key={t.userId} className="flex items-center justify-between gap-2 text-sm">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[10px] font-semibold text-[var(--color-text-3)]">
-                          {idx + 1}
-                        </span>
-                        <span className="truncate text-[13px] text-[var(--color-text-1)]">{t.name}</span>
+                    <li key={t.userId} className="reports-podium-row text-sm">
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className={cn("reports-podium-rank", podiumClass(idx))}>{idx + 1}</span>
+                        <span className="truncate text-[13px] font-medium text-[var(--color-text-1)]">{t.name}</span>
                       </span>
-                      <span className="shrink-0 rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-text-2)]">
-                        {t.resolved}
-                      </span>
+                      <span className="reports-podium-count-pill">{t.resolved}</span>
                     </li>
                   ))}
                 </ol>
@@ -453,19 +472,30 @@ function Tile({
   icon?: React.ReactNode;
   tone?: "neutral" | "success" | "warning" | "error";
 }) {
-  const toneClass = {
-    neutral: "text-[var(--color-text-1)]",
-    success: "text-[var(--color-success)]",
-    warning: "text-[var(--color-warning)]",
-    error: "text-[var(--color-error)]",
+  // Tinte CSS por tono. "neutral" no tinta para no ensuciar la vista.
+  const toneVar = {
+    neutral: undefined,
+    success: "var(--color-success)",
+    warning: "var(--color-warning)",
+    error: "var(--color-error)",
   }[tone];
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
-      <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
-        {icon}
+    <div
+      className="reports-kpi-tile"
+      style={toneVar ? { ["--kpi-tone" as string]: toneVar } : undefined}
+    >
+      <p className="reports-kpi-tile-head">
+        {icon ? <span className="reports-kpi-tile-icon">{icon}</span> : null}
         {label}
       </p>
-      <p className={cn("mt-2 text-2xl font-bold tabular-nums", toneClass)}>{value}</p>
+      <p
+        className={cn(
+          "reports-kpi-tile-value",
+          !toneVar && "reports-kpi-tile-value--neutral",
+        )}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -482,38 +512,41 @@ function CardList({
     ...rows.map((r) => (typeof r.value === "number" ? r.value : 0)),
   );
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-      <h2 className="mb-3 text-sm font-semibold text-[var(--color-text-1)]">{title}</h2>
+    <div className="reports-panel">
+      <h2 className="reports-panel-title">
+        <span className="reports-panel-title-dot" aria-hidden />
+        {title}
+      </h2>
       {rows.length === 0 ? (
         <p className="text-sm text-[var(--color-text-3)]">Sin datos.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {rows.map((r) => {
             const pct = typeof r.value === "number" ? Math.round((r.value / max) * 100) : 100;
-            const barColor =
+            const barToneVar =
               r.tone === "error"
-                ? "bg-[var(--color-error)]"
+                ? "var(--color-error)"
                 : r.tone === "warning"
-                  ? "bg-[var(--color-warning)]"
-                  : "bg-[var(--color-accent)]";
+                  ? "var(--color-warning)"
+                  : "var(--color-accent)";
             return (
-              <li key={r.label} className="space-y-1">
+              <li key={r.label} className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="min-w-0 truncate text-[var(--color-text-2)]">{r.label}</span>
-                  <span className="ml-2 shrink-0 font-semibold tabular-nums text-[var(--color-text-1)]">
+                  <span className="min-w-0 truncate font-medium text-[var(--color-text-2)]">{r.label}</span>
+                  <span className="ml-2 shrink-0 font-bold tabular-nums text-[var(--color-text-1)]">
                     {r.value}
                     {r.hint ? (
-                      <span className="ml-1 text-[10px] font-normal text-[var(--color-text-3)]">
+                      <span className="ml-1.5 text-[10px] font-normal text-[var(--color-text-3)]">
                         {r.hint}
                       </span>
                     ) : null}
                   </span>
                 </div>
                 {typeof r.value === "number" ? (
-                  <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-2)]">
+                  <div className="reports-bar-track">
                     <div
-                      className={cn("h-full rounded-full transition-all duration-700", barColor)}
-                      style={{ width: `${pct}%` }}
+                      className="reports-bar-fill"
+                      style={{ width: `${pct}%`, ["--bar-tone" as string]: barToneVar }}
                     />
                   </div>
                 ) : null}
@@ -531,36 +564,42 @@ function SeriesChart({ series }: { series: Series[] }) {
     return <p className="text-sm text-[var(--color-text-3)]">Sin datos.</p>;
   }
   const width = 720;
-  const height = 220;
-  const padding = { top: 12, right: 8, bottom: 22, left: 32 };
+  const height = 240;
+  const padding = { top: 16, right: 12, bottom: 26, left: 36 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
 
   const max = Math.max(1, ...series.map((s) => Math.max(s.creados, s.resueltos)));
   const stepX = series.length > 1 ? innerW / (series.length - 1) : 0;
 
-  const pointsCreados = series
-    .map((s, i) => {
+  // Genera tanto los puntos de la linea como un path cerrado para el
+  // area pintada bajo la curva (con gradient SVG).
+  const buildPaths = (key: "creados" | "resueltos") => {
+    const pts = series.map((s, i) => {
       const x = padding.left + i * stepX;
-      const y = padding.top + innerH - (s.creados / max) * innerH;
-      return `${x},${y}`;
-    })
-    .join(" ");
-  const pointsResueltos = series
-    .map((s, i) => {
-      const x = padding.left + i * stepX;
-      const y = padding.top + innerH - (s.resueltos / max) * innerH;
-      return `${x},${y}`;
-    })
-    .join(" ");
+      const y = padding.top + innerH - (s[key] / max) * innerH;
+      return [x, y] as const;
+    });
+    const line = pts.map(([x, y]) => `${x},${y}`).join(" ");
+    const first = pts[0];
+    const last = pts[pts.length - 1];
+    const baseline = padding.top + innerH;
+    // Path cerrado: empieza en baseline, sube al primer punto, sigue la
+    // linea, baja al baseline en el ultimo punto, vuelve al inicio.
+    const area = `M ${first[0]},${baseline} L ${pts.map(([x, y]) => `${x},${y}`).join(" L ")} L ${last[0]},${baseline} Z`;
+    return { line, area, pts };
+  };
 
-  // 5 líneas de cuadrícula horizontal.
+  const creados = buildPaths("creados");
+  const resueltos = buildPaths("resueltos");
+
+  // 5 lineas de cuadricula horizontal.
   const gridLines = [0, 0.25, 0.5, 0.75, 1].map((p) => {
     const y = padding.top + innerH - p * innerH;
     return { y, value: Math.round(max * p) };
   });
 
-  // Etiquetas X: primer, mitad y último.
+  // Etiquetas X: primer, mitad y ultimo.
   const xLabelIdxs =
     series.length <= 2
       ? series.map((_, i) => i)
@@ -572,9 +611,31 @@ function SeriesChart({ series }: { series: Series[] }) {
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label="Gráfico de tickets creados vs resueltos"
-        className="h-56 w-full min-w-[640px]"
+        className="h-60 w-full min-w-[640px]"
       >
-        {/* Cuadrícula */}
+        <defs>
+          {/* Gradients de area: del color hacia transparente. */}
+          <linearGradient id="reports-area-creados" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.45" />
+            <stop offset="60%" stopColor="var(--color-accent)" stopOpacity="0.10" />
+            <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="reports-area-resueltos" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-success)" stopOpacity="0.42" />
+            <stop offset="60%" stopColor="var(--color-success)" stopOpacity="0.10" />
+            <stop offset="100%" stopColor="var(--color-success)" stopOpacity="0" />
+          </linearGradient>
+          {/* Glow para las polylines (sutil). */}
+          <filter id="reports-line-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {/* Cuadricula */}
         {gridLines.map((g) => (
           <g key={g.y}>
             <line
@@ -583,39 +644,69 @@ function SeriesChart({ series }: { series: Series[] }) {
               y1={g.y}
               y2={g.y}
               stroke="currentColor"
-              strokeOpacity="0.08"
+              strokeOpacity="0.07"
               strokeDasharray="2,3"
             />
             <text
-              x={padding.left - 6}
+              x={padding.left - 8}
               y={g.y + 3}
-              fontSize="9"
+              fontSize="9.5"
               textAnchor="end"
               fill="currentColor"
-              opacity="0.6"
+              opacity="0.55"
             >
               {g.value}
             </text>
           </g>
         ))}
 
-        {/* Líneas */}
+        {/* Areas debajo de la linea */}
+        <path d={creados.area} fill="url(#reports-area-creados)" />
+        <path d={resueltos.area} fill="url(#reports-area-resueltos)" />
+
+        {/* Lineas con glow */}
         <polyline
-          points={pointsCreados}
+          points={creados.line}
           fill="none"
           stroke="var(--color-accent)"
-          strokeWidth="1.5"
+          strokeWidth="2.2"
           strokeLinejoin="round"
           strokeLinecap="round"
+          filter="url(#reports-line-glow)"
         />
         <polyline
-          points={pointsResueltos}
+          points={resueltos.line}
           fill="none"
           stroke="var(--color-success)"
-          strokeWidth="1.5"
+          strokeWidth="2.2"
           strokeLinejoin="round"
           strokeLinecap="round"
+          filter="url(#reports-line-glow)"
         />
+
+        {/* Dots solo en primer y ultimo punto + max de cada serie. */}
+        {[creados, resueltos].map((s, i) => {
+          if (s.pts.length === 0) return null;
+          const colorVar = i === 0 ? "var(--color-accent)" : "var(--color-success)";
+          const lastIdx = s.pts.length - 1;
+          // Indice del maximo (si hay mas de 2 puntos).
+          let maxIdx = -1;
+          if (s.pts.length > 2) {
+            const ys = s.pts.map(([, y]) => y);
+            maxIdx = ys.indexOf(Math.min(...ys));
+            if (maxIdx === 0 || maxIdx === lastIdx) maxIdx = -1;
+          }
+          const idxs = new Set<number>([0, lastIdx, ...(maxIdx >= 0 ? [maxIdx] : [])]);
+          return Array.from(idxs).map((idx) => {
+            const [x, y] = s.pts[idx];
+            return (
+              <g key={`${i}-${idx}`}>
+                <circle cx={x} cy={y} r="4.5" fill={colorVar} opacity="0.25" />
+                <circle cx={x} cy={y} r="2.6" fill={colorVar} stroke="var(--color-surface)" strokeWidth="1.5" />
+              </g>
+            );
+          });
+        })}
 
         {/* Etiquetas X */}
         {xLabelIdxs.map((idx) => {
@@ -624,23 +715,25 @@ function SeriesChart({ series }: { series: Series[] }) {
             <text
               key={idx}
               x={x}
-              y={height - 6}
-              fontSize="9"
+              y={height - 8}
+              fontSize="9.5"
               textAnchor="middle"
               fill="currentColor"
-              opacity="0.6"
+              opacity="0.55"
             >
               {series[idx].day.slice(5)}
             </text>
           );
         })}
       </svg>
-      <div className="mt-1 flex items-center justify-end gap-4 text-[11px] text-[var(--color-text-3)]">
+      <div className="reports-chart-legend mt-1">
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-3 rounded-full bg-[var(--color-accent)]" /> Creados
+          <span className="reports-chart-legend-dot" style={{ background: "var(--color-accent)", color: "var(--color-accent)" }} aria-hidden />
+          Creados
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-3 rounded-full bg-[var(--color-success)]" /> Resueltos
+          <span className="reports-chart-legend-dot" style={{ background: "var(--color-success)", color: "var(--color-success)" }} aria-hidden />
+          Resueltos
         </span>
       </div>
     </div>
