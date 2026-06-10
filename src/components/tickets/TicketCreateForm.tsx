@@ -1424,7 +1424,7 @@ export function TicketCreateForm({
           size="lg"
           onClick={() => void submitCreate()}
           disabled={saving || ticketFormProgress.nextStepIndex !== null}
-          className="w-full"
+          className="login-primary-cta-premium w-full"
         >
           {saving ? (
             <>

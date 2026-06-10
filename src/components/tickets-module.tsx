@@ -238,43 +238,56 @@ function MaintenanceAlertsPanel({
     );
   }
   return (
-    <div className="space-y-2">
-      {alerts.slice(0, 4).map((alert) => (
-        <div
-          key={`${alert.busId}-${alert.assetType}`}
-          className={cn(
-            "rounded-r-lg border border-[var(--color-border)] border-l-4 p-3 text-xs",
-            alert.severity === "critical"
-              ? "border-l-[var(--color-error)] bg-[var(--color-error-light)]"
-              : "border-l-[var(--color-warning)] bg-[var(--color-warning-light)]",
-          )}
-        >
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="font-medium text-[var(--color-text-1)]">
-              {alert.busId} · {alert.assetType}
+    <div className="space-y-2.5">
+      {alerts.slice(0, 4).map((alert) => {
+        const isCritical = alert.severity === "critical";
+        // Variables CSS para tintar borde lateral, glow y badge segun
+        // severidad sin tener que ramificar en el HTML.
+        const toneStyle = isCritical
+          ? {
+              ["--alert-tone" as string]: "var(--color-error)",
+              ["--alert-tone-light" as string]: "var(--color-error-light)",
+            }
+          : {
+              ["--alert-tone" as string]: "var(--color-warning)",
+              ["--alert-tone-light" as string]: "var(--color-warning-light)",
+            };
+        return (
+          <div
+            key={`${alert.busId}-${alert.assetType}`}
+            className={cn(
+              "tickets-alert-card text-xs",
+              isCritical && "tickets-alert-card--critical",
+            )}
+            style={toneStyle}
+          >
+            <div className="mb-1 flex items-center justify-between gap-2 pl-2">
+              <p className="font-semibold text-[var(--color-text-1)]">
+                {alert.busId} · {alert.assetType}
+              </p>
+              <Badge variant={isCritical ? "error" : "warning"}>
+                {isCritical ? "Critico" : "Warning"}
+              </Badge>
+            </div>
+            <p className="mb-2 pl-2 text-[var(--color-text-2)]">
+              {alert.failuresInWindow} fallos en {windowDays} días · {alert.municipio}
             </p>
-            <Badge variant={alert.severity === "critical" ? "error" : "warning"}>
-              {alert.severity === "critical" ? "Critico" : "Warning"}
-            </Badge>
+            {alert.hasOpenPreventiveTask ? (
+              <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent)]">
+                <CheckCircle2 size={11} />
+                Tarea abierta ({alert.preventiveTaskId})
+              </span>
+            ) : (
+              <button
+                onClick={() => onCreateTask(alert)}
+                className="tickets-alert-create-cta ml-2"
+              >
+                <span aria-hidden>+</span> Crear tarea preventiva
+              </button>
+            )}
           </div>
-          <p className="mb-2 text-[var(--color-text-2)]">
-            {alert.failuresInWindow} fallos en {windowDays} días · {alert.municipio}
-          </p>
-          {alert.hasOpenPreventiveTask ? (
-            <span className="inline-flex items-center gap-1 text-[11px] text-[var(--color-accent)]">
-              <CheckCircle2 size={11} />
-              Tarea abierta ({alert.preventiveTaskId})
-            </span>
-          ) : (
-            <button
-              onClick={() => onCreateTask(alert)}
-              className="rounded-md border border-[var(--color-border)] px-2 py-1 text-[11px] text-[var(--color-text-2)] transition-all duration-150 hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]"
-            >
-              + Crear tarea preventiva
-            </button>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -295,27 +308,25 @@ function TicketsHeroHeader({
   slaVencidos: number;
 }) {
   return (
-    <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm">
+    <header className="tickets-hero-glow relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
       <div
         aria-hidden
         className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
       />
       <div className="relative flex flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/20">
-            <TicketIcon size={18} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/25">
+            <TicketIcon size={20} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-3)]">
-              <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold text-[var(--color-text-3)]">
-                CCMGC
-              </span>
-              Operación
+            <div className="dashboard-pretitle">
+              <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+              CCMGC · Operación
             </div>
-            <h1 className="mt-0.5 text-[20px] font-semibold tracking-tight text-[var(--color-text-1)]">
+            <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
               Bandeja de tickets
             </h1>
-            <p className="mt-0.5 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
+            <p className="mt-1 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
               Incidencias del Centro de Control. Crea, asigna, sigue y cierra tickets con trazabilidad completa.
             </p>
           </div>
@@ -331,7 +342,7 @@ function TicketsHeroHeader({
             <KpiPill label="Resueltos hoy" value={resueltosHoy} tone="success" />
           ) : null}
           {slaVencidos > 0 ? (
-            <KpiPill label="SLA vencido" value={slaVencidos} tone="error" icon={<Timer size={11} strokeWidth={1.8} aria-hidden />} />
+            <KpiPill label="SLA vencido" value={slaVencidos} tone="error" pulse icon={<Timer size={11} strokeWidth={1.8} aria-hidden />} />
           ) : null}
         </div>
       </div>
@@ -346,30 +357,36 @@ function KpiPill({
   value,
   tone,
   icon,
+  pulse = false,
 }: {
   label: string;
   value: number;
   tone: KpiTone;
   icon?: React.ReactNode;
+  /** Pulse para urgencia (p.ej. SLA vencido > 0). */
+  pulse?: boolean;
 }) {
-  const TONE_BG: Record<KpiTone, string> = {
-    neutral: "bg-[var(--color-surface-2)] text-[var(--color-text-2)] ring-[var(--color-border)]",
-    info: "bg-[var(--color-surface-2)] text-[var(--color-text-1)] ring-[var(--color-border)]",
-    accent: "bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-[var(--color-accent)]/30",
-    warning: "bg-[var(--color-warning-light)] text-[var(--color-warning)] ring-[var(--color-warning)]/30",
-    success: "bg-[var(--color-success-light)] text-[var(--color-success)] ring-[var(--color-success)]/30",
-    error: "bg-[var(--color-error-light)] text-[var(--color-error)] ring-[var(--color-error)]/30",
+  // Mapa de tone -> variable CSS de color. El tone "neutral"/"info" no
+  // tinta (queda gris); el resto pinta dot, borde y glow.
+  const TONE_VAR: Record<KpiTone, string | undefined> = {
+    neutral: undefined,
+    info: undefined,
+    accent: "var(--color-accent)",
+    warning: "var(--color-warning)",
+    success: "var(--color-success)",
+    error: "var(--color-error)",
   };
+  const toneVar = TONE_VAR[tone];
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10.5px] font-medium ring-1 backdrop-blur",
-        TONE_BG[tone],
-      )}
+      className={cn("tickets-kpi-pill", pulse && "tickets-kpi-pill--pulse")}
+      style={toneVar ? { ["--pill-tone" as string]: toneVar } : undefined}
     >
-      {icon ?? null}
-      <span className="num-tabular text-[12.5px] font-semibold tabular-nums">{value}</span>
-      <span className="uppercase tracking-wide opacity-80">{label}</span>
+      {icon ?? (
+        <span className="tickets-kpi-pill-dot" aria-hidden />
+      )}
+      <span className="tickets-kpi-pill-value">{value}</span>
+      <span className="tickets-kpi-pill-label">{label}</span>
     </span>
   );
 }
@@ -950,9 +967,12 @@ export function TicketsModule() {
             * (bandeja + form). Header con título + divider para separar
             * jerarquía. */}
           <div className="mt-6 mb-3 flex items-center gap-3">
-            <span className="text-eyebrow whitespace-nowrap">Operativa secundaria</span>
-            <span className="h-px flex-1 bg-[var(--color-border)]/70" aria-hidden />
-            <span className="hidden text-[10px] uppercase tracking-widest text-[var(--color-text-3)]/70 sm:inline">
+            <span className="tickets-section-eyebrow">
+              <span className="tickets-section-eyebrow-dot" aria-hidden />
+              Operativa secundaria
+            </span>
+            <span className="tickets-section-divider" aria-hidden />
+            <span className="hidden text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]/70 sm:inline">
               Contexto del centro
             </span>
           </div>
