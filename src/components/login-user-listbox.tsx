@@ -203,7 +203,7 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
         >
           <span className="flex min-w-0 flex-1 items-center gap-3">
             {hasRichOptions ? (
-              <span className="login-listbox-trigger-avatar login-avatar-online">
+              <span className="login-listbox-trigger-avatar">
                 <OptionAvatar avatarUrl={selectedOption?.avatarUrl ?? null} label={selectedLabel} size={36} />
               </span>
             ) : null}

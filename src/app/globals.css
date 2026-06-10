@@ -1482,25 +1482,6 @@ body {
     0 0 0 4px color-mix(in oklab, var(--color-accent) 18%, transparent) !important;
 }
 
-/* Avatar wrapper con dot "online" verde abajo a la derecha. */
-.login-avatar-online {
-  position: relative;
-  display: inline-flex;
-  flex-shrink: 0;
-}
-.login-avatar-online::after {
-  content: "";
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--color-success);
-  border: 2px solid var(--color-surface-2);
-  box-shadow: 0 0 6px color-mix(in oklab, var(--color-success) 55%, transparent);
-}
-
 /* Panel del listbox con sombra/contraste premium. */
 .login-listbox-panel-premium {
   background: linear-gradient(
