@@ -1783,3 +1783,212 @@ body {
     0 0 0 2px color-mix(in oklab, var(--color-accent) 50%, transparent),
     0 0 12px color-mix(in oklab, var(--color-accent) 35%, transparent);
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * DASHBOARD PREMIUM
+ *
+ * Capa visual adicional sobre el dashboard operativo. No toca data ni
+ * APIs: anade gradient holo al titulo del hero, pretitles con dot,
+ * tipografia de numero con tinte segun tone, barras de fondo en los
+ * top buses, mini barras en MTTR por prioridad, y pulse del "Sin
+ * asignar" cuando hay tickets en cola.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Eyebrow EN VIVO mas premium (refuerzo del que ya hay). */
+.dashboard-live-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-success) 38%, var(--color-border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-success-light) 38%, transparent) 0%,
+    color-mix(in oklab, var(--color-success-light) 18%, transparent) 100%
+  );
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-success) 70%, white);
+  white-space: nowrap;
+}
+
+/* Hero title con gradient holo muy sutil (azul-blanco). */
+.dashboard-hero-title {
+  background-image: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    color-mix(in oklab, #ffffff 88%, #cfe2ff 12%) 60%,
+    color-mix(in oklab, #ffffff 70%, #93c5fd 30%) 100%
+  );
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+          color: transparent;
+}
+.light .dashboard-hero-title,
+:root.light .dashboard-hero-title {
+  background: none;
+  -webkit-background-clip: border-box;
+          background-clip: border-box;
+  -webkit-text-fill-color: var(--color-text-1);
+          color: var(--color-text-1);
+}
+
+/* Pretitle generico con dot (acento configurable via --dot-color). */
+.dashboard-pretitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+.dashboard-pretitle-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--dot-color, var(--color-accent));
+  box-shadow: 0 0 7px color-mix(in oklab, var(--dot-color, var(--color-accent)) 60%, transparent);
+}
+.dashboard-pretitle-dot--pulse {
+  animation: dashboard-dot-pulse 2.1s ease-out infinite;
+}
+@keyframes dashboard-dot-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--dot-color, var(--color-accent)) 55%, transparent); }
+  60%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-pretitle-dot--pulse { animation: none; }
+}
+
+/* KPI value con gradient sutil segun tone. */
+.dashboard-kpi-value {
+  background-image: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    color-mix(in oklab, #ffffff 88%, var(--kpi-tone, var(--color-accent)) 20%) 65%,
+    color-mix(in oklab, #ffffff 72%, var(--kpi-tone, var(--color-accent)) 40%) 100%
+  );
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+          color: transparent;
+}
+.light .dashboard-kpi-value,
+:root.light .dashboard-kpi-value {
+  background: none;
+  -webkit-background-clip: border-box;
+          background-clip: border-box;
+  -webkit-text-fill-color: var(--color-text-1);
+          color: var(--color-text-1);
+}
+/* En estado vacio (—) no aplicamos el gradient para mantener legibilidad. */
+.dashboard-kpi-value--empty {
+  background: none !important;
+  -webkit-background-clip: border-box !important;
+          background-clip: border-box !important;
+  -webkit-text-fill-color: var(--color-text-3) !important;
+          color: var(--color-text-3) !important;
+}
+
+/* Wrapper del icono del KPI con glow ambient en hover. */
+.dashboard-kpi-icon-wrap {
+  position: relative;
+}
+.dashboard-kpi-icon-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--kpi-tone, var(--color-accent)) 38%, transparent),
+    transparent 75%
+  );
+  filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.2s var(--ease-out);
+  pointer-events: none;
+  z-index: -1;
+}
+.group:hover .dashboard-kpi-icon-wrap::before {
+  opacity: 0.55;
+}
+
+/* Top buses: fila con barra de fondo proporcional al count. */
+.dashboard-topbus-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  padding: 4px 6px;
+  transition: background-color 0.18s var(--ease-out);
+}
+.dashboard-topbus-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-accent) 16%, transparent) 0%,
+    color-mix(in oklab, var(--color-accent) 6%, transparent) 100%
+  );
+  width: var(--bus-fill, 0%);
+  border-radius: 8px;
+  transition: width 0.6s var(--ease-out);
+  z-index: 0;
+}
+.dashboard-topbus-row:hover {
+  background-color: color-mix(in oklab, var(--color-surface-2) 60%, transparent);
+}
+.dashboard-topbus-row > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Sin asignar > 30 min: pulse cuando hay tickets en cola. */
+.dashboard-unassigned-card--active {
+  position: relative;
+  overflow: hidden;
+}
+.dashboard-unassigned-card--active::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  bottom: -1px;
+  left: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-warning) 45%, transparent);
+  animation: dashboard-warning-pulse 2.4s ease-out infinite;
+}
+@keyframes dashboard-warning-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-warning) 45%, transparent); }
+  60%  { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-unassigned-card--active::before { animation: none; }
+}
+
+/* MTTR por prioridad: mini barra horizontal (color segun prioridad). */
+.dashboard-mttr-bar {
+  height: 4px;
+  width: 100%;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-surface-2) 70%, transparent);
+  overflow: hidden;
+}
+.dashboard-mttr-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--mttr-color, var(--color-accent));
+  box-shadow: 0 0 8px color-mix(in oklab, var(--mttr-color, var(--color-accent)) 55%, transparent);
+  transition: width 0.6s var(--ease-out);
+}

@@ -178,6 +178,14 @@ function KpiCard({
 }) {
   const t = TONE_STYLE[tone];
   const isEmpty = value === "—" || value === null;
+  // Variable CSS para que el gradient del numero y el glow del icono usen
+  // el color del tone sin tener que ramificar en CSS.
+  const toneVar =
+    tone === "critical"
+      ? "var(--color-error)"
+      : tone === "success"
+        ? "var(--color-success)"
+        : "var(--color-accent)";
   return (
     <article
       className={cn(
@@ -185,6 +193,7 @@ function KpiCard({
         primary && "ccmgc-card-accent",
         staggerIndex && `ccmgc-stagger-in ccmgc-stagger-in-${staggerIndex}`,
       )}
+      style={{ ["--kpi-tone" as string]: toneVar }}
       title={isEmpty && emptyHint ? emptyHint : undefined}
     >
       {/* Glow sutil en hover: acento del tono solo cuando se interactúa. */}
@@ -200,7 +209,7 @@ function KpiCard({
       <div className="mb-3 flex items-start justify-between gap-2">
         <div
           className={cn(
-            "flex items-center justify-center rounded-xl ring-1 transition-transform duration-200 group-hover:scale-[1.04]",
+            "dashboard-kpi-icon-wrap flex items-center justify-center rounded-xl ring-1 transition-transform duration-200 group-hover:scale-[1.04]",
             primary ? "h-11 w-11" : "h-9 w-9",
             t.iconBg,
             tone === "critical"
@@ -224,8 +233,8 @@ function KpiCard({
       </div>
       <div
         className={cn(
-          "num-tabular font-semibold tracking-tight",
-          isEmpty ? "text-[var(--color-text-3)]" : "text-[var(--color-text-1)]",
+          "dashboard-kpi-value num-tabular font-semibold tracking-tight",
+          isEmpty && "dashboard-kpi-value--empty",
           primary ? "text-[44px] leading-[1]" : "text-[30px] leading-[1.05]",
         )}
       >
@@ -392,35 +401,62 @@ function OperationalKpiRow({
             MTTR por prioridad (30d)
           </p>
         </div>
-        <ul className="space-y-2">
-          {(["alta", "media", "baja"] as const).map((prio) => {
-            const dotClass =
-              prio === "alta"
-                ? "bg-[var(--color-error)]"
-                : prio === "media"
-                  ? "bg-[var(--color-warning)]"
-                  : "bg-[var(--color-success)]";
-            const label = prio.charAt(0).toUpperCase() + prio.slice(1);
-            return (
-              <li key={prio} className="flex items-center justify-between text-sm">
-                <span className="inline-flex items-center gap-2 text-[var(--color-text-2)]">
-                  <span className={cn("h-2 w-2 rounded-full", dotClass)} aria-hidden />
-                  {label}
-                </span>
-                <span className="font-semibold tabular-nums text-[var(--color-text-1)]">
-                  {formatMs(mttr[prio])}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        {(() => {
+          // Calculamos el MTTR maximo entre las tres prioridades para
+          // escalar las mini barras proporcionalmente. Si no hay datos
+          // (todos null) caemos a 1ms para evitar division por 0.
+          const maxMttr = Math.max(
+            ...(["alta", "media", "baja"] as const).map((p) => mttr[p] ?? 0),
+            1,
+          );
+          return (
+            <ul className="space-y-2.5">
+              {(["alta", "media", "baja"] as const).map((prio) => {
+                const dotClass =
+                  prio === "alta"
+                    ? "bg-[var(--color-error)]"
+                    : prio === "media"
+                      ? "bg-[var(--color-warning)]"
+                      : "bg-[var(--color-success)]";
+                const colorVar =
+                  prio === "alta"
+                    ? "var(--color-error)"
+                    : prio === "media"
+                      ? "var(--color-warning)"
+                      : "var(--color-success)";
+                const label = prio.charAt(0).toUpperCase() + prio.slice(1);
+                const value = mttr[prio];
+                const fillPct = value == null || value <= 0 ? 0 : Math.round((value / maxMttr) * 100);
+                return (
+                  <li key={prio} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="inline-flex items-center gap-2 text-[var(--color-text-2)]">
+                        <span className={cn("h-2 w-2 rounded-full", dotClass)} aria-hidden />
+                        {label}
+                      </span>
+                      <span className="font-semibold tabular-nums text-[var(--color-text-1)]">
+                        {formatMs(value)}
+                      </span>
+                    </div>
+                    <div className="dashboard-mttr-bar">
+                      <div
+                        className="dashboard-mttr-bar-fill"
+                        style={{ width: `${fillPct}%`, ["--mttr-color" as string]: colorVar }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        })()}
       </div>
 
       {/* Sin asignar > 30 min */}
       <div
         className={cn(
           "ccmgc-card p-4",
-          unassigned > 0 && "border-[var(--color-warning)]/40",
+          unassigned > 0 && "dashboard-unassigned-card--active border-[var(--color-warning)]/40",
         )}
       >
         <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
@@ -456,32 +492,41 @@ function OperationalKpiRow({
         </p>
         {topBuses.length === 0 ? (
           <p className="mt-3 text-sm text-[var(--color-text-3)]">Sin datos suficientes.</p>
-        ) : (
-          <ol className="mt-2 space-y-1.5">
-            {topBuses.slice(0, 5).map((b, idx) => (
-              <li
-                key={b.busId}
-                className="flex items-center justify-between gap-2 text-sm"
-                title={[b.operator, b.municipio].filter(Boolean).join(" · ")}
-              >
-                <span className="flex min-w-0 items-center gap-2 text-[var(--color-text-2)]">
-                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[10px] font-semibold tabular-nums text-[var(--color-text-3)]">
-                    {idx + 1}
-                  </span>
-                  <a
-                    href={`/tickets?busId=${encodeURIComponent(b.busId)}`}
-                    className="truncate font-mono text-[13px] text-[var(--color-text-1)] hover:underline"
+        ) : (() => {
+          // Calculamos el max localmente para que la barra de fondo sea
+          // proporcional al bus mas problematico (no a un eje absoluto).
+          const maxTickets = Math.max(...topBuses.slice(0, 5).map((b) => b.ticketCount), 1);
+          return (
+            <ol className="mt-2 space-y-1.5">
+              {topBuses.slice(0, 5).map((b, idx) => {
+                const fillPct = Math.max(8, Math.round((b.ticketCount / maxTickets) * 100));
+                return (
+                  <li
+                    key={b.busId}
+                    className="dashboard-topbus-row flex items-center justify-between gap-2 text-sm"
+                    style={{ ["--bus-fill" as string]: `${fillPct}%` }}
+                    title={[b.operator, b.municipio].filter(Boolean).join(" · ")}
                   >
-                    {b.busId}
-                  </a>
-                </span>
-                <span className="shrink-0 rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-text-2)]">
-                  {b.ticketCount}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
+                    <span className="flex min-w-0 items-center gap-2 text-[var(--color-text-2)]">
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[10px] font-semibold tabular-nums text-[var(--color-text-3)]">
+                        {idx + 1}
+                      </span>
+                      <a
+                        href={`/tickets?busId=${encodeURIComponent(b.busId)}`}
+                        className="truncate font-mono text-[13px] text-[var(--color-text-1)] hover:underline"
+                      >
+                        {b.busId}
+                      </a>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--color-text-2)]">
+                      {b.ticketCount}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          );
+        })()}
       </div>
     </div>
   );
@@ -673,9 +718,9 @@ export function Dashboard() {
       {/* ── Header ── */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <div className="mb-1 flex flex-wrap items-center gap-2">
+          <div className="mb-1.5 flex flex-wrap items-center gap-2">
             <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-success)]/30 bg-[var(--color-success-light)]/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--color-success)]"
+              className="dashboard-live-eyebrow"
               title="Datos actualizados en tiempo real"
             >
               <span className="relative inline-flex h-1.5 w-1.5">
@@ -688,7 +733,7 @@ export function Dashboard() {
               {dashboardView === "conductor" ? "Vista de campo" : "Centro de control"}
             </span>
           </div>
-          <h1 className="text-balance text-2xl font-semibold leading-tight tracking-tight text-[var(--color-text-1)]">
+          <h1 className="dashboard-hero-title text-balance text-[26px] font-semibold leading-[1.1] tracking-tight sm:text-[28px]">
             {dashboardView === "conductor" ? "Vista conductor" : "Panel operativo"}
           </h1>
           <p className="mt-1 text-sm text-[var(--color-text-2)]">
@@ -752,7 +797,10 @@ export function Dashboard() {
           {/* ── KPIs (jerarquía: principal destacado + 3 secundarios) ── */}
           <div>
             <div className="mb-2.5 flex items-center justify-between">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">Métricas operativas</p>
+              <span className="dashboard-pretitle">
+                <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+                Métricas operativas
+              </span>
               <FeedbackTargetButton id="dashboard/kpis" label="KPIs operativos" />
             </div>
             {/*
