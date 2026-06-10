@@ -313,6 +313,39 @@ function TicketsHeroHeader({
         aria-hidden
         className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
       />
+      {/* Marca de agua: silueta estilizada de Gran Canaria. Es coherente
+       *  con CCMGC (Centro de Control de Movilidad de Gran Canaria) y
+       *  refuerza la identidad del proyecto sin distraer (opacidad ~7%).
+       *  Se ancla a la derecha y se sangra fuera del contenedor para que
+       *  solo asome la parte oeste/centro de la isla; el resto queda
+       *  oculto por overflow-hidden del header. Aria-hidden + pointer
+       *  events none para no interferir con lectores de pantalla ni
+       *  interacciones. En movil (< sm) la ocultamos para no comer
+       *  espacio vertical en el iPhone 13 Pro. */}
+      <svg
+        aria-hidden
+        viewBox="0 0 240 240"
+        className="pointer-events-none absolute -right-8 top-1/2 hidden h-[260%] w-auto -translate-y-1/2 text-[var(--color-accent)] opacity-[0.07] sm:block lg:-right-4 lg:opacity-[0.08]"
+        style={{ filter: "drop-shadow(0 0 30px rgba(56,189,248,0.35))" }}
+      >
+        <path
+          d="M 120 14
+             C 148 16, 174 28, 192 50
+             C 208 70, 218 96, 220 124
+             C 222 146, 218 166, 206 182
+             L 184 200
+             L 158 216
+             L 138 224
+             L 122 226
+             L 108 220
+             L 88 206
+             C 64 188, 42 168, 28 144
+             C 20 124, 22 100, 36 76
+             C 52 50, 76 30, 100 20
+             Z"
+          fill="currentColor"
+        />
+      </svg>
       <div className="relative flex flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/25">
