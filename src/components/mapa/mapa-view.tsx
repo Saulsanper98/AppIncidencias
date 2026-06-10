@@ -15,6 +15,7 @@ import {
   PanelLeftClose,
   RefreshCw,
   SlidersHorizontal,
+  Sparkles,
   Timer,
   X,
 } from "lucide-react";
@@ -1327,24 +1328,22 @@ export function MapaView() {
     // migas ya dice donde esta el usuario.
     <div className={cn("flex h-full min-h-0 w-full min-w-0 flex-1 flex-col", mapaMuro ? "gap-2" : "gap-2 sm:gap-3")}>
       {!mapaMuro ? (
-      <header className="relative shrink-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/25 p-2.5 shadow-sm sm:p-4">
+      <header className="relative shrink-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/25 p-3 shadow-sm sm:p-4">
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
+          className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/18 blur-3xl"
         />
         <div className="relative flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
           <div className="flex w-full min-w-0 items-center gap-2.5 sm:flex-1 sm:items-start sm:gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/20 sm:h-10 sm:w-10 sm:rounded-xl">
-              <MapPinned size={16} strokeWidth={1.7} className="text-[var(--color-accent)] sm:h-[18px] sm:w-[18px]" aria-hidden />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25 sm:h-11 sm:w-11">
+              <MapPinned size={18} strokeWidth={1.7} className="sm:h-5 sm:w-5" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="hidden items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-3)] sm:flex">
-                <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold text-[var(--color-text-3)]">
-                  CCMGC
-                </span>
-                Vista operativa
+              <div className="dashboard-pretitle hidden sm:inline-flex">
+                <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+                CCMGC · Vista operativa
               </div>
-              <h1 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-[var(--color-text-1)] sm:mt-0.5 sm:text-[20px]">
+              <h1 className="dashboard-hero-title mt-0.5 flex items-center gap-2 text-[16px] font-semibold leading-tight tracking-tight sm:mt-1 sm:text-[22px]">
                 Mapa operativo
                 <FeedbackTargetButton id="mapa/vista-operativa" label="Mapa operativo de incidencias" />
               </h1>
@@ -1355,24 +1354,39 @@ export function MapaView() {
                 </span>
                 ) o coordenadas GPS si el ticket las tiene. Pulsa un marcador o una fila para centrar.
               </p>
-              {/* Chips KPI compactos. En movil bajamos los paddings y el
-                  espacio para que las 3 metricas quepan en una sola
-                  linea junto al titulo. */}
+              {/* KPI pills premium. Mantenemos las 3 metricas + filterSummary.
+                  Solo se muestran las que tienen valor para no ensuciar el
+                  hero compacto del movil (iPhone 13 Pro). */}
               {data ? (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1 sm:mt-2 sm:gap-1.5">
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:mt-2">
                   {urgentCount > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-error-light)] px-1 py-0.5 text-[10px] font-semibold text-[var(--color-error)] ring-1 ring-[var(--color-error)]/30 sm:px-1.5 sm:text-[10.5px]">
-                      <span className="num-tabular text-[11px] font-bold sm:text-[12px]">{urgentCount}</span>
-                      <span className="uppercase tracking-wide opacity-80">SLA</span>
+                    <span
+                      className="tickets-kpi-pill tickets-kpi-pill--pulse"
+                      style={{ ["--pill-tone" as string]: "var(--color-error)" }}
+                      title="Tickets fuera de SLA visibles en el mapa"
+                    >
+                      <Timer size={11} strokeWidth={1.9} />
+                      <span className="tickets-kpi-pill-value">{urgentCount}</span>
+                      <span className="tickets-kpi-pill-label">SLA</span>
                     </span>
                   ) : null}
-                  <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-surface-2)] px-1 py-0.5 text-[10px] font-medium text-[var(--color-text-2)] ring-1 ring-[var(--color-border)] sm:px-1.5 sm:text-[10.5px]">
-                    <span className="num-tabular text-[11px] font-semibold text-[var(--color-text-1)] sm:text-[12px]">{nVisible}</span>
-                    <span className="uppercase tracking-wide opacity-80">Mapa</span>
+                  <span
+                    className="tickets-kpi-pill"
+                    style={{ ["--pill-tone" as string]: "var(--color-accent)" }}
+                    title="Tickets visibles en el mapa"
+                  >
+                    <MapPinned size={11} strokeWidth={1.9} />
+                    <span className="tickets-kpi-pill-value">{nVisible}</span>
+                    <span className="tickets-kpi-pill-label">Mapa</span>
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-md bg-[var(--color-surface-2)] px-1 py-0.5 text-[10px] font-medium text-[var(--color-text-2)] ring-1 ring-[var(--color-border)] sm:px-1.5 sm:text-[10.5px]">
-                    <span className="num-tabular text-[11px] font-semibold text-[var(--color-text-1)] sm:text-[12px]">{sortedFilteredList.length}</span>
-                    <span className="uppercase tracking-wide opacity-80">
+                  <span
+                    className="tickets-kpi-pill"
+                    style={{ ["--pill-tone" as string]: "var(--color-success)" }}
+                    title="Tickets en la lista filtrada"
+                  >
+                    <Sparkles size={11} strokeWidth={1.9} />
+                    <span className="tickets-kpi-pill-value">{sortedFilteredList.length}</span>
+                    <span className="tickets-kpi-pill-label">
                       Lista{listSearch.trim() ? "*" : ""}
                     </span>
                   </span>
@@ -1386,23 +1400,20 @@ export function MapaView() {
           {/* Barra de controles secundarios: oculta en movil (los atajos
               de teclado no aplican, "Enfoque/Panel" duplica los tabs
               Bandeja/Mapa, y "Ir a bandeja" se accede desde el menu). */}
-          <div className="relative hidden shrink-0 flex-wrap items-center gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-1)] p-1 shadow-sm sm:flex">
+          <div className="relative hidden shrink-0 flex-wrap items-center gap-1.5 sm:flex">
             <button
               type="button"
               onClick={() => setPresentationMode((v) => !v)}
               title={presentationMode ? "Mostrar panel lateral" : "Solo mapa (oculta panel)"}
               aria-pressed={presentationMode}
               className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors",
-                presentationMode
-                  ? "bg-[var(--color-accent-light)] text-[var(--color-accent)]"
-                  : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+                "desvios-action-chip",
+                presentationMode && "desvios-action-chip--accent",
               )}
             >
               <PanelLeftClose size={14} strokeWidth={1.7} aria-hidden />
-              <span className="hidden sm:inline">{presentationMode ? "Panel" : "Enfoque"}</span>
+              <span>{presentationMode ? "Panel" : "Enfoque"}</span>
             </button>
-            <span aria-hidden className="h-5 w-px shrink-0 bg-[var(--color-border)]" />
             <div className="relative" data-map-shortcuts>
               <button
                 type="button"
@@ -1410,10 +1421,8 @@ export function MapaView() {
                 aria-expanded={shortcutsOpen}
                 title="Atajos de teclado"
                 className={cn(
-                  "inline-flex h-9 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition-colors",
-                  shortcutsOpen
-                    ? "bg-[var(--color-accent-light)] text-[var(--color-accent)]"
-                    : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+                  "desvios-action-chip",
+                  shortcutsOpen && "desvios-action-chip--accent",
                 )}
               >
                 <HelpCircle size={14} strokeWidth={1.7} aria-hidden />
@@ -1436,13 +1445,12 @@ export function MapaView() {
                 </div>
               ) : null}
             </div>
-            <span aria-hidden className="h-5 w-px shrink-0 bg-[var(--color-border)]" />
             <Link
               href={ticketsHref}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-2.5 text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+              className="login-primary-cta-premium inline-flex h-9 items-center gap-1.5 px-3 text-[12px]"
             >
               <ExternalLink size={13} strokeWidth={1.7} aria-hidden />
-              <span className="hidden sm:inline">Ir a bandeja</span>
+              <span>Ir a bandeja</span>
             </Link>
           </div>
         </div>
@@ -1488,12 +1496,13 @@ export function MapaView() {
         </div>
       ) : null}
 
-      {/* Tabs compactos en movil: alto 36px en vez de 40px para ganar
-          espacio vertical. Quitamos el mb-2 (el gap del flex padre ya
-          separa) y bajamos el padding interno. */}
+      {/* Tabs compactos en movil con segmented premium: el activo se
+          destaca con gradient azul (reports-period-pill--active) y los
+          inactivos hacen hover sobre surface. Alto 36px para no comerse
+          vertical en iPhone 13 Pro. */}
       <div
         className={cn(
-          "flex shrink-0 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 lg:hidden",
+          "flex shrink-0 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-0.5 backdrop-blur lg:hidden",
           mapaMuro && "hidden",
         )}
       >
@@ -1501,10 +1510,10 @@ export function MapaView() {
           type="button"
           onClick={() => setMobileTab("panel")}
           className={cn(
-            "min-h-9 flex-1 rounded-lg px-2 text-[13px] font-medium transition-colors",
+            "min-h-9 flex-1 rounded-lg px-2 text-[13px] font-semibold transition-all duration-150",
             mobileTab === "panel"
-              ? "bg-[var(--color-accent-light)] text-[var(--color-text-1)]"
-              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
+              ? "reports-period-pill--active"
+              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
           )}
         >
           Bandeja
@@ -1513,10 +1522,10 @@ export function MapaView() {
           type="button"
           onClick={() => setMobileTab("map")}
           className={cn(
-            "min-h-9 flex-1 rounded-lg px-2 text-[13px] font-medium transition-colors",
+            "min-h-9 flex-1 rounded-lg px-2 text-[13px] font-semibold transition-all duration-150",
             mobileTab === "map"
-              ? "bg-[var(--color-accent-light)] text-[var(--color-text-1)]"
-              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
+              ? "reports-period-pill--active"
+              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
           )}
         >
           Mapa
@@ -1547,12 +1556,21 @@ export function MapaView() {
         >
           <div className="flex shrink-0 flex-wrap items-start justify-between gap-x-2 gap-y-2 border-b border-[var(--color-border)] pb-2.5">
             <div className="min-w-0 flex-1 pr-2">
+              {/* Modo normal: pretitle premium con dot + titulo. Modo muro
+                  conserva su tipografia gigante intacta (no aplica el
+                  patron premium para no romper la legibilidad a 3-5m). */}
+              {!mapaMuro ? (
+                <span className="dashboard-pretitle">
+                  <span className="dashboard-pretitle-dot" aria-hidden />
+                  Bandeja
+                </span>
+              ) : null}
               <h2
                 className={cn(
                   "font-semibold leading-tight text-[var(--color-text-1)]",
                   mapaMuro
                     ? "text-3xl font-extrabold tracking-tight text-[var(--color-text-1)] lg:text-5xl min-[2200px]:lg:text-6xl"
-                    : "text-sm",
+                    : "mt-0.5 text-[14px] tracking-tight",
                 )}
               >
                 Tickets
@@ -1580,28 +1598,37 @@ export function MapaView() {
                 <Link
                   href={enterMuroHref}
                   title="Pantalla completa para muro o videowall (sin menú lateral de la app)"
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--color-text-1)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface-3)]"
+                  className="desvios-action-chip"
                 >
-                  <Monitor size={14} aria-hidden />
+                  <Monitor size={13} strokeWidth={1.7} aria-hidden />
                   Modo muro
                 </Link>
               )}
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className={cn(
-                  "shrink-0 gap-1.5",
-                  mapaMuro &&
-                    "border-2 lg:!min-h-16 lg:!gap-2.5 lg:!px-8 lg:!py-3 lg:!text-xl lg:!font-bold [&_svg]:lg:!size-6 min-[2200px]:lg:!min-h-[4.5rem] min-[2200px]:lg:!text-2xl",
-                )}
-                onClick={() => setFiltersMenuOpen(true)}
-                aria-expanded={filtersMenuOpen}
-                aria-controls="mapa-opciones-panel"
-              >
-                <SlidersHorizontal size={14} className={cn(mapaMuro && "lg:size-6")} aria-hidden />
-                Opciones
-              </Button>
+              {mapaMuro ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0 gap-1.5 border-2 lg:!min-h-16 lg:!gap-2.5 lg:!px-8 lg:!py-3 lg:!text-xl lg:!font-bold [&_svg]:lg:!size-6 min-[2200px]:lg:!min-h-[4.5rem] min-[2200px]:lg:!text-2xl"
+                  onClick={() => setFiltersMenuOpen(true)}
+                  aria-expanded={filtersMenuOpen}
+                  aria-controls="mapa-opciones-panel"
+                >
+                  <SlidersHorizontal size={14} className="lg:size-6" aria-hidden />
+                  Opciones
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  className="desvios-action-chip desvios-action-chip--accent"
+                  onClick={() => setFiltersMenuOpen(true)}
+                  aria-expanded={filtersMenuOpen}
+                  aria-controls="mapa-opciones-panel"
+                >
+                  <SlidersHorizontal size={13} strokeWidth={1.7} aria-hidden />
+                  Opciones
+                </button>
+              )}
             </div>
           </div>
 
