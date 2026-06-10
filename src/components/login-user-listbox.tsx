@@ -1,12 +1,13 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
 import {
   forwardRef,
   useCallback,
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type MutableRefObject,
@@ -34,6 +35,10 @@ type LoginUserListboxProps = {
   "aria-describedby"?: string;
 };
 
+// A partir de cuantos usuarios mostramos el buscador integrado en el
+// panel. Por debajo el filtro es ruido visual.
+const SEARCH_THRESHOLD = 5;
+
 function initialsFromLabel(label: string): string {
   return label
     .trim()
@@ -54,7 +59,7 @@ function OptionAvatar({ avatarUrl, label, size = 28 }: { avatarUrl?: string | nu
         src={src}
         alt=""
         aria-hidden
-        className="shrink-0 rounded-full object-cover ring-1 ring-[color-mix(in_oklab,var(--color-border)_70%,transparent)]"
+        className="block shrink-0 rounded-full object-cover"
         style={{ width: size, height: size }}
       />
     );
@@ -62,7 +67,7 @@ function OptionAvatar({ avatarUrl, label, size = 28 }: { avatarUrl?: string | nu
   return (
     <span
       aria-hidden
-      className="flex shrink-0 items-center justify-center rounded-full bg-[color-mix(in_oklab,var(--color-accent-light)_70%,var(--color-surface-3))] text-[10px] font-semibold text-[var(--color-accent)] ring-1 ring-[color-mix(in_oklab,var(--color-border)_70%,transparent)]"
+      className="flex shrink-0 items-center justify-center rounded-full bg-[color-mix(in_oklab,var(--color-accent-light)_70%,var(--color-surface-3))] text-[11px] font-semibold text-[var(--color-accent)]"
       style={{ width: size, height: size }}
     >
       {initialsFromLabel(label) || "?"}
@@ -71,10 +76,10 @@ function OptionAvatar({ avatarUrl, label, size = 28 }: { avatarUrl?: string | nu
 }
 
 const triggerBase =
-  "login-focusable login-listbox-trigger-premium flex w-full min-h-[44px] items-center justify-between gap-2 rounded-xl border border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[var(--color-surface-2)] px-3 py-2.5 text-left text-[13px] leading-5 text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,background-color,box-shadow] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--color-accent)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]";
+  "login-focusable login-listbox-trigger-premium flex w-full min-h-[52px] items-center justify-between gap-2 rounded-xl border border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[var(--color-surface-2)] px-3 py-2.5 text-left text-[13px] leading-5 text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,background-color,box-shadow] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--color-accent)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]";
 
 const listSurface =
-  "login-user-listbox-panel login-listbox-panel-premium absolute left-0 right-0 top-full z-50 mt-1.5 flex max-h-[min(280px,50vh)] flex-col gap-0.5 overflow-y-auto rounded-xl border border-[color-mix(in_oklab,var(--color-border)_85%,transparent)] bg-[color-mix(in_oklab,var(--color-surface-2)_96%,var(--color-surface))] p-1.5 shadow-[0_18px_48px_-14px_rgba(0,0,0,0.55)] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-[color-mix(in_oklab,var(--color-surface-3)_40%,transparent)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_oklab,var(--color-text-3)_35%,transparent)]";
+  "login-user-listbox-panel login-listbox-panel-premium absolute left-0 right-0 top-full z-50 mt-1.5 flex max-h-[min(340px,55vh)] flex-col overflow-hidden rounded-xl border border-[color-mix(in_oklab,var(--color-border)_85%,transparent)] bg-[color-mix(in_oklab,var(--color-surface-2)_96%,var(--color-surface))] p-1.5 shadow-[0_18px_48px_-14px_rgba(0,0,0,0.55)]";
 
 function mergeRefs<T>(...refs: (Ref<T> | undefined)[]) {
   return (node: T | null) => {
@@ -86,13 +91,25 @@ function mergeRefs<T>(...refs: (Ref<T> | undefined)[]) {
   };
 }
 
+function matchesQuery(opt: LoginUserListboxOption, q: string): boolean {
+  if (!q) return true;
+  const needle = q.toLowerCase().trim();
+  if (!needle) return true;
+  if (opt.label.toLowerCase().includes(needle)) return true;
+  if (opt.secondary && opt.secondary.toLowerCase().includes(needle)) return true;
+  return false;
+}
+
 export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxProps>(
   function LoginUserListbox({ id, value, onChange, options, className, "aria-describedby": ariaDescribedBy }, ref) {
     const listId = useId();
+    const searchId = useId();
     const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
     const rootRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement | null>(null);
     const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+    const searchInputRef = useRef<HTMLInputElement>(null);
     const openRef = useRef(false);
 
     openRef.current = open;
@@ -100,20 +117,37 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
     const selectedOption = options.find((o) => o.value === value);
     const selectedLabel = selectedOption?.label ?? "";
     const hasRichOptions = options.some((opt) => opt.avatarUrl || opt.secondary);
+    const showSearch = options.length >= SEARCH_THRESHOLD;
 
-    const focusOption = useCallback((index: number) => {
-      const n = options.length;
-      if (n === 0) return;
-      const i = ((index % n) + n) % n;
-      optionRefs.current[i]?.focus();
-    }, [options.length]);
+    const filteredOptions = useMemo(() => {
+      if (!showSearch || !query) return options;
+      return options.filter((o) => matchesQuery(o, query));
+    }, [options, query, showSearch]);
+
+    const focusOption = useCallback(
+      (index: number) => {
+        const n = filteredOptions.length;
+        if (n === 0) return;
+        const i = ((index % n) + n) % n;
+        optionRefs.current[i]?.focus();
+      },
+      [filteredOptions.length],
+    );
 
     useLayoutEffect(() => {
-      if (!open) return;
-      const idx = options.findIndex((o) => o.value === value);
+      if (!open) {
+        setQuery("");
+        return;
+      }
+      // Si hay buscador, foco al input; si no, al item seleccionado.
+      if (showSearch) {
+        requestAnimationFrame(() => searchInputRef.current?.focus());
+        return;
+      }
+      const idx = filteredOptions.findIndex((o) => o.value === value);
       const i = idx >= 0 ? idx : 0;
       requestAnimationFrame(() => optionRefs.current[i]?.focus());
-    }, [open, options, value]);
+    }, [open, filteredOptions, value, showSearch]);
 
     useEffect(() => {
       const onDocMouse = (e: MouseEvent) => {
@@ -167,16 +201,16 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
             }
           }}
         >
-          <span className="flex min-w-0 flex-1 items-center gap-2.5">
+          <span className="flex min-w-0 flex-1 items-center gap-3">
             {hasRichOptions ? (
-              <span className="login-avatar-online">
-                <OptionAvatar avatarUrl={selectedOption?.avatarUrl ?? null} label={selectedLabel} size={32} />
+              <span className="login-listbox-trigger-avatar login-avatar-online">
+                <OptionAvatar avatarUrl={selectedOption?.avatarUrl ?? null} label={selectedLabel} size={36} />
               </span>
             ) : null}
             <span className="flex min-w-0 flex-col">
-              <span className="truncate text-[13px] font-medium text-[var(--color-text-1)]">{selectedLabel}</span>
+              <span className="truncate text-[13.5px] font-semibold text-[var(--color-text-1)]">{selectedLabel}</span>
               {selectedOption?.secondary ? (
-                <span className="truncate text-[11px] text-[var(--color-text-3)]">{selectedOption.secondary}</span>
+                <span className="truncate text-[11.5px] text-[var(--color-text-3)]">{selectedOption.secondary}</span>
               ) : null}
             </span>
           </span>
@@ -189,70 +223,157 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
         </button>
 
         {open ? (
-          <ul id={listId} role="listbox" tabIndex={-1} className={listSurface}>
-            {options.map((opt, idx) => {
-              const active = opt.value === value;
-              return (
-                <li key={opt.value} role="presentation" className="min-w-0">
+          <div className={listSurface}>
+            {/* Header: cuenta de usuarios disponibles. Refuerza la
+             *  sensacion de "panel operativo" y no aporta solo aire. */}
+            <div className="login-listbox-header">
+              <span className="login-listbox-header-count">
+                <span className="login-listbox-header-count-dot" aria-hidden />
+                {options.length} {options.length === 1 ? "cuenta" : "cuentas"}
+              </span>
+              <span className="opacity-70">Selecciona</span>
+            </div>
+
+            {/* Buscador solo si hay un n�mero razonable de usuarios. */}
+            {showSearch ? (
+              <div className="login-listbox-search">
+                <Search size={14} aria-hidden className="login-listbox-search-icon" strokeWidth={1.8} />
+                <input
+                  ref={searchInputRef}
+                  id={searchId}
+                  type="text"
+                  inputMode="search"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Buscar usuario..."
+                  className="login-listbox-search-input"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      focusOption(0);
+                      return;
+                    }
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const first = filteredOptions[0];
+                      if (first) {
+                        onChange(first.value);
+                        setOpen(false);
+                        triggerRef.current?.focus();
+                      }
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      if (query) {
+                        setQuery("");
+                      } else {
+                        setOpen(false);
+                        triggerRef.current?.focus();
+                      }
+                    }
+                  }}
+                />
+                {query ? (
                   <button
                     type="button"
-                    role="option"
-                    aria-selected={active}
-                    ref={(el) => {
-                      optionRefs.current[idx] = el;
-                    }}
-                    className={cn(
-                      "login-listbox-option flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 pl-3 text-left text-[13px] leading-snug transition-colors duration-150",
-                      active
-                        ? "login-listbox-option--active bg-[color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface-3))] font-medium text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_35%,transparent)]"
-                        : "text-[color-mix(in_oklab,var(--color-text-2)_92%,white)] hover:bg-[color-mix(in_oklab,var(--color-surface-3)_70%,transparent)] hover:text-[var(--color-text-1)]",
-                    )}
+                    className="login-listbox-search-clear"
                     onClick={() => {
-                      onChange(opt.value);
-                      setOpen(false);
+                      setQuery("");
+                      searchInputRef.current?.focus();
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === "ArrowDown") {
-                        e.preventDefault();
-                        focusOption(idx + 1);
-                        return;
-                      }
-                      if (e.key === "ArrowUp") {
-                        e.preventDefault();
-                        focusOption(idx - 1);
-                        return;
-                      }
-                      if (e.key === "Home") {
-                        e.preventDefault();
-                        focusOption(0);
-                        return;
-                      }
-                      if (e.key === "End") {
-                        e.preventDefault();
-                        focusOption(options.length - 1);
-                        return;
-                      }
-                      if (e.key === "Tab") {
-                        setOpen(false);
-                      }
-                    }}
+                    aria-label="Limpiar busqueda"
                   >
-                    {hasRichOptions ? (
-                      <OptionAvatar avatarUrl={opt.avatarUrl ?? null} label={opt.label} size={28} />
-                    ) : null}
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate">{opt.label}</span>
-                      {opt.secondary ? (
-                        <span className="truncate text-[11px] text-[color-mix(in_oklab,var(--color-text-3)_75%,white)]">
-                          {opt.secondary}
-                        </span>
-                      ) : null}
-                    </span>
+                    <X size={13} aria-hidden strokeWidth={2} />
                   </button>
-                </li>
-              );
-            })}
-          </ul>
+                ) : null}
+              </div>
+            ) : null}
+
+            {filteredOptions.length === 0 ? (
+              <div className="login-listbox-empty">No hay coincidencias</div>
+            ) : (
+              <ul
+                id={listId}
+                role="listbox"
+                tabIndex={-1}
+                className="flex flex-col gap-0.5 overflow-y-auto px-0.5 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-[color-mix(in_oklab,var(--color-surface-3)_40%,transparent)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_oklab,var(--color-text-3)_35%,transparent)]"
+              >
+                {filteredOptions.map((opt, idx) => {
+                  const active = opt.value === value;
+                  return (
+                    <li key={opt.value} role="presentation" className="min-w-0">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        ref={(el) => {
+                          optionRefs.current[idx] = el;
+                        }}
+                        className={cn(
+                          "login-listbox-option login-listbox-option-premium",
+                          active && "login-listbox-option-premium--active",
+                        )}
+                        onClick={() => {
+                          onChange(opt.value);
+                          setOpen(false);
+                          triggerRef.current?.focus();
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            focusOption(idx + 1);
+                            return;
+                          }
+                          if (e.key === "ArrowUp") {
+                            e.preventDefault();
+                            if (idx === 0 && showSearch) {
+                              searchInputRef.current?.focus();
+                            } else {
+                              focusOption(idx - 1);
+                            }
+                            return;
+                          }
+                          if (e.key === "Home") {
+                            e.preventDefault();
+                            focusOption(0);
+                            return;
+                          }
+                          if (e.key === "End") {
+                            e.preventDefault();
+                            focusOption(filteredOptions.length - 1);
+                            return;
+                          }
+                          if (e.key === "Tab") {
+                            setOpen(false);
+                          }
+                        }}
+                      >
+                        {hasRichOptions ? (
+                          <span className="login-listbox-avatar">
+                            <OptionAvatar avatarUrl={opt.avatarUrl ?? null} label={opt.label} size={36} />
+                          </span>
+                        ) : null}
+                        <span className="login-listbox-option-text">
+                          <span className="login-listbox-option-name">{opt.label}</span>
+                          {opt.secondary ? (
+                            <span className="login-listbox-option-role">{opt.secondary}</span>
+                          ) : null}
+                        </span>
+                        {active ? (
+                          <span className="login-listbox-option-check" aria-hidden>
+                            <Check size={13} strokeWidth={3} />
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         ) : null}
       </div>
     );
