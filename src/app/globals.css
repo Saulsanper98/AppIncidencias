@@ -2082,7 +2082,13 @@ body {
   pointer-events: none;
   z-index: 0;
 }
-.tickets-hero-glow > * {
+/* Solo el contenido (no los decorativos aria-hidden) recibe stacking.
+   Antes era ".tickets-hero-glow > *" lo que rompia cualquier hijo
+   decorativo con position:absolute (Tailwind .absolute tiene misma
+   especificidad y se declara antes en el CSS, asi que perdia).
+   Excluir [aria-hidden] permite anadir adornos absolute (blur, SVG
+   marca de agua, etc.) sin que la regla los re-posicione. */
+.tickets-hero-glow > *:not([aria-hidden]) {
   position: relative;
   z-index: 1;
 }
