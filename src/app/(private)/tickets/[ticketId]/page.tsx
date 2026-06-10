@@ -1295,9 +1295,13 @@ export default function TicketDetailPage() {
                     Quedará visible para tu equipo en la actividad
                   </span>
                 </div>
+                {/* overflow-hidden imprescindible: el footer interior tiene su
+                 *  propio bg (surface/40) sin rounded-b-xl propio. Sin recortar
+                 *  al wrapper, las esquinas inferiores y el ring de focus se
+                 *  veian "escalonados" cuando el textarea estaba activo. */}
                 <div
                   className={cn(
-                    "group/note rounded-xl border bg-[var(--color-surface-2)] transition-colors duration-150 focus-within:border-[var(--color-accent)]/55 focus-within:ring-2 focus-within:ring-[var(--color-accent)]/30",
+                    "group/note overflow-hidden rounded-xl border bg-[var(--color-surface-2)] transition-colors duration-150 focus-within:border-[var(--color-accent)]/55 focus-within:ring-2 focus-within:ring-[var(--color-accent)]/30",
                     noteError ? "border-[var(--color-error)]/55" : "border-[var(--color-border)]",
                   )}
                 >
