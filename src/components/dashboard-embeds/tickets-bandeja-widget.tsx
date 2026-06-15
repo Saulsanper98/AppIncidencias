@@ -60,7 +60,7 @@ export function TicketsBandejaWidget() {
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] text-[var(--color-text-3)]">Últimos tickets (vista compacta)</p>
         <Link
-          href="/tickets"
+          href="/bandeja"
           className="shrink-0 text-[11px] font-medium text-[var(--color-accent)] hover:underline"
         >
           Bandeja completa

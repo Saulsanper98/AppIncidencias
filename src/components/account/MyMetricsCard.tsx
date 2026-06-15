@@ -193,7 +193,7 @@ export function MyMetricsCard() {
             {data.currentlyAssigned}
           </p>
           <p className="account-kpi-tile-hint">tickets activos</p>
-          <a href="/tickets?mine=1" className="account-kpi-tile-link">
+          <a href="/bandeja?mine=1" className="account-kpi-tile-link">
             Ver mis tickets →
           </a>
         </div>

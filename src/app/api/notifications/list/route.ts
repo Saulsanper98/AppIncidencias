@@ -4,8 +4,12 @@ import { resolveRequestActor } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 
 function hrefForAudit(row: { ticketId: string | null; action: string }): string {
+  // Las notificaciones sobre tickets concretos abren el detalle del ticket.
+  // El resto (eventos genericos de la cola, accion sobre la lista) abren
+  // la bandeja — desde junio 2026 la bandeja vive en /bandeja, no en
+  // /tickets (que es ahora la pagina de gestion + preventivo).
   if (row.ticketId) return `/tickets/${row.ticketId}`;
-  if (row.action.startsWith("ticket.")) return "/tickets";
+  if (row.action.startsWith("ticket.")) return "/bandeja";
   if (row.action.startsWith("maintenance.")) return "/tickets";
   if (row.action === "auth.login" || row.action === "auth.logout") return "/dashboard";
   return "/dashboard";

@@ -25,6 +25,7 @@ import {
   Bus as BusIcon,
   ClipboardList,
   Command,
+  Inbox,
   LayoutDashboard,
   MapPinned,
   Package,
@@ -79,7 +80,8 @@ type Suggestion = StaticTarget | RemoteSuggestion;
 
 const ROUTES: StaticTarget[] = [
   { kind: "route", id: "dashboard", label: "Dashboard", hint: "Panel operativo", href: "/dashboard", Icon: LayoutDashboard, shortcut: "G D" },
-  { kind: "route", id: "tickets", label: "Tickets", hint: "Bandeja y nuevo ticket", href: "/tickets", Icon: ClipboardList, shortcut: "G T" },
+  { kind: "route", id: "bandeja", label: "Bandeja", hint: "Listado de tickets", href: "/bandeja", Icon: Inbox, shortcut: "G B" },
+  { kind: "route", id: "tickets", label: "Tickets", hint: "Nuevo ticket y mantenimiento preventivo", href: "/tickets", Icon: ClipboardList, shortcut: "G T" },
   { kind: "route", id: "inventory", label: "Inventario", hint: "Repuestos y stock", href: "/inventory", Icon: Package, shortcut: "G I" },
   { kind: "route", id: "mapa", label: "Mapa", hint: "Vista geográfica", href: "/mapa", Icon: MapPinned, shortcut: "G M" },
   { kind: "route", id: "novedades", label: "Novedades", hint: "Avisos y cambios de versión", href: "/novedades", Icon: Bell },

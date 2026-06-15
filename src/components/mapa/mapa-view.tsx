@@ -454,7 +454,9 @@ function buildTicketsHref(qs: URLSearchParams): string {
   const pri = qs.get("priority");
   if (pri && pri !== "todos") p.set("priority", pri);
   const s = p.toString();
-  return s ? `/tickets?${s}` : "/tickets";
+  // /bandeja desde junio 2026 (la bandeja vive ahora como pagina propia
+  // del sidebar; /tickets quedo para la gestion/preventivo).
+  return s ? `/bandeja?${s}` : "/bandeja";
 }
 
 type MapMuroTicketPayload = {

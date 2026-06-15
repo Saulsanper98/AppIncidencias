@@ -166,10 +166,17 @@ export default function PrivateLayout({
       const truncated =
         title && title.length > 42 ? `${title.slice(0, 40).trimEnd()}…` : title;
       const label = truncated ? `${short} · ${truncated}` : `Ticket ${short}`;
-      return [root, { label: "Tickets", href: "/tickets" }, { label }];
+      // El detalle de un ticket cuelga conceptualmente de Bandeja (es
+      // donde el usuario suele venir y a donde quiere "volver"). Antes
+      // colgaba de Tickets, pero tras separar la bandeja a su propia
+      // pagina (junio 2026) ya no tenia sentido.
+      return [root, { label: "Bandeja", href: "/bandeja" }, { label }];
+    }
+    if (pathname.startsWith("/bandeja")) {
+      return [root, { label: "Bandeja", href: "/bandeja" }];
     }
     if (pathname.startsWith("/tickets")) {
-      return [root, { label: "Tickets", href: "/tickets" }, { label: "Bandeja y nuevo ticket" }];
+      return [root, { label: "Tickets", href: "/tickets" }, { label: "Gestión y mantenimiento" }];
     }
     if (pathname.startsWith("/dashboard")) {
       return [root, { label: "Dashboard", href: "/dashboard" }];

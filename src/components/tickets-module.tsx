@@ -445,8 +445,28 @@ function KpiPill({
   );
 }
 
-export function TicketsModule() {
+/**
+ * Vista del modulo de tickets. Separa lo que se ve en cada pagina:
+ *   - "full"    : todo junto (formulario + bandeja + operativa secundaria).
+ *                 Comportamiento legado, util si se quiere recuperar la
+ *                 vista combinada en algun punto.
+ *   - "bandeja" : solo el listado de tickets (hero KPIs + filtros + tabla).
+ *                 La usa la pagina /bandeja, promovida a entrada propia
+ *                 del sidebar (junio 2026) para que el equipo del centro
+ *                 acceda a la bandeja con 1 click sin perderse entre el
+ *                 formulario y la operativa preventiva.
+ *   - "manage"  : la "trastienda" — formulario de crear ticket + alertas
+ *                 preventivas + tareas preventivas + auditoria. La usa
+ *                 la pagina /tickets (de ahi el nombre): es el sitio para
+ *                 dar de alta tickets y revisar el contexto preventivo.
+ */
+export type TicketsModuleView = "full" | "bandeja" | "manage";
+
+export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = {}) {
   const t = useTickets();
+  const showForm = view !== "bandeja";
+  const showInbox = view !== "manage";
+  const showSecondary = view !== "bandeja";
 
   const heroKpis = useMemo(() => {
     const now = Date.now();
@@ -510,20 +530,32 @@ export function TicketsModule() {
         resueltosHoy={heroKpis.resueltosHoy}
         slaVencidos={heroKpis.slaVencidos}
       />
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <TicketCreateForm
-          catalog={t.catalog}
-          lineas={t.lineas}
-          tipologias={t.tipologias}
-          sessionUser={t.sessionUser}
-          saving={t.saving}
-          onCreateTicket={t.handleCreateTicket}
-          setError={t.setError}
-          setNotice={t.setNotice}
-          setNoticeTone={t.setNoticeTone}
-          setNoticePlacement={t.setNoticePlacement}
-        />
+      <section
+        className={cn(
+          "grid grid-cols-1 gap-4",
+          // Solo activamos el grid de 12 columnas cuando se muestran las
+          // dos columnas (formulario + bandeja). En vistas individuales
+          // dejamos una sola columna para que cada bloque ocupe todo el
+          // ancho disponible.
+          showForm && showInbox && "xl:grid-cols-12",
+        )}
+      >
+        {showForm ? (
+          <TicketCreateForm
+            catalog={t.catalog}
+            lineas={t.lineas}
+            tipologias={t.tipologias}
+            sessionUser={t.sessionUser}
+            saving={t.saving}
+            onCreateTicket={t.handleCreateTicket}
+            setError={t.setError}
+            setNotice={t.setNotice}
+            setNoticeTone={t.setNoticeTone}
+            setNoticePlacement={t.setNoticePlacement}
+          />
+        ) : null}
 
+        {showInbox ? (
         <motion.article
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -531,7 +563,13 @@ export function TicketsModule() {
           // En movil reducimos a p-3 para que el contenido respire (el
           // padding del <main> y el de la card interna `ccmgc-card p-4`
           // sumaban 36px laterales y dejaba las cards de tickets pegadas).
-          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-5 xl:col-span-7"
+          className={cn(
+            "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-5",
+            // Cuando convivimos con el formulario, ocupamos 7 columnas
+            // del grid de 12. En vista solo-bandeja no necesitamos
+            // restringir el ancho — la card ya esta sola en su section.
+            showForm && "xl:col-span-7",
+          )}
           aria-describedby="tickets-inbox-hint"
         >
           <p id="tickets-inbox-hint" className="sr-only">
@@ -1016,11 +1054,16 @@ export function TicketsModule() {
             onClearPartCodeFilter={t.clearPartCodeFilter}
             onClearFilters={t.handleClearFilters}
           />
+        </motion.article>
+        ) : null}
+      </section>
 
+      {showSecondary ? (
+        <>
           {/* Operativa secundaria: bloque visual diferenciado del tronco
             * (bandeja + form). Header con título + divider para separar
             * jerarquía. */}
-          <div className="mt-6 mb-3 flex items-center gap-3">
+          <div className="mt-2 mb-3 flex items-center gap-3">
             <span className="tickets-section-eyebrow">
               <span className="tickets-section-eyebrow-dot" aria-hidden />
               Operativa secundaria
@@ -1299,8 +1342,8 @@ export function TicketsModule() {
               </div>
             </div>
           ) : null}
-        </motion.article>
-      </section>
+        </>
+      ) : null}
 
       <TicketActionMenu
         ticket={t.actionMenuTicket}

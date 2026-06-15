@@ -222,7 +222,9 @@ export async function GET(request: Request) {
         title: b.id,
         subtitle: `${b.operator} · ${b.municipio}`,
         // Abre la bandeja filtrada por ese bus (es la vista más útil del bus).
-        href: `/tickets?busId=${encodeURIComponent(b.id)}`,
+        // Desde junio 2026 la bandeja vive en /bandeja (entrada propia
+        // del sidebar; antes era una sub-vista de /tickets).
+        href: `/bandeja?busId=${encodeURIComponent(b.id)}`,
         badge: "Bus",
       }));
     })();

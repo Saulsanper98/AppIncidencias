@@ -127,9 +127,16 @@ export function slugFromFilters(parts: string[]): string {
   return s || "todos";
 }
 
-/** Ruta relativa para `Link` y navegación interna. */
+/**
+ * Ruta relativa para `Link` y navegacion interna.
+ *
+ * Apunta a la bandeja (/bandeja) con el filtro `partCode` en la URL.
+ * Antes apuntaba a /tickets, pero tras separar la bandeja a su propia
+ * pagina (junio 2026) el filtro de pieza solo tiene sentido en la
+ * bandeja — /tickets ya no muestra el listado.
+ */
 export function ticketsPathForPartCode(partCode: string): string {
-  return `/tickets?partCode=${encodeURIComponent(partCode)}`;
+  return `/bandeja?partCode=${encodeURIComponent(partCode)}`;
 }
 
 export function buildInventoryCsv(

@@ -109,7 +109,7 @@ export function AnomalousBusesBanner() {
             >
               <div className="min-w-0">
                 <Link
-                  href={`/tickets?busId=${encodeURIComponent(b.busId)}`}
+                  href={`/bandeja?busId=${encodeURIComponent(b.busId)}`}
                   className="block truncate font-mono text-[13px] font-semibold text-[var(--color-text-1)] hover:underline"
                 >
                   {b.busId}

@@ -268,6 +268,7 @@ const URL_LABELS: Record<string, string> = {
   "/handover": "Pase de turno",
   "/preventivo": "Calendario preventivo",
   "/feedback": "Sugerencias y opiniones",
+  "/bandeja": "Bandeja",
   "/tickets": "Tickets",
   "/inventory": "Inventario",
   "/desvios": "Desvíos",

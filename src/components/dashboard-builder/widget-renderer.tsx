@@ -406,7 +406,10 @@ const QUICK_DATA_SOURCES = [
 ] as const;
 
 const OPERATION_QUICK_LINKS = [
-  { href: "/tickets", label: "Bandeja de tickets", hint: "Listado y alta de tickets" },
+  // /bandeja desde junio 2026 (la bandeja se promovio a entrada propia
+  // del sidebar; /tickets queda para gestion y mantenimiento).
+  { href: "/bandeja", label: "Bandeja de tickets", hint: "Listado de tickets activos" },
+  { href: "/tickets", label: "Nuevo ticket", hint: "Alta de incidencias y preventivo" },
   { href: "/dashboard", label: "Panel operativo", hint: "KPIs e incidencias activas" },
   { href: "/mapa", label: "Mapa de incidencias", hint: "Vista geográfica" },
   { href: "/inventory", label: "Inventario", hint: "Repuestos y almacenes" },

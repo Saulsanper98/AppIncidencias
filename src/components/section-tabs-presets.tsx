@@ -58,16 +58,25 @@ const dashboardTabs: SectionTab[] = [
 ];
 
 /**
- * Pestañas de la sección "Tickets". La bandeja del listado y el "Pase de
- * turno" (M/T/N) van de la mano: el handover repasa los tickets abiertos al
- * cerrar un turno, así que vivirá como sub-página de Tickets.
+ * Pestañas de la sección "Tickets". Tras promover la bandeja a entrada
+ * propia del sidebar (junio 2026, vive en /bandeja), aqui quedan las dos
+ * vistas que comparten "el equipo del turno":
+ *
+ *   - Gestion       → /tickets — formulario "Nuevo ticket" + alertas y
+ *                     tareas preventivas + auditoria.
+ *   - Pase de turno → /handover — repaso del turno (M/T/N) al cerrar.
+ *
+ * La bandeja ya NO aparece como pestaña: el centro de control la abre
+ * con 1 click desde el sidebar.
  */
 const ticketsTabs: SectionTab[] = [
   {
-    label: "Bandeja",
+    label: "Gestión",
     href: "/tickets",
     icon: ClipboardList,
-    // /tickets/[id] sigue siendo "Bandeja" — un detalle pertenece al listado.
+    // Mantenemos /tickets/[id] aqui tambien por si el usuario navega al
+    // detalle desde otras secciones (mapa, busqueda...) — la pestana
+    // activa sigue siendo "Gestion" para conservar el contexto visual.
     match: (pathname) =>
       pathname === "/tickets" || pathname.startsWith("/tickets/"),
   },

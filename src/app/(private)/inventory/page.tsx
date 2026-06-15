@@ -1020,7 +1020,7 @@ export default function InventoryPage() {
           <p className="mt-1 max-w-md text-caption text-[var(--color-text-2)]">{inv.emptyCatalog.body}</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link
-              href="/tickets"
+              href="/bandeja"
               className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-transparent bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-[var(--color-accent-hover)]"
             >
               {inv.emptyCatalog.tickets}
@@ -1450,7 +1450,7 @@ export default function InventoryPage() {
                               : inv.card.ticketsNoCount}
                           </Link>
                           <Link
-                            href="/tickets"
+                            href="/bandeja"
                             className="block text-center text-[13px] font-medium text-[var(--color-text-2)] underline-offset-2 hover:text-[var(--color-text-1)] hover:underline sm:text-left"
                           >
                             {inv.card.bandejaGeneral}

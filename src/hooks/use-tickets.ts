@@ -27,6 +27,13 @@ import { toUiPriority } from "@/lib/ticketing";
 export function useTickets() {
   const router = useRouter();
   const pathname = usePathname();
+  // Ruta base sobre la que sincronizamos los filtros como query string.
+  // El modulo de tickets vive en dos paginas distintas: /bandeja (vista
+  // primaria del centro) y /tickets (gestion + preventivo). Cuando el
+  // usuario cambia un filtro queremos reflejarlo en la URL ACTUAL, no
+  // redirigirlo de /bandeja a /tickets. Antes el `router.replace` era
+  // siempre "/tickets?..." y rompia la URL al filtrar desde /bandeja.
+  const inboxPath = pathname.startsWith("/bandeja") ? "/bandeja" : "/tickets";
   const searchParams = useSearchParams();
   const busIdFromQuery = searchParams.get("busId");
   const statusFromQuery = searchParams.get("status");
@@ -278,7 +285,11 @@ export function useTickets() {
   }, [notice, noticeTone, noticePlacement]);
 
   useEffect(() => {
-    if (loading || pathname !== "/tickets") return;
+    // Solo sincronizamos URL en las paginas donde tiene sentido el listado:
+    // /bandeja (vista primaria) y /tickets (gestion + preventivo). Cuando
+    // el usuario abre un detalle (/tickets/[id]) NO queremos manipular la
+    // URL — la pagina del detalle gestiona su propia navegacion.
+    if (loading || (pathname !== "/tickets" && pathname !== "/bandeja")) return;
     const id = window.setTimeout(() => {
       const desiredStatus = statusFilter === "todos" ? "" : statusFilter;
       const desiredPri = priorityFilter === "todos" ? "" : priorityFilter;
@@ -298,10 +309,10 @@ export function useTickets() {
       if (desiredBus) q.set("busId", desiredBus);
       if (curPart) q.set("partCode", curPart);
       const qs = q.toString();
-      router.replace(qs ? `/tickets?${qs}` : "/tickets", { scroll: false });
+      router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
     }, 0);
     return () => window.clearTimeout(id);
-  }, [loading, pathname, statusFilter, priorityFilter, operatorFilter, busFilter, router, searchParams]);
+  }, [loading, pathname, inboxPath, statusFilter, priorityFilter, operatorFilter, busFilter, router, searchParams]);
 
   const fetchCatalog = useCallback(async () => {
     const response = await fetch("/api/catalog", { cache: "no-store" });
@@ -1012,8 +1023,8 @@ export function useTickets() {
     setOperatorFilter("todas");
     setBusFilter("todas");
     setOnlyMine(false);
-    router.replace("/tickets");
-  }, [router]);
+    router.replace(inboxPath);
+  }, [router, inboxPath]);
 
   /**
    * Aplica una vista guardada: parsea el querystring (sin '?'), resetea TODOS
@@ -1056,9 +1067,9 @@ export function useTickets() {
       // Sincroniza la URL (sin scroll) para que reflejar/compartir la vista
       // funcione igual que aplicar los filtros manualmente.
       const qs = params.toString();
-      router.replace(qs ? `/tickets?${qs}` : "/tickets", { scroll: false });
+      router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
     },
-    [router],
+    [router, inboxPath],
   );
 
   const clearPartCodeFilter = useCallback(() => {
@@ -1068,8 +1079,8 @@ export function useTickets() {
     if (operatorFilter !== "todas") q.set("operator", operatorFilter);
     if (busFilter !== "todas") q.set("busId", busFilter);
     const qs = q.toString();
-    router.replace(qs ? `/tickets?${qs}` : "/tickets", { scroll: false });
-  }, [statusFilter, priorityFilter, operatorFilter, busFilter, router]);
+    router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
+  }, [statusFilter, priorityFilter, operatorFilter, busFilter, router, inboxPath]);
 
   const filteredTickets = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

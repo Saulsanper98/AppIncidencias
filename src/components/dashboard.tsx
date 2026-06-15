@@ -478,7 +478,7 @@ function OperationalKpiRow({
               : "tickets abiertos sin asignar"}
         </p>
         <a
-          href="/tickets?status=abierto"
+          href="/bandeja?status=abierto"
           className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-[var(--color-accent)] hover:underline"
         >
           Ver bandeja
@@ -512,7 +512,7 @@ function OperationalKpiRow({
                         {idx + 1}
                       </span>
                       <a
-                        href={`/tickets?busId=${encodeURIComponent(b.busId)}`}
+                        href={`/bandeja?busId=${encodeURIComponent(b.busId)}`}
                         className="truncate font-mono text-[13px] text-[var(--color-text-1)] hover:underline"
                       >
                         {b.busId}

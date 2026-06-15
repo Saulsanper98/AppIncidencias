@@ -4,7 +4,8 @@
  * Atajos de teclado de navegacion global.
  *
  *   g d -> /dashboard
- *   g t -> /tickets
+ *   g b -> /bandeja        (listado de tickets — vista mas usada)
+ *   g t -> /tickets        (gestion / mantenimiento)
  *   g i -> /inventory
  *   g m -> /mapa
  *   g a -> /account
@@ -18,6 +19,7 @@ import { useEffect, useRef } from "react";
 
 const TARGETS: Record<string, string> = {
   d: "/dashboard",
+  b: "/bandeja",
   t: "/tickets",
   i: "/inventory",
   m: "/mapa",

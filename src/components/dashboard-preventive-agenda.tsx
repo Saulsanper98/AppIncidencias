@@ -147,7 +147,7 @@ export function DashboardPreventiveAgenda() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => router.push(`/tickets?busId=${encodeURIComponent(task.busId)}`)}
+                  onClick={() => router.push(`/bandeja?busId=${encodeURIComponent(task.busId)}`)}
                   className="mt-2 flex items-center gap-1 text-xs text-[var(--color-accent)] transition-colors hover:text-[var(--color-accent-hover)]"
                 >
                   Ver tarea <ArrowRight size={11} />

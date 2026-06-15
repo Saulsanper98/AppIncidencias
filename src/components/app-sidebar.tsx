@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ChartNoAxesCombined,
   ClipboardList,
+  Inbox,
   MapPinned,
   Megaphone,
   Menu,
@@ -70,6 +71,14 @@ type MenuSection = {
 // "Mi cuenta", lo que lo escondía. La pestaña interna se mantiene para
 // continuidad, pero el ítem directo le da al usuario un atajo de 1 click.
 //
+// Junio 2026: "Bandeja" promovida a su propia entrada del sidebar — antes
+// vivia como sub-bloque de la pagina /tickets junto al formulario de
+// "Nuevo ticket" y la operativa preventiva. Como es la vista que mas
+// usa el centro de control, tenerla a 1 click reduce roce diario. La
+// pagina /tickets queda como "gestion / mantenimiento" (formulario +
+// preventivo + auditoria) y la bandeja vive en /bandeja con su modulo
+// dedicado (TicketsModule view="bandeja").
+//
 // La barra de pestañas la pinta el componente `SectionTabs` en cada página.
 // "Inventario" se ocultó del menú (mayo 2026, decisión del centro: no se usa
 // de momento). La ruta /inventory sigue accesible por URL si hace falta.
@@ -78,6 +87,9 @@ const menuSections: MenuSection[] = [
     title: "Operación",
     items: [
       { label: "Dashboard", icon: ChartNoAxesCombined, href: "/dashboard" },
+      // Bandeja PRIMERO dentro de Tickets/Gestion: es la vista mas usada
+      // del centro y queremos que sea el target visual mas grande.
+      { label: "Bandeja", icon: Inbox, href: "/bandeja" },
       { label: "Tickets", icon: ClipboardList, href: "/tickets" },
       // "Desvios" tiene su propio badge: cuenta de PENDIENTE + ACTIVO. Se
       // refresca por SSE en `desvio_nuevo` / `desvio_actualizado` y con un
@@ -328,9 +340,18 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
         pathname.startsWith("/dashboards")
       );
     }
-    // "Tickets" engloba la bandeja y el "Pase de turno" (/handover).
+    // "Bandeja" cubre /bandeja Y el detalle de ticket (/tickets/[id])
+    // porque al abrir un ticket conceptualmente sigues dentro de la
+    // bandeja — el usuario tiende a "volver a la bandeja" desde ahi.
+    if (href === "/bandeja") {
+      return pathname.startsWith("/bandeja") || /^\/tickets\/[^/]+$/.test(pathname);
+    }
+    // "Tickets" cubre solo /tickets exacto (gestion + preventivo) y el
+    // "Pase de turno" (/handover) que sigue como pestana interna. El
+    // detalle /tickets/[id] ya lo cubre "Bandeja", asi que aqui hacemos
+    // match estricto para no encender dos items a la vez.
     if (href === "/tickets") {
-      return pathname.startsWith("/tickets") || pathname.startsWith("/handover");
+      return pathname === "/tickets" || pathname.startsWith("/handover");
     }
     // "Preventivo" agrupa el calendario preventivo y el banner de buses
     // anómalos. El antiguo /inventory ya no tiene entrada en el menú.

@@ -420,7 +420,7 @@ export default function ReportesPage() {
                       <span className="flex min-w-0 items-center gap-2.5">
                         <span className={cn("reports-podium-rank", podiumClass(idx))}>{idx + 1}</span>
                         <a
-                          href={`/tickets?busId=${encodeURIComponent(b.busId)}`}
+                          href={`/bandeja?busId=${encodeURIComponent(b.busId)}`}
                           className="truncate font-mono text-[13px] font-medium text-[var(--color-text-1)] hover:text-[var(--color-accent)] hover:underline"
                           title={[b.operator, b.municipio].filter(Boolean).join(" · ")}
                         >

@@ -809,7 +809,7 @@ export default function TicketDetailPage() {
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <AlertCircle size={40} className="mb-3 text-[var(--color-error)]" />
         <p className="text-subheading text-[var(--color-text-2)]">{error}</p>
-        <Link href="/tickets" className="mt-4 text-sm text-[var(--color-accent)] hover:underline">
+        <Link href="/bandeja" className="mt-4 text-sm text-[var(--color-accent)] hover:underline">
           ← Volver a la bandeja
         </Link>
       </div>
@@ -836,7 +836,7 @@ export default function TicketDetailPage() {
     <div className="ticket-detail-print-root space-y-4 pb-28 [padding-bottom:max(7rem,env(safe-area-inset-bottom))] lg:pb-0 lg:[padding-bottom:unset]">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Link
-          href="/tickets"
+          href="/bandeja"
           className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)]"
         >
           <ArrowLeft size={14} />
@@ -880,7 +880,7 @@ export default function TicketDetailPage() {
         onClose={() => setDeleteOpen(false)}
         onDeleted={() => {
           setDeleteOpen(false);
-          router.replace("/tickets");
+          router.replace("/bandeja");
         }}
       />
 
@@ -2050,7 +2050,7 @@ export default function TicketDetailPage() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Link
-                      href="/tickets"
+                      href="/bandeja"
                       className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-light)]"
                     >
                       Volver a la bandeja

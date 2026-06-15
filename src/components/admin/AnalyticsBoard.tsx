@@ -197,6 +197,7 @@ const SHIFT_META: Record<
 };
 
 const SECTION_META: Record<string, { Icon: typeof Sun; tone: string }> = {
+  "/bandeja": { Icon: Layers, tone: "text-sky-300" },
   "/tickets": { Icon: Layers, tone: "text-sky-300" },
   "/dashboard": { Icon: BarChart3, tone: "text-violet-300" },
   "/admin": { Icon: Users, tone: "text-amber-300" },
