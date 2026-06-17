@@ -408,7 +408,9 @@ function Item({
         onClick={onClick}
         className={cn(
           "group flex w-full items-center gap-3 px-4 py-2 text-left transition-colors",
-          active ? "bg-[var(--color-surface-2)]" : "hover:bg-[var(--color-surface-2)]/70",
+          active
+            ? "bg-[var(--color-accent-light)]/55 ring-1 ring-inset ring-[var(--color-accent)]/25"
+            : "hover:bg-[var(--color-surface-2)]/70",
         )}
       >
         {children}

@@ -62,22 +62,22 @@ const ICON_MAP = {
 
 const COLOR_MAP: Record<ToastTone, { border: string; bar: string; iconColor: string }> = {
   success: {
-    border: "border-[rgba(16,185,129,0.30)]",
+    border: "border-[var(--toast-border-success)]",
     bar: "bg-[var(--color-success)]",
     iconColor: "text-[var(--color-success)]",
   },
   error: {
-    border: "border-[rgba(239,68,68,0.30)]",
+    border: "border-[var(--toast-border-error)]",
     bar: "bg-[var(--color-error)]",
     iconColor: "text-[var(--color-error)]",
   },
   warning: {
-    border: "border-[rgba(245,158,11,0.30)]",
+    border: "border-[var(--toast-border-warning)]",
     bar: "bg-[var(--color-warning)]",
     iconColor: "text-[var(--color-warning)]",
   },
   info: {
-    border: "border-[rgba(59,130,246,0.30)]",
+    border: "border-[var(--toast-border-info)]",
     bar: "bg-[var(--color-accent)]",
     iconColor: "text-[var(--color-accent)]",
   },
@@ -104,7 +104,11 @@ export function ToastHost() {
     <div
       role="region"
       aria-label="Notificaciones"
-      className="pointer-events-none fixed bottom-4 right-4 z-[200] flex flex-col gap-2"
+      className="pointer-events-none fixed z-[200] flex flex-col gap-2"
+      style={{
+        bottom: "max(1rem, env(safe-area-inset-bottom, 0px))",
+        right: "max(1rem, env(safe-area-inset-right, 0px))",
+      }}
     >
       {items.map((item) => {
         const Icon = ICON_MAP[item.tone];

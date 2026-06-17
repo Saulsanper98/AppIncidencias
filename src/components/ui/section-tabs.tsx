@@ -94,7 +94,7 @@ export function SectionTabs({ preset, className, size = "md" }: Props) {
   return (
     <nav
       className={cn(
-        "relative -mx-1 mb-4 flex items-center gap-1 overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1",
+        "section-tabs-scroll-fade relative -mx-1 mb-4 flex items-center gap-1 overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1",
         className,
       )}
       aria-label="Sub-secciones"
@@ -112,7 +112,7 @@ export function SectionTabs({ preset, className, size = "md" }: Props) {
               "group inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-all duration-150",
               size === "sm" && "px-2.5 py-1 text-[13px]",
               isActive
-                ? "bg-[var(--color-accent-light)] font-semibold text-[var(--color-accent)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_30%,transparent)]"
+                ? "segmented-pill--active font-semibold"
                 : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
             )}
             aria-current={isActive ? "page" : undefined}

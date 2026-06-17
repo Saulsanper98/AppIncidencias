@@ -187,6 +187,42 @@ export default function PrivateLayout({
     if (pathname.startsWith("/mapa")) {
       return [root, { label: "Mapa", href: "/mapa" }];
     }
+    if (pathname.startsWith("/reportes")) {
+      return [root, { label: "Dashboard", href: "/dashboard" }, { label: "Reportes" }];
+    }
+    if (pathname.startsWith("/desvios/nuevo")) {
+      return [root, { label: "Desvíos", href: "/desvios" }, { label: "Nuevo" }];
+    }
+    if (pathname.startsWith("/desvios/")) {
+      return [root, { label: "Desvíos", href: "/desvios" }, { label: "Detalle" }];
+    }
+    if (pathname.startsWith("/desvios")) {
+      return [root, { label: "Desvíos", href: "/desvios" }];
+    }
+    if (pathname.startsWith("/preventivo")) {
+      return [root, { label: "Preventivo", href: "/preventivo" }];
+    }
+    if (pathname.startsWith("/handover")) {
+      return [root, { label: "Tickets", href: "/tickets" }, { label: "Pase de turno" }];
+    }
+    if (pathname.startsWith("/novedades")) {
+      return [root, { label: "Novedades", href: "/novedades" }];
+    }
+    if (pathname.startsWith("/sugerencias")) {
+      return [root, { label: "Sugerencias", href: "/sugerencias" }];
+    }
+    if (pathname.startsWith("/kb")) {
+      return [root, { label: "Base de conocimiento", href: "/kb" }];
+    }
+    if (pathname.startsWith("/account")) {
+      return [root, { label: "Mi cuenta", href: "/account" }];
+    }
+    if (pathname.startsWith("/lectura")) {
+      return [root, { label: "Lectura de incidencias", href: "/lectura" }];
+    }
+    if (pathname.startsWith("/admin/analytics")) {
+      return [root, { label: "Administración", href: "/admin" }, { label: "Analítica" }];
+    }
     return [root];
   }, [pathname, ticketCrumbTitle]);
 
@@ -289,6 +325,16 @@ export default function PrivateLayout({
             })}
           </nav>
           <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Busqueda movil: icono compacto (desktop mantiene campo amplio). */}
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("ccmgc-open-quick-search"))}
+              title="Búsqueda rápida (Ctrl+K)"
+              aria-label="Abrir búsqueda rápida"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/55 text-[var(--color-text-2)] transition-colors hover:border-[var(--color-accent)]/45 hover:text-[var(--color-accent)] md:hidden"
+            >
+              <Search size={16} strokeWidth={1.6} aria-hidden />
+            </button>
             {/* Búsqueda: campo amplio con icono y atajo. Se parece a un input
                 real para que el usuario lo identifique como "buscador del
                 centro de control" en lugar de un botón sin contexto. */}

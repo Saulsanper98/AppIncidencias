@@ -609,7 +609,7 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
                                   // lejos en la sala.
                                   active
                                     ? "bg-[var(--color-accent)] text-white"
-                                    : "bg-[var(--color-error)] text-white",
+                                    : "bg-[var(--color-surface-2)] text-[var(--color-error)] ring-1 ring-[var(--color-error)]/30",
                                 )}
                               >
                                 {badgeCount > 99 ? "99+" : badgeCount}

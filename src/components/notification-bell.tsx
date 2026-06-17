@@ -138,7 +138,7 @@ export function NotificationBell() {
               onClick={() => void clearAll()}
               disabled={clearing || (items.length === 0 && count === 0)}
               title="Marcar como leídas todas las notificaciones actuales"
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[var(--color-border)] bg-transparent px-2 py-1 text-[10.5px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-accent)]/35 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="desvios-action-chip !h-8 shrink-0 px-2 text-[10.5px] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Check size={11} aria-hidden />
               {clearing ? "Limpiando…" : "Limpiar"}
