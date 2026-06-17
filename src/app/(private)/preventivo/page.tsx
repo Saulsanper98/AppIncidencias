@@ -337,29 +337,26 @@ export default function PreventivoPage() {
     <div className="space-y-4">
       <AnomalousBusesBanner />
       {/* HERO del mes */}
-      <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
+      <section className="tickets-hero-glow relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
         />
-        {/* Movil: titulo + nav-mes apilados; tablet+: horizontal. */}
         <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
           <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/25">
               <CalendarDays size={20} className="text-[var(--color-accent)]" aria-hidden />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[var(--color-text-3)]">
-                <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold">
-                  CCMGC
-                </span>
+              <p className="ccmgc-eyebrow">
+                <span className="ccmgc-eyebrow-dot" aria-hidden />
                 Mantenimiento programado
-              </div>
-              <h1 className="mt-0.5 flex items-center gap-2 text-[22px] font-semibold tracking-tight text-[var(--color-text-1)]">
+              </p>
+              <h1 className="dashboard-hero-title mt-1 flex items-center gap-2">
                 Calendario preventivo
                 <FeedbackTargetButton id="preventivo/calendario" label="Calendario preventivo" />
               </h1>
-              <p className="text-[12.5px] text-[var(--color-text-3)]">
+              <p className="mt-1 text-[12.5px] text-[var(--color-text-3)]">
                 Planifica las revisiones recurrentes y rebalancea cargas entre técnicos.
               </p>
             </div>
@@ -479,7 +476,7 @@ export default function PreventivoPage() {
                 setAssetFilter("all");
                 setStatusFilter("all");
               }}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-0.5 text-[10.5px] text-[var(--color-text-3)] transition-colors hover:text-[var(--color-error)]"
+              className="desvios-action-chip !rounded-full !px-2 !py-0.5 !text-[10.5px]"
               title="Quitar filtros"
             >
               <X size={10} aria-hidden /> Limpiar
@@ -937,12 +934,12 @@ export default function PreventivoPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="prev-task-title"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+            className="ccmgc-modal-overlay z-50"
             onClick={(e) => {
               if (e.target === e.currentTarget) setActiveTask(null);
             }}
           >
-            <div className="ccmgc-daily-pop-in w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
+            <div className="ccmgc-modal-panel ccmgc-daily-pop-in max-w-lg overflow-hidden shadow-2xl">
               {/* Cabecera con tono del activo */}
               <div
                 className={cn(
