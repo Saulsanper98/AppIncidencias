@@ -72,6 +72,43 @@
   --space-7: 32px;
   --space-8: 48px;
 
+  /* Alias usado en KB y formularios legacy (antes referenciado sin definir). */
+  --color-surface-1: var(--color-surface);
+
+  /* Sombra suave para skip-link, popovers ligeros. */
+  --shadow-soft: 0 4px 16px -6px rgba(0, 0, 0, 0.35),
+                 0 2px 6px -2px rgba(0, 0, 0, 0.2);
+
+  /* Info alineado con acento (no hay azul secundario aparte). */
+  --color-info: var(--color-accent);
+  --color-info-light: var(--color-accent-light);
+
+  /* Heroes, modales y charts — escala unificada (ver bloque DESIGN SYSTEM). */
+  --hero-radius: var(--radius-xl);
+  --modal-overlay: rgba(0, 0, 0, 0.55);
+  --modal-radius: var(--radius-xl);
+  --chart-series-1: var(--color-accent);
+  --chart-series-2: var(--color-success);
+  --chart-grid: rgba(148, 163, 184, 0.12);
+
+  /* Badges semanticos (consumidos por .ccmgc-badge). */
+  --badge-success-bg: var(--color-success-light);
+  --badge-success-fg: var(--color-success);
+  --badge-warning-bg: var(--color-warning-light);
+  --badge-warning-fg: var(--color-warning);
+  --badge-error-bg: var(--color-error-light);
+  --badge-error-fg: var(--color-error);
+  --badge-info-bg: var(--color-accent-light);
+  --badge-info-fg: var(--color-accent);
+  --badge-neutral-bg: var(--color-surface-2);
+  --badge-neutral-fg: var(--color-text-2);
+
+  /* Toast borders semanticos. */
+  --toast-border-success: color-mix(in oklab, var(--color-success) 35%, transparent);
+  --toast-border-warning: color-mix(in oklab, var(--color-warning) 35%, transparent);
+  --toast-border-error: color-mix(in oklab, var(--color-error) 35%, transparent);
+  --toast-border-info: color-mix(in oklab, var(--color-accent) 35%, transparent);
+
   /* ── Tokens semánticos de texto ──
    * Mapas claros a los grises slate ya definidos para no inventar nuevos.
    * "strong" se reserva para títulos / cifras hero.
@@ -599,6 +636,16 @@ body {
   :root.light .login-hero-title {
     color: var(--color-text-1);
   }
+
+  /* Espaciado canonico (sustituye gap ad-hoc donde se adopte). */
+  .gap-token-1 { gap: var(--space-1); }
+  .gap-token-2 { gap: var(--space-2); }
+  .gap-token-3 { gap: var(--space-3); }
+  .gap-token-4 { gap: var(--space-4); }
+  .gap-token-5 { gap: var(--space-5); }
+  .gap-token-6 { gap: var(--space-6); }
+  .gap-token-7 { gap: var(--space-7); }
+  .gap-token-8 { gap: var(--space-8); }
 }
 
 .login-card-shell {
@@ -2063,6 +2110,17 @@ body {
   .tickets-kpi-pill--pulse { animation: none; }
 }
 
+/* Variante compacta para filtros en barra de herramientas (bandeja). */
+.tickets-kpi-pill--compact {
+  padding: 3px 8px;
+  font-size: 10.5px;
+  gap: 4px;
+}
+.tickets-kpi-pill--compact .tickets-kpi-pill-dot {
+  width: 6px;
+  height: 6px;
+}
+
 /* Hero header del modulo: glow exterior muy sutil */
 .tickets-hero-glow {
   position: relative;
@@ -2931,7 +2989,26 @@ body {
  * (alias semantico de .login-primary-cta-premium para que la pagina no
  * dependa del login). */
 .account-primary-cta {
-  /* Hereda el gradient luminoso ya definido. */
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-accent) 78%, white 22%) 0%,
+    color-mix(in oklab, var(--color-accent) 92%, white 8%) 45%,
+    var(--color-accent) 100%
+  ) !important;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 60%, white 16%) !important;
+  color: white !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.30) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.16) inset,
+    0 14px 34px -10px color-mix(in oklab, var(--color-accent) 80%, transparent),
+    0 4px 12px -2px rgba(0, 0, 0, 0.30) !important;
+  position: relative;
+  overflow: hidden;
+}
+.account-primary-cta:disabled {
+  background: color-mix(in oklab, var(--color-accent) 38%, var(--color-surface-2)) !important;
+  box-shadow: none !important;
+  opacity: 0.72;
 }
 
 /* ──────────────────────────────────────────────────────────────────────
@@ -3037,4 +3114,179 @@ body {
 .desvios-action-chip--accent:hover {
   background: color-mix(in oklab, var(--color-accent-light) 80%, var(--color-accent) 15%);
   border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-border-hover));
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * DESIGN SYSTEM FOUNDATION (Fase 0 — premium unificado)
+ *
+ * Escala tipografica heroes:
+ *   - pretitle / eyebrow: 10px uppercase ( .ccmgc-eyebrow )
+ *   - titulo operativo:   22–24px ( .dashboard-hero-title )
+ *   - titulo dashboard:   26–28px ( excepcion en /dashboard )
+ *
+ * Clases nuevas: badge, empty, modal, segmented pill, eyebrow alias.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Eyebrow unificado (alias de dashboard-pretitle). */
+.ccmgc-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+.ccmgc-eyebrow-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--dot-color, var(--color-accent));
+  box-shadow: 0 0 7px color-mix(in oklab, var(--dot-color, var(--color-accent)) 60%, transparent);
+}
+.ccmgc-eyebrow-dot--pulse {
+  animation: dashboard-dot-pulse 2.1s ease-out infinite;
+}
+
+/* Tab / pill activo segmentado (alias reports + mapa movil). */
+.segmented-pill--active,
+.reports-period-pill--active {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-accent) 92%, white 4%) 0%,
+    var(--color-accent) 100%
+  ) !important;
+  color: white !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-accent) 80%, transparent) inset,
+    0 4px 14px -4px color-mix(in oklab, var(--color-accent) 70%, transparent);
+}
+
+/* Badge semantico base. */
+.ccmgc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  border: 1px solid transparent;
+  background: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
+}
+.ccmgc-badge--success {
+  background: var(--badge-success-bg);
+  color: var(--badge-success-fg);
+  border-color: color-mix(in oklab, var(--badge-success-fg) 25%, transparent);
+}
+.ccmgc-badge--warning {
+  background: var(--badge-warning-bg);
+  color: var(--badge-warning-fg);
+  border-color: color-mix(in oklab, var(--badge-warning-fg) 25%, transparent);
+}
+.ccmgc-badge--error {
+  background: var(--badge-error-bg);
+  color: var(--badge-error-fg);
+  border-color: color-mix(in oklab, var(--badge-error-fg) 25%, transparent);
+}
+.ccmgc-badge--info {
+  background: var(--badge-info-bg);
+  color: var(--badge-info-fg);
+  border-color: color-mix(in oklab, var(--badge-info-fg) 25%, transparent);
+}
+
+/* Empty state canonico. */
+.ccmgc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--color-border);
+  background: color-mix(in oklab, var(--color-surface-2) 40%, transparent);
+}
+.ccmgc-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-3);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+.ccmgc-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-2);
+}
+.ccmgc-empty-hint {
+  margin-top: 4px;
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-3);
+}
+
+/* Modal shell compartido. */
+.ccmgc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: var(--modal-overlay);
+  backdrop-filter: blur(4px);
+}
+.ccmgc-modal-panel {
+  width: 100%;
+  max-width: 28rem;
+  border-radius: var(--modal-radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+.ccmgc-modal-header {
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.ccmgc-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Densidad compacta: heroes operativos. */
+html[data-density="compact"] .tickets-hero-glow,
+html[data-density="compact"] .desvios-hero {
+  padding: 0.875rem 1rem !important;
+}
+html[data-density="compact"] .dashboard-hero-title {
+  font-size: 1.25rem !important;
+}
+html[data-density="compact"] .tickets-kpi-pill {
+  padding: 2px 8px;
+  font-size: 10px;
+}
+
+/* Section tabs con scroll fade (mask en nav con clase extra). */
+.section-tabs-scroll-fade {
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    black 12px,
+    black calc(100% - 12px),
+    transparent 100%
+  );
 }
