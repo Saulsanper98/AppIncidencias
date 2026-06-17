@@ -150,6 +150,8 @@ export type TicketsBandejaProps = {
   filteredTickets: TicketView[];
   role: UserRole;
   bandejaCompacta: boolean;
+  /** Oculta el encabezado interno cuando el hero de pagina ya dice "Bandeja". */
+  hideCardHeader?: boolean;
   actionMenuTicketId: string | null;
   onToggleActionMenu: (ticketId: string) => void;
   onOpenStatusChange: (ticketId: string, nextStatus: TicketStatus) => void;
@@ -163,6 +165,7 @@ export function TicketsBandeja({
   filteredTickets,
   role,
   bandejaCompacta,
+  hideCardHeader = false,
   actionMenuTicketId,
   onToggleActionMenu,
   onOpenStatusChange,
@@ -195,6 +198,7 @@ export function TicketsBandeja({
     // padre (motion.article p-3) y dejar mas ancho real a las cards de
     // tickets de dentro.
     <div className="ccmgc-card mb-4 p-3 sm:p-4">
+      {!hideCardHeader ? (
       <div className="mb-3 flex flex-wrap items-center gap-3 border-b border-[var(--color-border)] pb-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
           <Inbox size={16} strokeWidth={1.7} aria-hidden />
@@ -214,6 +218,7 @@ export function TicketsBandeja({
           </p>
         </div>
       </div>
+      ) : null}
 
       {partCodeFromQuery ? (
         <div

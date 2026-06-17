@@ -176,6 +176,11 @@ export function useTickets() {
         if (inField) return;
         if (e.ctrlKey || e.metaKey || e.altKey) return;
         e.preventDefault();
+        // En /bandeja no hay formulario embebido: N lleva a Tickets.
+        if (pathname === "/bandeja") {
+          router.push("/tickets");
+          return;
+        }
         const root = document.getElementById("tickets-new-form-anchor");
         root?.scrollIntoView({ behavior: "smooth", block: "start" });
         window.setTimeout(() => {
@@ -195,7 +200,7 @@ export function useTickets() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [shortcutsOpen, actionMenuTicketId]);
+  }, [shortcutsOpen, actionMenuTicketId, pathname, router]);
 
   useEffect(() => {
     if (!actionMenuTicketId) setActionMenuViewport(null);

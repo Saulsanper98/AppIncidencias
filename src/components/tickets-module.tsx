@@ -20,8 +20,10 @@ import {
   UserCheck,
   X,
   Zap,
+  ArrowRight,
 } from "lucide-react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
@@ -38,57 +40,19 @@ import type {
   MaintenanceAlertView,
 } from "@/components/tickets/tickets-module-types";
 import {
-  TICKETS_EMPTY_SHELL,
   TICKETS_UI_HINT_KEY,
   preventiveTaskTone,
   statusMap,
 } from "@/components/tickets/tickets-module-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { KpiPill } from "@/components/ui/kpi-pill";
 import { Select } from "@/components/ui/input";
 import { useTickets } from "@/hooks/use-tickets";
 import type { TicketPriority, TicketStatus } from "@/lib/domain";
 import { canUseFilters } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
-
-type EmptyIcon = typeof PackageSearch;
-
-function EmptyStateBlock({
-  icon: Icon,
-  title,
-  hint,
-  actionLabel,
-  onAction,
-  iconSize = 26,
-  compact = false,
-}: {
-  icon: EmptyIcon;
-  title: string;
-  hint: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  iconSize?: number;
-  compact?: boolean;
-}) {
-  return (
-    <div className={cn(TICKETS_EMPTY_SHELL, compact && "!py-6")}>
-      <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-surface)] text-[var(--color-text-3)] ring-1 ring-[var(--color-border)]">
-        <Icon size={iconSize} strokeWidth={1.5} aria-hidden />
-      </span>
-      <p className="text-subheading text-[var(--color-text-2)]">{title}</p>
-      <p className="mx-auto mt-1 max-w-[280px] text-caption text-[var(--color-text-3)]">{hint}</p>
-      {actionLabel && onAction ? (
-        <button
-          type="button"
-          onClick={onAction}
-          className="mt-4 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/40 px-3 py-1.5 text-xs font-medium text-[var(--color-accent)] transition-all duration-150 hover:bg-[var(--color-accent-light)]"
-        >
-          {actionLabel}
-        </button>
-      ) : null}
-    </div>
-  );
-}
 
 /** Tiempo relativo en español, formato uniforme:
  *   - <60s: "ahora"
@@ -140,11 +104,10 @@ function AuditPanel({ events }: { events: AuditEventView[] }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   if (events.length === 0) {
     return (
-      <EmptyStateBlock
+      <EmptyState
         icon={ClipboardList}
         title="Sin eventos registrados"
         hint="La auditoría del centro aparecerá aquí cuando haya actividad."
-        iconSize={36}
       />
     );
   }
@@ -228,13 +191,12 @@ function MaintenanceAlertsPanel({
 }) {
   if (alerts.length === 0) {
     return (
-      <div className={cn(TICKETS_EMPTY_SHELL, "py-8")}>
-        <CheckCircle2 size={36} className="mb-3 text-[var(--color-success)]" />
-        <p className="text-subheading text-[var(--color-text-2)]">Todos los activos en buen estado</p>
-        <p className="mx-auto mt-1 max-w-[260px] text-caption text-[var(--color-text-3)]">
-          Sin tendencias de fallo en {windowDays} días en el conjunto monitorizado.
-        </p>
-      </div>
+      <EmptyState
+        icon={CheckCircle2}
+        title="Todos los activos en buen estado"
+        hint={`Sin tendencias de fallo en ${windowDays} días en el conjunto monitorizado.`}
+        compact
+      />
     );
   }
   return (
@@ -293,6 +255,7 @@ function MaintenanceAlertsPanel({
 }
 
 function TicketsHeroHeader({
+  view,
   total,
   abiertos,
   enProceso,
@@ -300,6 +263,7 @@ function TicketsHeroHeader({
   resueltosHoy,
   slaVencidos,
 }: {
+  view: TicketsModuleView;
   total: number;
   abiertos: number;
   enProceso: number;
@@ -307,6 +271,30 @@ function TicketsHeroHeader({
   resueltosHoy: number;
   slaVencidos: number;
 }) {
+  const copy =
+    view === "manage"
+      ? {
+          title: "Gestión y mantenimiento",
+          subtitle:
+            "Alta de incidencias, alertas preventivas y seguimiento operativo del centro.",
+          showKpis: false,
+          bandejaCta: true,
+        }
+      : view === "bandeja"
+        ? {
+            title: "Bandeja de tickets",
+            subtitle: "Sigue, asigna y cierra incidencias del centro de control.",
+            showKpis: true,
+            bandejaCta: false,
+          }
+        : {
+            title: "Bandeja de tickets",
+            subtitle:
+              "Incidencias del Centro de Control. Crea, asigna, sigue y cierra tickets con trazabilidad completa.",
+            showKpis: true,
+            bandejaCta: false,
+          };
+
   return (
     <header className="tickets-hero-glow relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
       <div
@@ -378,13 +366,22 @@ function TicketsHeroHeader({
               CCMGC · Operación
             </div>
             <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
-              Bandeja de tickets
+              {copy.title}
             </h1>
             <p className="mt-1 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
-              Incidencias del Centro de Control. Crea, asigna, sigue y cierra tickets con trazabilidad completa.
+              {copy.subtitle}
             </p>
           </div>
         </div>
+        {copy.bandejaCta ? (
+          <Link
+            href="/bandeja"
+            className="login-primary-cta-premium inline-flex min-h-[40px] shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-semibold text-white"
+          >
+            Abrir bandeja completa
+            <ArrowRight size={15} strokeWidth={2} aria-hidden />
+          </Link>
+        ) : copy.showKpis ? (
         <div className="flex flex-wrap items-center gap-1.5">
           <KpiPill label="Total" value={total} tone="neutral" />
           <KpiPill label="Abiertos" value={abiertos} tone="info" />
@@ -399,49 +396,9 @@ function TicketsHeroHeader({
             <KpiPill label="SLA vencido" value={slaVencidos} tone="error" pulse icon={<Timer size={11} strokeWidth={1.8} aria-hidden />} />
           ) : null}
         </div>
+        ) : null}
       </div>
     </header>
-  );
-}
-
-type KpiTone = "neutral" | "info" | "accent" | "warning" | "success" | "error";
-
-function KpiPill({
-  label,
-  value,
-  tone,
-  icon,
-  pulse = false,
-}: {
-  label: string;
-  value: number;
-  tone: KpiTone;
-  icon?: React.ReactNode;
-  /** Pulse para urgencia (p.ej. SLA vencido > 0). */
-  pulse?: boolean;
-}) {
-  // Mapa de tone -> variable CSS de color. El tone "neutral"/"info" no
-  // tinta (queda gris); el resto pinta dot, borde y glow.
-  const TONE_VAR: Record<KpiTone, string | undefined> = {
-    neutral: undefined,
-    info: undefined,
-    accent: "var(--color-accent)",
-    warning: "var(--color-warning)",
-    success: "var(--color-success)",
-    error: "var(--color-error)",
-  };
-  const toneVar = TONE_VAR[tone];
-  return (
-    <span
-      className={cn("tickets-kpi-pill", pulse && "tickets-kpi-pill--pulse")}
-      style={toneVar ? { ["--pill-tone" as string]: toneVar } : undefined}
-    >
-      {icon ?? (
-        <span className="tickets-kpi-pill-dot" aria-hidden />
-      )}
-      <span className="tickets-kpi-pill-value">{value}</span>
-      <span className="tickets-kpi-pill-label">{label}</span>
-    </span>
   );
 }
 
@@ -523,6 +480,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
   return (
     <div className="space-y-4">
       <TicketsHeroHeader
+        view={view}
         total={heroKpis.total}
         abiertos={heroKpis.abiertos}
         enProceso={heroKpis.enProceso}
@@ -564,10 +522,12 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
           // padding del <main> y el de la card interna `ccmgc-card p-4`
           // sumaban 36px laterales y dejaba las cards de tickets pegadas).
           className={cn(
-            "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-5",
-            // Cuando convivimos con el formulario, ocupamos 7 columnas
-            // del grid de 12. En vista solo-bandeja no necesitamos
-            // restringir el ancho — la card ya esta sola en su section.
+            // En /bandeja evitamos triple marco (article + ccmgc-card): el
+            // contenedor exterior queda transparente y la card vive solo
+            // dentro de TicketsBandeja.
+            view === "bandeja"
+              ? "bg-transparent p-0 shadow-none"
+              : "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-5",
             showForm && "xl:col-span-7",
           )}
           aria-describedby="tickets-inbox-hint"
@@ -639,7 +599,16 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 text-[11.5px] text-[var(--color-text-3)]">
               <p className="min-w-0 flex-1 leading-snug">
                 <span className="kbd">/</span> filtro,{" "}
-                <span className="kbd">N</span> nuevo,{" "}
+                {view === "bandeja" ? (
+                  <>
+                    <span className="kbd">N</span> ir a Tickets (nuevo),{" "}
+                    <span className="kbd">Q</span> ticket rápido,{" "}
+                  </>
+                ) : (
+                  <>
+                    <span className="kbd">N</span> nuevo,{" "}
+                  </>
+                )}
                 <span className="kbd">?</span> ayuda — los filtros viven en la URL para compartir la vista.
               </p>
               <button
@@ -698,27 +667,24 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
               {/* Chips de conteo por prioridad con dot del color y label
                *  explicito (no criptico "A:1 / M:2 / B:1"). */}
               <div className="flex flex-wrap items-center gap-1" aria-label="Conteo por prioridad">
-                <span
-                  className="inline-flex items-center gap-1 rounded-md bg-[var(--color-error-light)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-error)] ring-1 ring-[var(--color-error)]/25"
-                  title={`${t.ticketCountByPriority.alta} de prioridad alta`}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-error)]" aria-hidden />
-                  Alta <span className="num-tabular">{t.ticketCountByPriority.alta}</span>
-                </span>
-                <span
-                  className="inline-flex items-center gap-1 rounded-md bg-[var(--color-warning-light)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-warning)] ring-1 ring-[var(--color-warning)]/25"
-                  title={`${t.ticketCountByPriority.media} de prioridad media`}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-warning)]" aria-hidden />
-                  Media <span className="num-tabular">{t.ticketCountByPriority.media}</span>
-                </span>
-                <span
-                  className="inline-flex items-center gap-1 rounded-md bg-[var(--color-success-light)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-success)] ring-1 ring-[var(--color-success)]/25"
-                  title={`${t.ticketCountByPriority.baja} de prioridad baja`}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-success)]" aria-hidden />
-                  Baja <span className="num-tabular">{t.ticketCountByPriority.baja}</span>
-                </span>
+                <KpiPill
+                  label="Alta"
+                  value={t.ticketCountByPriority.alta}
+                  tone="error"
+                  compact
+                />
+                <KpiPill
+                  label="Media"
+                  value={t.ticketCountByPriority.media}
+                  tone="warning"
+                  compact
+                />
+                <KpiPill
+                  label="Baja"
+                  value={t.ticketCountByPriority.baja}
+                  tone="success"
+                  compact
+                />
               </div>
 
               <div className="hidden h-5 w-px shrink-0 bg-[var(--color-border)] sm:block" />
@@ -929,7 +895,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                 onClick={t.handleExportTicketsCsv}
                 disabled={t.tickets.length === 0}
                 title="Exportar la bandeja visible a CSV (UTF-8, separador punto y coma)"
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-2)] transition-all duration-200 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)] disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0"
+                className="desvios-action-chip min-h-10 md:min-h-0 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Download size={12} aria-hidden />
                 CSV
@@ -953,10 +919,8 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                 aria-pressed={t.bandejaCompacta}
                 title={t.bandejaCompacta ? "Vista detallada" : "Vista compacta (menos padding en tabla)"}
                 className={cn(
-                  "inline-flex min-h-10 items-center rounded-lg border px-3 py-1.5 text-xs transition-all duration-200 md:min-h-0",
-                  t.bandejaCompacta
-                    ? "border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] text-[var(--color-accent)]"
-                    : "border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-text-2)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)]",
+                  "desvios-action-chip min-h-10 md:min-h-0",
+                  t.bandejaCompacta && "desvios-action-chip--accent",
                 )}
               >
                 Compacta
@@ -964,7 +928,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
               <button
                 type="button"
                 onClick={t.handleClearFilters}
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1.5 text-xs text-[var(--color-text-2)] transition-all duration-200 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)] md:min-h-0"
+                className="desvios-action-chip min-h-10 md:min-h-0"
               >
                 <X size={12} aria-hidden />
                 Limpiar
@@ -977,6 +941,15 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
               compacto original. mb mas amplio (4) en movil para separarlo
               visualmente de la card de bandeja que viene debajo. */}
           <div className="mb-4 flex flex-wrap items-center justify-end gap-2 sm:mb-3">
+            {view === "bandeja" ? (
+              <Link
+                href="/tickets"
+                className="login-primary-cta-premium inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-[11.5px] font-semibold text-white sm:min-h-0 sm:text-[12px]"
+              >
+                Nuevo ticket
+                <ArrowRight size={13} strokeWidth={2} aria-hidden />
+              </Link>
+            ) : null}
             {(t.role === "tecnico_campo" || t.role === "gestor_centro_control") ? (
               <button
                 type="button"
@@ -992,7 +965,11 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
             <button
               type="button"
               onClick={() => t.setShortcutsOpen((v) => !v)}
-              title={"Atajos: / filtra estado \u00B7 N nuevo \u00B7 Q r\u00E1pido \u00B7 ? ayuda \u00B7 Esc cerrar"}
+              title={
+                view === "bandeja"
+                  ? "Atajos: / filtra estado · N ir a Tickets · Q rápido · ? ayuda · Esc cerrar"
+                  : "Atajos: / filtra estado · N nuevo · Q rápido · ? ayuda · Esc cerrar"
+              }
               className={cn(
                 "inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11.5px] font-medium transition-colors sm:min-h-0 sm:text-[11px]",
                 t.shortcutsOpen
@@ -1030,12 +1007,16 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                 </li>
                 <li>
                   <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-1)]">N</kbd>{" "}
-                  Ir al formulario de nuevo ticket y enfocar el primer campo.
+                  {view === "bandeja"
+                    ? "Ir a Tickets para crear una incidencia nueva."
+                    : "Ir al formulario de nuevo ticket y enfocar el primer campo."}
                 </li>
+                {(t.role === "tecnico_campo" || t.role === "gestor_centro_control") ? (
                 <li>
                   <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--color-text-1)]">Q</kbd>{" "}
                   Abrir el modal de <span className="font-medium">Ticket rápido</span> (plantilla + variables).
                 </li>
+                ) : null}
               </ul>
             </div>
           ) : null}
@@ -1045,6 +1026,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
             filteredTickets={t.filteredTickets}
             role={t.role}
             bandejaCompacta={t.bandejaCompacta}
+            hideCardHeader={view === "bandeja"}
             actionMenuTicketId={t.actionMenuTicketId}
             onToggleActionMenu={(ticketId) =>
               t.setActionMenuTicketId((id) => (id === ticketId ? null : ticketId))
@@ -1290,11 +1272,11 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                   </div>
                 ))}
                 {t.preventiveTasks.length === 0 && (
-                  <EmptyStateBlock
+                  <EmptyState
                     icon={CalendarCheck}
                     title="Sin tareas preventivas activas"
                     hint="No hay mantenimientos programados."
-                    iconSize={26}
+                    compact
                   />
                 )}
               </div>
