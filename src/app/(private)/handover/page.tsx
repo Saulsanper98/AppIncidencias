@@ -26,6 +26,7 @@ import { createPortal } from "react-dom";
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { ShiftHeroCard } from "@/components/handover/ShiftHeroCard";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { cn } from "@/lib/utils";
@@ -573,19 +574,26 @@ export default function HandoverPage() {
               ))}
             </div>
           ) : visibleItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/30 py-10 text-center">
-              <CheckCircle2 size={20} className="text-[var(--color-text-3)]" aria-hidden />
-              <p className="text-sm font-medium text-[var(--color-text-2)]">
-                {tab === "unacked"
+            <EmptyState
+              icon={Handshake}
+              title={
+                tab === "unacked"
+                  ? "Sin pases pendientes"
+                  : tab === "mine"
+                    ? "Sin pases entregados"
+                    : "Sin pases registrados"
+              }
+              hint={
+                tab === "unacked"
                   ? "No hay pases pendientes de firmar."
                   : tab === "mine"
                     ? "Aún no has entregado ningún pase."
-                    : "Todavía no hay pases registrados."}
-              </p>
-              <p className="text-[12px] text-[var(--color-text-3)]">
-                {tab === "all" && "Entrega el primero usando el formulario de arriba."}
-              </p>
-            </div>
+                    : tab === "all"
+                      ? "Entrega el primero usando el formulario de arriba."
+                      : "Todavía no hay pases registrados."
+              }
+              compact
+            />
           ) : (
             <ol className="relative space-y-3">
               {visibleItems.map((h) => (

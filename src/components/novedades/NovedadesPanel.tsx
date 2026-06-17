@@ -26,6 +26,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { MarkdownView } from "@/components/kb/MarkdownView";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useSseEvent } from "@/hooks/use-sse-event";
 import type {
   Announcement,
@@ -629,7 +630,7 @@ export function NovedadesPanel({
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all duration-150",
                 tab === value
-                  ? "reports-period-pill--active"
+                  ? "segmented-pill--active"
                   : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
               )}
             >
@@ -652,7 +653,7 @@ export function NovedadesPanel({
                 className={cn(
                   "rounded-md px-2.5 py-1 font-semibold transition-all duration-150",
                   statusFilter === value
-                    ? "reports-period-pill--active"
+                    ? "segmented-pill--active"
                     : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
                 )}
               >
@@ -667,13 +668,20 @@ export function NovedadesPanel({
       {loading && !items ? (
         <div className="h-32 animate-pulse rounded-2xl bg-[var(--color-surface-2)]" />
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-8 text-center">
-          <p className="text-[13px] text-[var(--color-text-3)]">
-            {tab === "avisos"
+        <EmptyState
+          icon={tab === "avisos" ? Megaphone : Sparkles}
+          title={
+            tab === "avisos"
+              ? "Sin avisos operativos"
+              : "Sin novedades publicadas"
+          }
+          hint={
+            tab === "avisos"
               ? "No hay avisos operativos vigentes en este momento. ¡Buenas noticias!"
-              : "Aún no hay entradas de changelog publicadas."}
-          </p>
-        </div>
+              : "Aún no hay entradas de changelog publicadas."
+          }
+          compact
+        />
       ) : (
         <ul className="space-y-3">
           {filtered.map((a) => (
