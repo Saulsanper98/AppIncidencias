@@ -37,6 +37,7 @@ import type { TicketPriority } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
 import { addMinutesIso } from "@/lib/ticketing";
 import { publishTicketEvent } from "@/lib/tickets-events";
+import { tryAutoAssignTicket } from "@/lib/ticket-auto-assign";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -170,12 +171,18 @@ export async function POST(request: Request) {
       detail: `Creado desde correo (${from ?? "remitente desconocido"})`,
     });
 
+    const auto = await tryAutoAssignTicket(created.id);
+    const assignedToUserId = auto.assigned ? auto.userId : null;
+    const assignedToUserName = auto.assigned ? auto.userName : null;
+
     publishTicketEvent("ticket_created", {
       id: created.id,
       busId: created.busId,
       status: created.status,
       priority: created.priority,
       title: created.title,
+      assignedToUserId,
+      assignedToUserName,
       by: from ?? "email-poller",
     });
 

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { AdminUsersManager } from "@/components/admin-users-manager";
+import { Skeleton } from "@/components/ui/skeleton";
 import { prisma } from "@/lib/prisma";
 import { canManageUsers } from "@/lib/rbac";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
@@ -25,7 +26,7 @@ export default async function AdminUsersPage() {
 
   return (
     <Suspense
-      fallback={<div className="h-[28rem] animate-pulse rounded-2xl bg-[var(--color-surface-2)]" aria-busy />}
+      fallback={<Skeleton className="h-[28rem] rounded-2xl" aria-busy />}
     >
       <AdminUsersManager />
     </Suspense>

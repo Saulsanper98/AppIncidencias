@@ -24,7 +24,7 @@ import { NextResponse } from "next/server";
 
 import { resolveRequestActor } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { ANOMALOUS_DEFAULTS } from "@/app/api/anomalous-config/route";
+import { ANOMALOUS_DEFAULTS } from "@/lib/anomalous-config";
 import {
   APP_SETTING_KEYS,
   getAppSettingJson,

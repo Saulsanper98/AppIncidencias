@@ -10,10 +10,8 @@ import {
   Download,
   FilterX,
   KeyRound,
-  Pencil,
   Search,
   Shield,
-  Trash2,
   Upload,
   UserCheck,
   UserMinus,
@@ -32,8 +30,12 @@ import {
   type AdminLocale,
 } from "@/app/(private)/admin/users/admin-users-messages";
 import { AdminRoleMenu } from "@/components/admin-role-menu";
+import { AdminUserRowActions } from "@/components/admin/AdminUserRowActions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Select } from "@/components/ui/input";
 import type { UserRole } from "@/lib/domain";
@@ -204,15 +206,15 @@ function downloadUsersCsv(rows: ManagedUser[], locale: AdminLocale) {
 function AdminUsersSkeleton() {
   return (
     <div className="space-y-4" aria-busy>
-      <div className="h-10 w-64 animate-pulse rounded-lg bg-[var(--color-surface-2)]" />
-      <div className="grid animate-pulse grid-cols-2 gap-3 sm:grid-cols-4">
+      <Skeleton className="h-10 w-64 rounded-lg" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-20 rounded-xl bg-[var(--color-surface-2)]" />
+          <Skeleton key={i} className="h-20 rounded-xl" />
         ))}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:items-start">
-        <div className="h-72 rounded-xl bg-[var(--color-surface-2)]" />
-        <div className="h-96 rounded-xl bg-[var(--color-surface-2)]" />
+        <Skeleton className="h-72 rounded-xl" />
+        <Skeleton className="h-96 rounded-xl" />
       </div>
     </div>
   );
@@ -254,6 +256,7 @@ export function AdminUsersManager() {
   >(null);
 
   // Importación CSV
+  const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importRows, setImportRows] = useState<Array<Record<string, string>>>([]);
   const [importFileName, setImportFileName] = useState<string | null>(null);
@@ -334,6 +337,12 @@ export function AdminUsersManager() {
   }, [qInput]);
 
   useEffect(() => {
+    if (!createOpen) return;
+    const id = requestAnimationFrame(() => nameInputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [createOpen]);
+
+  useEffect(() => {
     if (!booted || !urlReady) return;
     if (urlWriteTimer.current) clearTimeout(urlWriteTimer.current);
     urlWriteTimer.current = setTimeout(() => {
@@ -407,18 +416,6 @@ export function AdminUsersManager() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
-
-  useEffect(() => {
-    if (!confirmDeactivate) return;
-    const id = requestAnimationFrame(() => dialogDeactivateRef.current?.focus());
-    return () => cancelAnimationFrame(id);
-  }, [confirmDeactivate]);
-
-  useEffect(() => {
-    if (!confirmBulk) return;
-    const id = requestAnimationFrame(() => dialogBulkRef.current?.focus());
-    return () => cancelAnimationFrame(id);
-  }, [confirmBulk]);
 
   useEffect(() => {
     setPage(1);
@@ -584,6 +581,7 @@ export function AdminUsersManager() {
       setRole("conductor");
       setInitialPasswordInput("");
       setForceChangeOnCreate(true);
+      setCreateOpen(false);
       await loadUsers();
     } finally {
       setPendingId("__create__", false);
@@ -893,13 +891,18 @@ export function AdminUsersManager() {
 
           {/* KPIs en vivo */}
           {stats ? (
-            <dl className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               <UsersKpi
                 icon={<Users size={11} aria-hidden />}
                 label={t.statsTotal}
                 value={stats.total}
                 tone="neutral"
                 title={t.statsTipTotal}
+                active={filterActive === "all" && filterRole === "all"}
+                onClick={() => {
+                  setFilterActive("all");
+                  setFilterRole("all");
+                }}
               />
               <UsersKpi
                 icon={<UserCheck size={11} aria-hidden />}
@@ -907,6 +910,8 @@ export function AdminUsersManager() {
                 value={stats.active}
                 tone="success"
                 title={t.statsTipActive}
+                active={filterActive === "active"}
+                onClick={() => setFilterActive(filterActive === "active" ? "all" : "active")}
               />
               <UsersKpi
                 icon={<UserMinus size={11} aria-hidden />}
@@ -914,6 +919,8 @@ export function AdminUsersManager() {
                 value={stats.inactive}
                 tone={stats.inactive > 0 ? "warning" : "neutral"}
                 title={t.statsTipInactive}
+                active={filterActive === "inactive"}
+                onClick={() => setFilterActive(filterActive === "inactive" ? "all" : "inactive")}
               />
               <UsersKpi
                 icon={<Shield size={11} aria-hidden />}
@@ -921,8 +928,12 @@ export function AdminUsersManager() {
                 value={stats.gestorsActive}
                 tone="violet"
                 title={t.statsTipGestors}
+                active={filterRole === "gestor_centro_control"}
+                onClick={() =>
+                  setFilterRole(filterRole === "gestor_centro_control" ? "all" : "gestor_centro_control")
+                }
               />
-            </dl>
+            </div>
           ) : null}
         </div>
 
@@ -960,132 +971,6 @@ export function AdminUsersManager() {
         ) : null}
       </section>
 
-      <div className="rounded-xl border border-[var(--color-border)] bg-[color-mix(in_oklab,var(--color-surface-2)_55%,transparent)] p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between">
-          <div className="relative min-w-0 flex-1 lg:max-w-md">
-            <Search
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]"
-              aria-hidden
-            />
-            <Input
-              ref={searchInputRef}
-              value={qInput}
-              onChange={(e) => setQInput(e.target.value)}
-              placeholder={t.searchPlaceholder}
-              className="pl-9"
-              aria-label={t.searchAria}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 text-caption text-[var(--color-text-3)]">
-              <span>{t.pageSize}</span>
-              <Select
-                aria-label={t.pageSize}
-                className="!min-h-10 w-auto min-w-[4.5rem]"
-                value={String(pageSize)}
-                onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
-              >
-                {PAGE_SIZE_OPTIONS.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="!min-h-10"
-              startIcon={<Download size={14} />}
-              onClick={() => downloadUsersCsv(processed, locale)}
-            >
-              {t.csvExport(processed.length)}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="!min-h-10"
-              startIcon={<Upload size={14} />}
-              onClick={() => { setImportOpen(true); setImportResult(null); setImportError(null); setImportRows([]); setImportFileName(null); }}
-            >
-              {t.importCsvCta}
-            </Button>
-            {filtersDirty ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="!min-h-10"
-                startIcon={<FilterX size={14} />}
-                onClick={() => {
-                  setQInput("");
-                  setQFilter("");
-                  setFilterRole("all");
-                  setFilterActive("all");
-                }}
-              >
-                {t.clearFilters}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        {/* En movil mostramos cada grupo de filtros (Estado y Rol) en su
-            propia fila para que la etiqueta y sus chips queden juntos y
-            no se mezclen entre si (antes con un solo flex-wrap el "Rol:"
-            podia caer al final de la primera fila y separarse de sus chips). */}
-        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--color-border)] pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-caption text-[var(--color-text-3)]">{t.filterState}:</span>
-            {(["all", "active", "inactive"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setFilterActive(v)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150",
-                  filterActive === v
-                    ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)] ring-1 ring-[var(--color-accent)]/35"
-                    : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
-                )}
-              >
-                {v === "all" ? t.chipAll : v === "active" ? t.chipActive : t.chipInactive}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 sm:ml-2">
-            <span className="text-caption text-[var(--color-text-3)]">{t.filterRole}:</span>
-            {(["all", "conductor", "tecnico_campo", "gestor_centro_control"] as const).map((v) => {
-              const active = filterRole === v;
-              const tone = v === "all" ? null : roleTone(v);
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setFilterRole(v)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all duration-150",
-                    tone === null
-                      ? active
-                        ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)] ring-1 ring-[var(--color-accent)]/35"
-                        : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]"
-                      : active
-                        ? tone.pillActive
-                        : tone.pillIdle,
-                  )}
-                >
-                  {tone ? <span className={cn("h-1.5 w-1.5 rounded-full", tone.dot)} aria-hidden /> : null}
-                  {v === "all" ? t.chipAll : userRoleLabel(v, locale)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
       {error ? (
         <div
           role="alert"
@@ -1106,113 +991,91 @@ export function AdminUsersManager() {
         </div>
       ) : null}
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:items-start">
+      <section>
         <article className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-          <div className="mb-4 flex min-h-[48px] items-center gap-2">
-            <UserPlus size={15} className="text-[var(--color-text-3)]" aria-hidden />
-            <h2 className="text-subheading">{t.newUserTitle}</h2>
-          </div>
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="admin-new-name" className="mb-1.5 block text-label">
-                {t.fieldName}
-              </label>
-              <Input
-                ref={nameInputRef}
-                id="admin-new-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Juan García"
-                autoComplete="name"
-              />
-              {createFieldErrors.name ? (
-                <p className="mt-1 text-caption text-[var(--color-error)]">{createFieldErrors.name}</p>
-              ) : null}
-              {name.length > 0 && name.trim().length < 3 ? (
-                <p className="mt-1 text-caption text-[var(--color-warning)]">{t.nameMin}</p>
-              ) : null}
-            </div>
-            <div>
-              <label htmlFor="admin-new-email" className="mb-1.5 block text-label">
-                {t.fieldEmail}
-              </label>
-              <Input
-                id="admin-new-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="usuario@ccmgc.local"
-                autoComplete="email"
-              />
-              {createFieldErrors.email ? (
-                <p className="mt-1 text-caption text-[var(--color-error)]">{createFieldErrors.email}</p>
+          <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <h2 className="text-subheading">{t.listTitle}</h2>
+              <span className="text-caption text-[var(--color-text-3)]">
+                {processed.length}
+                {processed.length !== users.length ? ` / ${users.length}` : ""}
+              </span>
+              {filtersDirty ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent)] hover:underline"
+                  onClick={() => {
+                    setQInput("");
+                    setQFilter("");
+                    setFilterRole("all");
+                    setFilterActive("all");
+                  }}
+                >
+                  <FilterX size={11} aria-hidden />
+                  {t.clearFilters}
+                </button>
               ) : null}
             </div>
-            <div>
-              <label htmlFor="admin-new-role" className="mb-1.5 block text-label">
-                {t.fieldRole}
-              </label>
-              <Select
-                id="admin-new-role"
-                value={role}
-                onChange={(e) => setRole(e.target.value as UserRole)}
-              >
-                <option value="conductor">{userRoleLabel("conductor", locale)}</option>
-                <option value="tecnico_campo">{userRoleLabel("tecnico_campo", locale)}</option>
-                <option value="gestor_centro_control">{userRoleLabel("gestor_centro_control", locale)}</option>
-              </Select>
-              {role === "gestor_centro_control" ? (
-                <p className="mt-1 text-caption text-[var(--color-warning)]">
-                  {t.confirmRoleGestorBody(name.trim() || (locale === "en" ? "this user" : "este usuario"))}
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <label htmlFor="admin-new-password" className="mb-1.5 block text-label">
-                {t.optionalPasswordLabel}
-              </label>
-              <Input
-                id="admin-new-password"
-                type="text"
-                value={initialPasswordInput}
-                onChange={(e) => setInitialPasswordInput(e.target.value)}
-                placeholder="••••••••••"
-                autoComplete="off"
-              />
-              <p className="mt-1 text-caption text-[var(--color-text-3)]">{t.optionalPasswordHint}</p>
-              <p className="text-caption text-[var(--color-text-3)]">{t.minPasswordHint}</p>
-            </div>
-            <label className="flex items-start gap-2 text-caption text-[var(--color-text-2)]">
-              <Checkbox
-                checked={forceChangeOnCreate}
-                onChange={(e) => setForceChangeOnCreate(e.target.checked)}
-              />
-              <span>{t.forceChangeLabel}</span>
-            </label>
-            {createFieldErrors._form ? (
-              <p className="text-caption text-[var(--color-error)]">{createFieldErrors._form}</p>
-            ) : null}
-            <Button
-              type="button"
-              size="md"
-              className="mt-2 w-full"
-              startIcon={<CheckCircle2 size={15} />}
-              disabled={!canCreate || pending.has("__create__")}
-              onClick={() => void handleCreateUser()}
-            >
-              {t.createCta}
-            </Button>
-          </div>
-        </article>
 
-        <article className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-          <div className="mb-4 flex min-h-[48px] flex-wrap items-center gap-2">
-            <Users size={15} className="text-[var(--color-text-3)]" aria-hidden />
-            <h2 className="text-subheading">{t.listTitle}</h2>
-            <span className="text-caption text-[var(--color-text-3)]">
-              ({processed.length}
-              {processed.length !== users.length ? ` de ${users.length}` : ""})
-            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center lg:max-w-2xl lg:justify-end">
+              <div className="relative min-w-0 flex-1 sm:max-w-md">
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]"
+                  aria-hidden
+                />
+                <Input
+                  ref={searchInputRef}
+                  value={qInput}
+                  onChange={(e) => setQInput(e.target.value)}
+                  placeholder={t.searchPlaceholder}
+                  className="!min-h-9 pl-9"
+                  aria-label={t.searchAria}
+                />
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="!min-h-9"
+                  startIcon={<UserPlus size={14} />}
+                  onClick={() => {
+                    setCreateFieldErrors({});
+                    setCreateOpen(true);
+                  }}
+                >
+                  {t.newUserTitle}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="!min-h-9 !px-2.5"
+                  title={t.csvExport(processed.length)}
+                  aria-label={t.csvExport(processed.length)}
+                  onClick={() => downloadUsersCsv(processed, locale)}
+                >
+                  <Download size={15} aria-hidden />
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="!min-h-9 !px-2.5"
+                  title={t.importCsvCta}
+                  aria-label={t.importCsvCta}
+                  onClick={() => {
+                    setImportOpen(true);
+                    setImportResult(null);
+                    setImportError(null);
+                    setImportRows([]);
+                    setImportFileName(null);
+                  }}
+                >
+                  <Upload size={15} aria-hidden />
+                </Button>
+              </div>
+            </div>
           </div>
 
           {users.length === 0 ? (
@@ -1258,8 +1121,8 @@ export function AdminUsersManager() {
                 </div>
               ) : null}
 
-              <div className="hidden overflow-x-auto overflow-y-visible md:block">
-                <table className="w-full text-sm">
+              <div className="hidden md:block">
+                <DataTable wrapperClassName="overflow-y-visible !rounded-none !border-0" className="ccmgc-table--row-middle">
                   <caption className="sr-only">{t.tableCaption}</caption>
                   <thead className="sticky top-0 z-10 bg-[var(--color-surface)] shadow-[0_1px_0_var(--color-border)]">
                     <tr className="border-b border-[var(--color-border)]">
@@ -1322,14 +1185,14 @@ export function AdminUsersManager() {
                           className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-label font-medium hover:bg-[var(--color-surface-2)]"
                           onClick={() => toggleSort("updatedAt")}
                         >
-                          {t.colUpdated}
+                          Actividad
                           <ArrowDownUp
                             size={12}
                             className={sortKey === "updatedAt" ? "text-[var(--color-accent)]" : ""}
                           />
                         </button>
                       </th>
-                      <th scope="col" className="pb-3 text-left text-label font-medium">
+                      <th scope="col" className="w-[1%] whitespace-nowrap pb-3 pr-1 text-right text-label font-medium">
                         {t.colActions}
                       </th>
                     </tr>
@@ -1341,18 +1204,20 @@ export function AdminUsersManager() {
                         initial={false}
                         animate={{ opacity: 1 }}
                         className={cn(
-                          "border-b border-[var(--color-border)] transition-colors hover:bg-[var(--color-surface-2)] focus-within:bg-[var(--color-surface-2)] last:border-0",
+                          "border-b border-[var(--color-border)] transition-[background-color,box-shadow,border-color] duration-150 hover:bg-[var(--color-surface-2)] hover:shadow-[inset_3px_0_0_0_var(--color-accent)] focus-within:bg-[var(--color-surface-2)] focus-within:shadow-[inset_3px_0_0_0_var(--color-accent)] last:border-0",
                           rowIdx % 2 === 1 && "bg-[color-mix(in_oklab,var(--color-surface-2)_42%,transparent)]",
                         )}
                       >
                         <td className="py-3 pr-1 align-middle">
-                          <Checkbox
-                            checked={selectedIds.has(user.id)}
-                            onChange={() => toggleUserSelected(user.id)}
-                            aria-label={user.name}
-                          />
+                          <div className="flex h-8 items-center">
+                            <Checkbox
+                              checked={selectedIds.has(user.id)}
+                              onChange={() => toggleUserSelected(user.id)}
+                              aria-label={user.name}
+                            />
+                          </div>
                         </td>
-                        <th scope="row" className="py-3 pr-2 text-left font-normal">
+                        <th scope="row" className="py-3 pr-2 align-middle text-left font-normal">
                           <div className="flex items-center gap-2.5">
                             <div
                               className={cn(
@@ -1382,98 +1247,67 @@ export function AdminUsersManager() {
                           />
                         </td>
                         <td className="py-3 align-middle">
-                          <Badge variant={user.isActive ? "success" : "warning"}>
+                          <Badge variant={user.isActive ? "success" : "warning"} className="whitespace-nowrap">
                             {user.isActive ? t.active : t.inactive}
                           </Badge>
                         </td>
                         <td className="py-3 align-middle">
-                          <span className="text-caption" title={user.createdAt}>
+                          <span
+                            className="block text-caption whitespace-nowrap"
+                            title={`${user.createdAt}${relativeDayLabel(user.createdAt) ? ` · ${relativeDayLabel(user.createdAt)}` : ""}`}
+                          >
                             {formatDate(user.createdAt)}
+                            {relativeDayLabel(user.createdAt) ? (
+                              <span className="text-[var(--color-text-3)]"> · {relativeDayLabel(user.createdAt)}</span>
+                            ) : null}
                           </span>
-                          {relativeDayLabel(user.createdAt) ? (
-                            <span className="mt-0.5 block text-[11px] text-[var(--color-text-3)]">
-                              {relativeDayLabel(user.createdAt)}
-                            </span>
-                          ) : null}
                         </td>
                         <td className="py-3 align-middle">
-                          <span className="text-caption" title={user.updatedAt}>
-                            {formatDate(user.updatedAt)}
+                          <span
+                            className="block text-caption whitespace-nowrap"
+                            title={
+                              user.lastLoginAt
+                                ? `Último acceso: ${user.lastLoginAt}${relativeDayLabel(user.lastLoginAt) ? ` · ${relativeDayLabel(user.lastLoginAt)}` : ""} · Mod.: ${user.updatedAt}`
+                                : `Sin acceso · Mod.: ${user.updatedAt}`
+                            }
+                          >
+                            {user.lastLoginAt ? formatDate(user.lastLoginAt) : "Sin acceso"}
+                            {user.lastLoginAt && relativeDayLabel(user.lastLoginAt) ? (
+                              <span className="text-[var(--color-text-3)]"> · {relativeDayLabel(user.lastLoginAt)}</span>
+                            ) : null}
+                            <span className="text-[var(--color-text-3)]"> · Mod. {formatDate(user.updatedAt)}</span>
                           </span>
-                          {relativeDayLabel(user.updatedAt) ? (
-                            <span className="mt-0.5 block text-[11px] text-[var(--color-text-3)]">
-                              {relativeDayLabel(user.updatedAt)}
-                            </span>
-                          ) : null}
                         </td>
-                        <td className="py-3 align-middle">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="!min-h-9 !px-2.5 !py-1.5 !text-xs text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]"
-                              disabled={pending.has(user.id)}
-                              onClick={() => setEditState({ user, name: user.name, email: user.email })}
-                              title={t.editAction}
-                            >
-                              <Pencil size={13} className="mr-1" /> {t.editAction}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="!min-h-9 !px-2.5 !py-1.5 !text-xs text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]"
-                              disabled={pending.has(user.id)}
-                              onClick={() => setConfirmReset(user)}
-                              title={t.resetPasswordAction}
-                            >
-                              <KeyRound size={13} className="mr-1" /> {t.resetPasswordAction}
-                            </Button>
-                            {user.isActive ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="!min-h-9 border border-[var(--color-error)]/35 !px-3 !py-1.5 !text-xs text-[var(--color-error)] hover:bg-[var(--color-error-light)]"
-                                disabled={pending.has(user.id) || user.id === actorId}
-                                title={user.id === actorId ? t.deactivateSelfTitle : undefined}
-                                onClick={() => setConfirmDeactivate(user)}
-                              >
-                                {t.deactivate}
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="!min-h-9 border border-[var(--color-success)]/35 !px-3 !py-1.5 !text-xs text-[var(--color-success)] hover:bg-[var(--color-success-light)]"
-                                disabled={pending.has(user.id)}
-                                onClick={async () => {
-                                  const ok = await runPatch(user.id, { isActive: true });
-                                  if (ok) pushToast(t.toastReactivated, "ok");
-                                }}
-                              >
-                                {t.activate}
-                              </Button>
-                            )}
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="!min-h-9 !px-2.5 !py-1.5 !text-xs text-[var(--color-error)] hover:bg-[var(--color-error-light)]"
-                              disabled={pending.has(user.id) || user.id === actorId}
-                              title={t.deleteAction}
-                              onClick={() => setConfirmDelete(user)}
-                            >
-                              <Trash2 size={13} className="mr-1" /> {t.deleteAction}
-                            </Button>
+                        <td className="py-3 pl-2 align-middle">
+                          <div className="flex justify-end">
+                            <AdminUserRowActions
+                            disabled={pending.has(user.id)}
+                            isSelf={user.id === actorId}
+                            isActive={user.isActive}
+                            labels={{
+                              edit: t.editAction,
+                              resetPassword: t.resetPasswordAction,
+                              deactivate: t.deactivate,
+                              activate: t.activate,
+                              delete: t.deleteAction,
+                              more: locale === "en" ? "More actions" : "Más acciones",
+                              deactivateSelfTitle: t.deactivateSelfTitle,
+                            }}
+                            onEdit={() => setEditState({ user, name: user.name, email: user.email })}
+                            onResetPassword={() => setConfirmReset(user)}
+                            onDeactivate={() => setConfirmDeactivate(user)}
+                            onActivate={async () => {
+                              const ok = await runPatch(user.id, { isActive: true });
+                              if (ok) pushToast(t.toastReactivated, "ok");
+                            }}
+                            onDelete={() => setConfirmDelete(user)}
+                          />
                           </div>
                         </td>
                       </motion.tr>
                     ))}
                   </tbody>
-                </table>
+                </DataTable>
               </div>
 
               <div className="space-y-3 md:hidden">
@@ -1528,117 +1362,111 @@ export function AdminUsersManager() {
                       {relativeDayLabel(user.createdAt) ? ` · ${relativeDayLabel(user.createdAt)}` : ""}
                     </p>
                     <p className="mb-3 text-caption text-[var(--color-text-3)]">
-                      {t.colUpdated} {formatDate(user.updatedAt)}
-                      {relativeDayLabel(user.updatedAt) ? ` · ${relativeDayLabel(user.updatedAt)}` : ""}
+                      Actividad{" "}
+                      {user.lastLoginAt ? formatDate(user.lastLoginAt) : "Sin acceso"}
+                      {user.lastLoginAt && relativeDayLabel(user.lastLoginAt)
+                        ? ` · ${relativeDayLabel(user.lastLoginAt)}`
+                        : ""}
+                      {" · "}
+                      Mod. {formatDate(user.updatedAt)}
                     </p>
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="!min-h-9 !text-xs text-[var(--color-text-2)]"
+                    <div className="flex justify-end">
+                      <AdminUserRowActions
                         disabled={pending.has(user.id)}
-                        onClick={() => setEditState({ user, name: user.name, email: user.email })}
-                      >
-                        <Pencil size={13} className="mr-1" /> {t.editAction}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="!min-h-9 !text-xs text-[var(--color-text-2)]"
-                        disabled={pending.has(user.id)}
-                        onClick={() => setConfirmReset(user)}
-                      >
-                        <KeyRound size={13} className="mr-1" /> {t.resetPasswordAction}
-                      </Button>
-                      {user.isActive ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="!min-h-9 border border-[var(--color-error)]/35 !text-xs text-[var(--color-error)]"
-                          disabled={pending.has(user.id) || user.id === actorId}
-                          onClick={() => setConfirmDeactivate(user)}
-                        >
-                          {t.deactivate}
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="!min-h-9 border border-[var(--color-success)]/35 !text-xs text-[var(--color-success)]"
-                          disabled={pending.has(user.id)}
-                          onClick={async () => {
-                            const ok = await runPatch(user.id, { isActive: true });
-                            if (ok) pushToast(t.toastReactivated, "ok");
-                          }}
-                        >
-                          {t.activate}
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="!min-h-9 !text-xs text-[var(--color-error)]"
-                        disabled={pending.has(user.id) || user.id === actorId}
-                        onClick={() => setConfirmDelete(user)}
-                      >
-                        <Trash2 size={13} className="mr-1" /> {t.deleteAction}
-                      </Button>
+                        isSelf={user.id === actorId}
+                        isActive={user.isActive}
+                        labels={{
+                          edit: t.editAction,
+                          resetPassword: t.resetPasswordAction,
+                          deactivate: t.deactivate,
+                          activate: t.activate,
+                          delete: t.deleteAction,
+                          more: locale === "en" ? "More actions" : "Más acciones",
+                          deactivateSelfTitle: t.deactivateSelfTitle,
+                        }}
+                        onEdit={() => setEditState({ user, name: user.name, email: user.email })}
+                        onResetPassword={() => setConfirmReset(user)}
+                        onDeactivate={() => setConfirmDeactivate(user)}
+                        onActivate={async () => {
+                          const ok = await runPatch(user.id, { isActive: true });
+                          if (ok) pushToast(t.toastReactivated, "ok");
+                        }}
+                        onDelete={() => setConfirmDelete(user)}
+                      />
                     </div>
                   </motion.div>
                 ))}
               </div>
 
-              {processed.length > pageSize ? (
+              {processed.length > 0 ? (
                 <div className="mt-4 flex flex-col gap-3 border-t border-[var(--color-border)] pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                  <p className="text-caption text-[var(--color-text-3)]">{t.pageOf(safePage, totalPages)}</p>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {totalPages <= 12
-                      ? Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                          <button
-                            key={n}
-                            type="button"
-                            onClick={() => setPage(n)}
-                            className={cn(
-                              "min-h-9 min-w-9 rounded-lg border text-xs font-medium transition-colors",
-                              n === safePage
-                                ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)]"
-                                : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
-                            )}
-                          >
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-caption text-[var(--color-text-3)]">
+                      {totalPages > 1 ? t.pageOf(safePage, totalPages) : `${processed.length} usuarios`}
+                    </p>
+                    <label className="flex items-center gap-2 text-caption text-[var(--color-text-3)]">
+                      <span>{t.pageSize}</span>
+                      <Select
+                        aria-label={t.pageSize}
+                        className="!min-h-9 w-auto min-w-[4.5rem]"
+                        value={String(pageSize)}
+                        onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                      >
+                        {PAGE_SIZE_OPTIONS.map((n) => (
+                          <option key={n} value={n}>
                             {n}
-                          </button>
-                        ))
-                      : null}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="!min-h-9"
-                      disabled={safePage <= 1}
-                      startIcon={<ChevronLeft size={14} />}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    >
-                      {t.pagePrev}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="!min-h-9"
-                      disabled={safePage >= totalPages}
-                      startIcon={<ChevronRight size={14} />}
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    >
-                      {t.pageNext}
-                    </Button>
-                  </div>
+                  {totalPages > 1 ? (
+                    <>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {totalPages <= 12
+                          ? Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => setPage(n)}
+                                className={cn(
+                                  "min-h-9 min-w-9 rounded-lg border text-xs font-medium transition-colors",
+                                  n === safePage
+                                    ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-text-1)]"
+                                    : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
+                                )}
+                              >
+                                {n}
+                              </button>
+                            ))
+                          : null}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="!min-h-9"
+                          disabled={safePage <= 1}
+                          startIcon={<ChevronLeft size={14} />}
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        >
+                          {t.pagePrev}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="!min-h-9"
+                          disabled={safePage >= totalPages}
+                          startIcon={<ChevronRight size={14} />}
+                          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        >
+                          {t.pageNext}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
             </>
@@ -1646,76 +1474,168 @@ export function AdminUsersManager() {
         </article>
       </section>
 
-      {confirmDeactivate ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setConfirmDeactivate(null);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-deactivate-title"
-            className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl"
-          >
-            <h3 id="admin-deactivate-title" className="text-subheading text-[var(--color-text-1)]">
-              {t.dialogDeactivateTitle}
-            </h3>
-            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.dialogDeactivateBody(confirmDeactivate.name)}</p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button ref={dialogDeactivateRef} type="button" variant="secondary" onClick={() => setConfirmDeactivate(null)}>
-                {t.cancel}
-              </Button>
-              <Button type="button" variant="danger" onClick={() => void confirmAndDeactivate()}>
-                {t.deactivate}
-              </Button>
-            </div>
+      <ModalShell
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        size="md"
+        title={t.newUserTitle}
+        initialFocusRef={nameInputRef}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>
+              {t.cancel}
+            </Button>
+            <Button
+              type="button"
+              startIcon={<CheckCircle2 size={15} />}
+              disabled={!canCreate || pending.has("__create__")}
+              onClick={() => void handleCreateUser()}
+            >
+              {t.createCta}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="admin-new-name" className="mb-1.5 block text-label">
+              {t.fieldName}
+            </label>
+            <Input
+              ref={nameInputRef}
+              id="admin-new-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Juan García"
+              autoComplete="name"
+            />
+            {createFieldErrors.name ? (
+              <p className="mt-1 text-caption text-[var(--color-error)]">{createFieldErrors.name}</p>
+            ) : null}
+            {name.length > 0 && name.trim().length < 3 ? (
+              <p className="mt-1 text-caption text-[var(--color-warning)]">{t.nameMin}</p>
+            ) : null}
           </div>
-        </div>
-      ) : null}
-
-      {confirmBulk ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setConfirmBulk(false);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-bulk-title"
-            className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl"
-          >
-            <h3 id="admin-bulk-title" className="text-subheading text-[var(--color-text-1)]">
-              {t.dialogBulkTitle(selectedIds.size)}
-            </h3>
-            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.dialogBulkBody}</p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button ref={dialogBulkRef} type="button" variant="secondary" onClick={() => setConfirmBulk(false)}>
-                {t.cancel}
-              </Button>
-              <Button type="button" variant="danger" onClick={() => void runBulkDeactivate()}>
-                {t.confirmBulk}
-              </Button>
-            </div>
+          <div>
+            <label htmlFor="admin-new-email" className="mb-1.5 block text-label">
+              {t.fieldEmail}
+            </label>
+            <Input
+              id="admin-new-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="usuario@ccmgc.local"
+              autoComplete="email"
+            />
+            {createFieldErrors.email ? (
+              <p className="mt-1 text-caption text-[var(--color-error)]">{createFieldErrors.email}</p>
+            ) : null}
           </div>
+          <div>
+            <label htmlFor="admin-new-role" className="mb-1.5 block text-label">
+              {t.fieldRole}
+            </label>
+            <Select
+              id="admin-new-role"
+              value={role}
+              onChange={(e) => setRole(e.target.value as UserRole)}
+            >
+              <option value="conductor">{userRoleLabel("conductor", locale)}</option>
+              <option value="tecnico_campo">{userRoleLabel("tecnico_campo", locale)}</option>
+              <option value="gestor_centro_control">{userRoleLabel("gestor_centro_control", locale)}</option>
+            </Select>
+            {role === "gestor_centro_control" ? (
+              <p className="mt-1 text-caption text-[var(--color-warning)]">
+                {t.confirmRoleGestorBody(name.trim() || (locale === "en" ? "this user" : "este usuario"))}
+              </p>
+            ) : null}
+          </div>
+          <div>
+            <label htmlFor="admin-new-password" className="mb-1.5 block text-label">
+              {t.optionalPasswordLabel}
+            </label>
+            <Input
+              id="admin-new-password"
+              type="text"
+              value={initialPasswordInput}
+              onChange={(e) => setInitialPasswordInput(e.target.value)}
+              placeholder="••••••••••"
+              autoComplete="off"
+            />
+            <p className="mt-1 text-caption text-[var(--color-text-3)]">{t.optionalPasswordHint}</p>
+            <p className="text-caption text-[var(--color-text-3)]">{t.minPasswordHint}</p>
+          </div>
+          <label className="flex items-start gap-2 text-caption text-[var(--color-text-2)]">
+            <Checkbox
+              checked={forceChangeOnCreate}
+              onChange={(e) => setForceChangeOnCreate(e.target.checked)}
+            />
+            <span>{t.forceChangeLabel}</span>
+          </label>
+          {createFieldErrors._form ? (
+            <p className="text-caption text-[var(--color-error)]">{createFieldErrors._form}</p>
+          ) : null}
         </div>
-      ) : null}
+      </ModalShell>
 
-      {/* --- Modal: editar nombre / email --- */}
-      {editState ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
-          role="presentation"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setEditState(null); }}
-        >
-          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
-            <h3 className="text-subheading text-[var(--color-text-1)]">{t.editDialogTitle}</h3>
-            <p className="mt-1 text-caption text-[var(--color-text-3)]">{editState.user.email}</p>
+      <ModalShell
+        open={Boolean(confirmDeactivate)}
+        onClose={() => setConfirmDeactivate(null)}
+        size="md"
+        title={t.dialogDeactivateTitle}
+        initialFocusRef={dialogDeactivateRef}
+        footer={
+          <>
+            <Button ref={dialogDeactivateRef} type="button" variant="secondary" onClick={() => setConfirmDeactivate(null)}>
+              {t.cancel}
+            </Button>
+            <Button type="button" variant="danger" onClick={() => void confirmAndDeactivate()}>
+              {t.deactivate}
+            </Button>
+          </>
+        }
+      >
+        {confirmDeactivate ? (
+          <p className="text-body text-[var(--color-text-2)]">{t.dialogDeactivateBody(confirmDeactivate.name)}</p>
+        ) : null}
+      </ModalShell>
+
+      <ModalShell
+        open={confirmBulk}
+        onClose={() => setConfirmBulk(false)}
+        size="md"
+        title={t.dialogBulkTitle(selectedIds.size)}
+        initialFocusRef={dialogBulkRef}
+        footer={
+          <>
+            <Button ref={dialogBulkRef} type="button" variant="secondary" onClick={() => setConfirmBulk(false)}>
+              {t.cancel}
+            </Button>
+            <Button type="button" variant="danger" onClick={() => void runBulkDeactivate()}>
+              {t.confirmBulk}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-body text-[var(--color-text-2)]">{t.dialogBulkBody}</p>
+      </ModalShell>
+
+      <ModalShell
+        open={Boolean(editState)}
+        onClose={() => setEditState(null)}
+        size="md"
+        title={t.editDialogTitle}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setEditState(null)}>{t.cancel}</Button>
+            <Button type="button" onClick={() => void runEditSubmit()}>{t.editDialogSave}</Button>
+          </>
+        }
+      >
+        {editState ? (
+          <>
+            <p className="text-caption text-[var(--color-text-3)]">{editState.user.email}</p>
             <div className="mt-4 space-y-3">
               <div>
                 <label htmlFor="edit-name" className="mb-1.5 block text-label">{t.fieldName}</label>
@@ -1726,166 +1646,159 @@ export function AdminUsersManager() {
                 <Input id="edit-email" type="email" value={editState.email} onChange={(e) => setEditState((s) => s ? { ...s, email: e.target.value } : s)} />
               </div>
             </div>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setEditState(null)}>{t.cancel}</Button>
-              <Button type="button" onClick={() => void runEditSubmit()}>{t.editDialogSave}</Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+          </>
+        ) : null}
+      </ModalShell>
 
-      {/* --- Modal: confirmar eliminar --- */}
-      {confirmDelete ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
-          role="presentation"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}
-        >
-          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
-            <h3 className="text-subheading text-[var(--color-text-1)]">{t.deleteDialogTitle}</h3>
-            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.deleteDialogBody(confirmDelete.name)}</p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>{t.cancel}</Button>
-              <Button type="button" variant="danger" onClick={() => void runDelete()}>{t.confirmDelete}</Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ModalShell
+        open={Boolean(confirmDelete)}
+        onClose={() => setConfirmDelete(null)}
+        size="md"
+        title={t.deleteDialogTitle}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>{t.cancel}</Button>
+            <Button type="button" variant="danger" onClick={() => void runDelete()}>{t.confirmDelete}</Button>
+          </>
+        }
+      >
+        {confirmDelete ? (
+          <p className="text-body text-[var(--color-text-2)]">{t.deleteDialogBody(confirmDelete.name)}</p>
+        ) : null}
+      </ModalShell>
 
-      {/* --- Modal: confirmar reset password --- */}
-      {confirmReset ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
-          role="presentation"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmReset(null); }}
-        >
-          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
-            <h3 className="text-subheading text-[var(--color-text-1)]">{t.resetDialogTitle}</h3>
-            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.resetDialogBody(confirmReset.name)}</p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setConfirmReset(null)}>{t.cancel}</Button>
-              <Button type="button" onClick={() => void runReset()}>{t.confirmReset}</Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ModalShell
+        open={Boolean(confirmReset)}
+        onClose={() => setConfirmReset(null)}
+        size="md"
+        title={t.resetDialogTitle}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setConfirmReset(null)}>{t.cancel}</Button>
+            <Button type="button" onClick={() => void runReset()}>{t.confirmReset}</Button>
+          </>
+        }
+      >
+        {confirmReset ? (
+          <p className="text-body text-[var(--color-text-2)]">{t.resetDialogBody(confirmReset.name)}</p>
+        ) : null}
+      </ModalShell>
 
-      {/* --- Modal: confirmar promoción a gestor --- */}
-      {pendingRoleChange ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
-          role="presentation"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setPendingRoleChange(null); }}
-        >
-          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
-            <h3 className="text-subheading text-[var(--color-text-1)]">{t.confirmRoleGestorTitle}</h3>
-            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.confirmRoleGestorBody(pendingRoleChange.user.name)}</p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setPendingRoleChange(null)}>{t.cancel}</Button>
-              <Button type="button" onClick={async () => {
-                const change = pendingRoleChange;
-                setPendingRoleChange(null);
-                if (change) await commitRoleChange(change.user, change.nextRole, change.previousRole);
-              }}>{t.confirmRoleGestorAccept}</Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ModalShell
+        open={Boolean(pendingRoleChange)}
+        onClose={() => setPendingRoleChange(null)}
+        size="md"
+        title={t.confirmRoleGestorTitle}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setPendingRoleChange(null)}>{t.cancel}</Button>
+            <Button type="button" onClick={async () => {
+              const change = pendingRoleChange;
+              setPendingRoleChange(null);
+              if (change) await commitRoleChange(change.user, change.nextRole, change.previousRole);
+            }}>{t.confirmRoleGestorAccept}</Button>
+          </>
+        }
+      >
+        {pendingRoleChange ? (
+          <p className="text-body text-[var(--color-text-2)]">{t.confirmRoleGestorBody(pendingRoleChange.user.name)}</p>
+        ) : null}
+      </ModalShell>
 
-      {/* --- Modal: contraseña generada (alta + reset) --- */}
-      {generatedPasswordDialog ? (
-        <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/55 p-4"
-          role="presentation"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setGeneratedPasswordDialog(null); }}
-        >
-          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
-            <div className="flex items-start gap-2">
-              <KeyRound size={20} className="mt-0.5 text-[var(--color-accent)]" aria-hidden />
-              <div>
-                <h3 className="text-subheading text-[var(--color-text-1)]">{t.initialPasswordTitle}</h3>
-                <p className="mt-1 text-body text-[var(--color-text-2)]">{generatedPasswordDialog.intro}</p>
-                <p className="text-caption text-[var(--color-text-3)]">{generatedPasswordDialog.userEmail}</p>
-              </div>
-            </div>
+      <ModalShell
+        open={Boolean(generatedPasswordDialog)}
+        onClose={() => setGeneratedPasswordDialog(null)}
+        size="md"
+        title={
+          <span className="flex items-start gap-2">
+            <KeyRound size={20} className="mt-0.5 shrink-0 text-[var(--color-accent)]" aria-hidden />
+            <span>{t.initialPasswordTitle}</span>
+          </span>
+        }
+        footer={
+          <>
+            <Button type="button" variant="secondary" startIcon={<Copy size={14} />} onClick={() => generatedPasswordDialog && copyToClipboard(generatedPasswordDialog.password)}>{t.copyPassword}</Button>
+            <Button type="button" onClick={() => setGeneratedPasswordDialog(null)}>{t.close}</Button>
+          </>
+        }
+      >
+        {generatedPasswordDialog ? (
+          <>
+            <p className="text-body text-[var(--color-text-2)]">{generatedPasswordDialog.intro}</p>
+            <p className="text-caption text-[var(--color-text-3)]">{generatedPasswordDialog.userEmail}</p>
             <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 font-mono text-lg tracking-wider text-[var(--color-text-1)] break-all">
               {generatedPasswordDialog.password}
             </div>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="secondary" startIcon={<Copy size={14} />} onClick={() => copyToClipboard(generatedPasswordDialog.password)}>{t.copyPassword}</Button>
-              <Button type="button" onClick={() => setGeneratedPasswordDialog(null)}>{t.close}</Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+          </>
+        ) : null}
+      </ModalShell>
 
-      {/* --- Modal: importar CSV --- */}
-      {importOpen ? (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4"
-          role="presentation"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setImportOpen(false); }}
-        >
-          <div role="dialog" aria-modal="true" className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
-            <h3 className="text-subheading text-[var(--color-text-1)]">{t.importDialogTitle}</h3>
-            <p className="mt-2 text-body text-[var(--color-text-2)]">{t.importDialogHint}</p>
-            <div className="mt-4 space-y-3">
-              <input
-                ref={importFileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="block w-full cursor-pointer rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text-2)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--color-accent)] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
-                onChange={(e) => void onPickImportFile(e.target.files?.[0] ?? null)}
-              />
-              {importFileName ? (
-                <p className="text-caption text-[var(--color-text-3)]">
-                  {importFileName} — {t.importRowsDetected(importRows.length)}
-                </p>
-              ) : null}
-              {importError ? (
-                <p className="text-caption text-[var(--color-error)]">{importError}</p>
-              ) : null}
+      <ModalShell
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        maxWidth="42rem"
+        className="max-h-[90vh] overflow-y-auto"
+        shake={Boolean(importError)}
+        title={t.importDialogTitle}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setImportOpen(false)}>{t.close}</Button>
+            <Button type="button" disabled={importRows.length === 0 || importing} onClick={() => void runImport()}>
+              {importing ? "..." : t.importRunCta}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-body text-[var(--color-text-2)]">{t.importDialogHint}</p>
+        <div className="mt-4 space-y-3">
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="block w-full cursor-pointer rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text-2)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--color-accent)] file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
+            onChange={(e) => void onPickImportFile(e.target.files?.[0] ?? null)}
+          />
+          {importFileName ? (
+            <p className="text-caption text-[var(--color-text-3)]">
+              {importFileName} — {t.importRowsDetected(importRows.length)}
+            </p>
+          ) : null}
+          {importError ? (
+            <p className="text-caption text-[var(--color-error)]">{importError}</p>
+          ) : null}
 
-              {importResult ? (
-                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
-                  <p className="mb-2 text-label">{t.importResultsTitle}</p>
-                  <ul className="grid grid-cols-2 gap-1 text-caption text-[var(--color-text-2)] sm:grid-cols-4">
-                    <li>{t.importStat("Total", importResult.stats.total)}</li>
-                    <li className="text-[var(--color-success)]">{t.importStat("OK", importResult.stats.created)}</li>
-                    <li className="text-[var(--color-warning)]">{t.importStat("Skipped", importResult.stats.skipped)}</li>
-                    <li className="text-[var(--color-error)]">{t.importStat("Errors", importResult.stats.errors)}</li>
-                  </ul>
-                  {importResult.results.length > 0 ? (
-                    <div className="mt-3 max-h-56 overflow-y-auto rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-caption">
-                      {importResult.results.map((r) => (
-                        <p key={r.index} className={cn(
-                          "py-0.5",
-                          r.status === "created" ? "text-[var(--color-success)]" :
-                          r.status === "skipped" ? "text-[var(--color-warning)]" :
-                          r.status === "error" ? "text-[var(--color-error)]" : "",
-                        )}>
-                          #{r.index} {r.email} — {r.status}{r.message ? ` (${r.message})` : ""}
-                        </p>
-                      ))}
-                    </div>
-                  ) : null}
-                  {importResult.results.some((r) => r.generatedPassword) ? (
-                    <Button type="button" variant="secondary" size="sm" className="mt-3" startIcon={<Download size={14} />} onClick={downloadImportPasswordsCsv}>
-                      {t.importDownloadCsv}
-                    </Button>
-                  ) : null}
+          {importResult ? (
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
+              <p className="mb-2 text-label">{t.importResultsTitle}</p>
+              <ul className="grid grid-cols-2 gap-1 text-caption text-[var(--color-text-2)] sm:grid-cols-4">
+                <li>{t.importStat("Total", importResult.stats.total)}</li>
+                <li className="text-[var(--color-success)]">{t.importStat("OK", importResult.stats.created)}</li>
+                <li className="text-[var(--color-warning)]">{t.importStat("Skipped", importResult.stats.skipped)}</li>
+                <li className="text-[var(--color-error)]">{t.importStat("Errors", importResult.stats.errors)}</li>
+              </ul>
+              {importResult.results.length > 0 ? (
+                <div className="mt-3 max-h-56 overflow-y-auto rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-caption">
+                  {importResult.results.map((r) => (
+                    <p key={r.index} className={cn(
+                      "py-0.5",
+                      r.status === "created" ? "text-[var(--color-success)]" :
+                      r.status === "skipped" ? "text-[var(--color-warning)]" :
+                      r.status === "error" ? "text-[var(--color-error)]" : "",
+                    )}>
+                      #{r.index} {r.email} — {r.status}{r.message ? ` (${r.message})` : ""}
+                    </p>
+                  ))}
                 </div>
               ) : null}
+              {importResult.results.some((r) => r.generatedPassword) ? (
+                <Button type="button" variant="secondary" size="sm" className="mt-3" startIcon={<Download size={14} />} onClick={downloadImportPasswordsCsv}>
+                  {t.importDownloadCsv}
+                </Button>
+              ) : null}
             </div>
-            <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setImportOpen(false)}>{t.close}</Button>
-              <Button type="button" disabled={importRows.length === 0 || importing} onClick={() => void runImport()}>
-                {importing ? "..." : t.importRunCta}
-              </Button>
-            </div>
-          </div>
+          ) : null}
         </div>
-      ) : null}
+      </ModalShell>
 
       {toast ? (
         <div
@@ -1929,12 +1842,16 @@ function UsersKpi({
   value,
   tone,
   title,
+  onClick,
+  active = false,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   tone: UsersKpiTone;
   title?: string;
+  onClick?: () => void;
+  active?: boolean;
 }) {
   const toneCls =
     tone === "success"
@@ -1944,19 +1861,31 @@ function UsersKpi({
         : tone === "violet"
           ? "ring-violet-400/30 bg-violet-500/12 text-violet-300"
           : "ring-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)]";
-  return (
-    <div
-      className={cn(
-        "flex min-w-[100px] items-center gap-2 rounded-lg px-2.5 py-1.5 ring-1 transition-shadow hover:shadow-sm",
-        toneCls,
-      )}
-      title={title}
-    >
+  const shared = cn(
+    "flex min-w-[100px] items-center gap-2 rounded-lg px-2.5 py-1.5 ring-1 transition-[box-shadow,transform,ring-color]",
+    toneCls,
+    onClick && "cursor-pointer hover:shadow-sm active:scale-[0.98]",
+    active && "ring-2 ring-[var(--color-accent)]/55 shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-accent)_25%,transparent)]",
+  );
+  const inner = (
+    <>
       <span className="opacity-80">{icon}</span>
-      <div className="flex min-w-0 flex-col">
+      <div className="flex min-w-0 flex-col text-left">
         <span className="text-[10px] uppercase tracking-wider opacity-80">{label}</span>
         <span className="num-tabular text-[15px] font-semibold leading-tight">{value}</span>
       </div>
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" className={shared} title={title} onClick={onClick} aria-pressed={active}>
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <div className={shared} title={title}>
+      {inner}
     </div>
   );
 }

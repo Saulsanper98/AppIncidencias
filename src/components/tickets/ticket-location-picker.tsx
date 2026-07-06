@@ -72,6 +72,8 @@ type Props = {
   onMapPlaceMunicipioChange: (v: string | null) => void;
   busMunicipio: string;
   onNotify: (message: string | null) => void;
+  /** Mapa más bajo (formulario de ticket colapsable). */
+  compact?: boolean;
 };
 
 export function TicketLocationPicker({
@@ -83,6 +85,7 @@ export function TicketLocationPicker({
   onMapPlaceMunicipioChange,
   busMunicipio,
   onNotify,
+  compact = false,
 }: Props) {
   const [geoLocating, setGeoLocating] = useState(false);
   const [searchQ, setSearchQ] = useState("");
@@ -206,12 +209,17 @@ export function TicketLocationPicker({
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-[var(--color-text-3)]">
+      <p className={cn("text-[var(--color-text-3)]", compact ? "text-[10.5px] leading-snug" : "text-[11px]")}>
         Toca el mapa o arrastra el pin: se rellenan coordenadas y el municipio o barrio reconocido (geocodificación
         inversa). Búsqueda por nombre abajo. Coordenadas avanzadas al final.
       </p>
 
-      <div className="relative h-[min(240px,42vw)] min-h-[200px] w-full overflow-hidden rounded-lg border border-[var(--color-border)]">
+      <div
+        className={cn(
+          "relative w-full overflow-hidden rounded-lg border border-[var(--color-border)]",
+          compact ? "h-[min(180px,34vw)] min-h-[160px]" : "h-[min(240px,42vw)] min-h-[200px]",
+        )}
+      >
         <MapContainer
           center={parsed ? [parsed.lat, parsed.lng] : GRAN_CANARIA_CENTER}
           zoom={parsed ? 13 : 11}

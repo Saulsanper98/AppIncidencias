@@ -20,6 +20,7 @@ enum AssetType {
 }
 
 enum TicketStatus {
+  borrador
   abierto
   en_proceso
   esperando_repuesto
@@ -30,6 +31,12 @@ enum TicketPriority {
   alta
   media
   baja
+}
+
+enum TicketDeletionRequestStatus {
+  pendiente
+  aprobada
+  rechazada
 }
 
 enum WarehouseType {
@@ -115,13 +122,28 @@ enum OrigenDesvio {
 }
 
 model Bus {
-  id        String   @id
-  operator  String
-  municipio String
-  lineas    String
-  assets    Asset[]
-  tickets   Ticket[]
+  id          String     @id
+  operator    String
+  municipio   String
+  lineas      String
+  description String?
+  assets      Asset[]
+  tickets     Ticket[]
   preventiveTasks PreventiveTask[]
+  photos      BusPhoto[]
+}
+
+/// Fotos del detalle de bus (galería). Las URLs apuntan a `/api/bus-media/...`.
+model BusPhoto {
+  id        String   @id @default(cuid())
+  busId     String
+  bus       Bus      @relation(fields: [busId], references: [id], onDelete: Cascade)
+  url       String
+  caption   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([busId])
 }
 
 /// Catalogo de lineas/servicios validos (alimenta el autocomplete de `servicioLabel`
@@ -198,6 +220,7 @@ model KbArticle {
   updatedAt       DateTime        @updatedAt
   category        KbCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   author          User?           @relation("KbAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  dashboardShortcuts KbDashboardShortcut[]
 
   @@index([status, updatedAt])
   @@index([categoryId, status])
@@ -244,11 +267,20 @@ model Ticket {
   conductorLabel String?
   /// Técnico de campo asignado al ticket (opcional).
   assignedToUserId String?
+  /// Usuario que abrió el ticket (nullable para tickets legacy / email).
+  createdByUserId  String?
+  /// Momento exacto de resolución (solo cuando status = resuelto).
+  resolvedAt       DateTime?
+  /// Hora real de la incidencia (puede diferir de createdAt en apuntes express).
+  incidentOccurredAt DateTime?
+  /// Apunte express sin tipología/adjuntos completos (incluye borradores y cerrados express).
+  needsCompletion    Boolean          @default(false)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   bus          Bus              @relation(fields: [busId], references: [id], onDelete: Restrict)
   asset        Asset            @relation(fields: [assetId], references: [id], onDelete: Restrict)
   assignedTo   User?            @relation("TicketAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  createdBy    User?            @relation("TicketCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   comments     TicketComment[]
   attachments  TicketAttachment[]
   reservations TicketPartReservation[]
@@ -256,6 +288,14 @@ model Ticket {
   relationsFrom TicketRelation[] @relation("TicketRelationFrom")
   /// Vínculos en los que ESTE ticket es el destino (otro → este).
   relationsTo   TicketRelation[] @relation("TicketRelationTo")
+  watchers      TicketWatcher[]
+  statusHistory TicketStatusChange[]
+  desvioLinks   TicketDesvioLink[]
+  deletionRequests TicketDeletionRequest[]
+
+  @@index([createdByUserId])
+  @@index([resolvedAt])
+  @@index([status, updatedAt])
 }
 
 /// Relacion N:N entre tickets para "adjuntar" tickets ya resueltos (u otros)
@@ -277,6 +317,173 @@ model TicketRelation {
 
   @@unique([fromTicketId, toTicketId])
   @@index([toTicketId])
+}
+
+/// Solicitud de borrado de ticket por un técnico de campo; la aprueba un gestor.
+model TicketDeletionRequest {
+  id                String                      @id @default(cuid())
+  ticketId          String
+  requestedByUserId String
+  reason            String
+  status            TicketDeletionRequestStatus @default(pendiente)
+  reviewedByUserId  String?
+  reviewNote        String?
+  createdAt         DateTime                    @default(now())
+  reviewedAt        DateTime?
+
+  ticket      Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  requestedBy User   @relation("TicketDeletionRequester", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  reviewedBy  User?  @relation("TicketDeletionReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([ticketId])
+  @@index([requestedByUserId])
+}
+
+/// Historial estructurado de cambios de estado (timeline visual).
+model TicketStatusChange {
+  id              String        @id @default(cuid())
+  ticketId        String
+  fromStatus      TicketStatus?
+  toStatus        TicketStatus
+  changedByUserId String?
+  changedByName   String
+  comment         String?
+  createdAt       DateTime      @default(now())
+  ticket          Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+}
+
+/// Suscripción de un usuario a un ticket para recibir notificaciones.
+model TicketWatcher {
+  id        String   @id @default(cuid())
+  ticketId  String
+  userId    String
+  createdAt DateTime @default(now())
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, userId])
+  @@index([userId])
+}
+
+/// Vínculo entre ticket técnico y desvío operativo (manual o automático).
+model TicketDesvioLink {
+  id              String   @id @default(cuid())
+  ticketId        String
+  desvioId        String
+  /// "manual" | "auto"
+  kind            String   @default("manual")
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  desvio          Desvio   @relation(fields: [desvioId], references: [id], onDelete: Cascade)
+  createdBy       User?    @relation("TicketDesvioLinkCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([ticketId, desvioId])
+  @@index([desvioId])
+}
+
+/// Entrada del catálogo de tipologías (editable desde admin).
+model TipologiaEntry {
+  id             String   @id @default(cuid())
+  tipo           String
+  subtipo        String
+  subsubtipo     String
+  dominio        String
+  nivelImpacto   String
+  origenTecnico  String
+  observaciones  String   @default("")
+  sortOrder      Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tipo, subtipo, subsubtipo])
+  @@index([active, sortOrder])
+}
+
+/// Reglas de escalado automático (una fila singleton).
+model EscalationConfig {
+  id                     String   @id @default("default")
+  unassignedAltaMinutes  Int      @default(15)
+  unassignedMediaMinutes Int      @default(60)
+  unassignedBajaMinutes  Int      @default(240)
+  slaWarnMinutes         Int      @default(15)
+  staleTicketHours       Int      @default(48)
+  /// Asignación automática al crear ticket (reglas + carga).
+  autoAssignEnabled      Boolean  @default(true)
+  /// Reasignar al técnico con menor carga cuando vence el SLA.
+  slaReassignEnabled     Boolean  @default(true)
+  updatedByName          String?
+  updatedAt              DateTime @updatedAt
+}
+
+/// Regla de asignación automática de tickets a técnicos.
+/// Se evalúan por `sortOrder` ascendente; la primera que coincida gana.
+/// Campos null = comodín (cualquier operadora, línea o turno).
+model TicketAssignmentRule {
+  id         String   @id @default(cuid())
+  active     Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  /// Operadora del bus (p. ej. TIL). Null = cualquiera.
+  operator   String?
+  /// Subcadena de lineaLabel (case-insensitive). Null = cualquiera.
+  lineaMatch String?
+  /// Turno M/T/N al momento de asignar. Null = cualquier turno.
+  shift      String?
+  userId     String
+  user       User     @relation("TicketAssignmentRuleTechnician", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([active, sortOrder])
+  @@index([userId])
+}
+
+/// Programación de tickets recurrentes / preventivos auto-generados.
+model TicketRecurrence {
+  id              String    @id @default(cuid())
+  name            String
+  active          Boolean   @default(true)
+  intervalDays    Int
+  /// JSON con campos del formulario (tipo, title, description, busId…).
+  templateJson    String
+  busId           String?
+  nextRunAt       DateTime
+  lastRunAt       DateTime?
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  createdBy       User?     @relation("TicketRecurrenceCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([active, nextRunAt])
+}
+
+/// Atajo destacado de KB en el dashboard (gestor elige artículos).
+model KbDashboardShortcut {
+  id        String    @id @default(cuid())
+  articleId String
+  sortOrder Int       @default(0)
+  label     String?
+  createdAt DateTime  @default(now())
+  article   KbArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([sortOrder])
+}
+
+/// Suscripción Web Push de un usuario (notificaciones fuera del navegador).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model TicketComment {
@@ -388,6 +595,11 @@ model User {
   createdPreventiveTasks PreventiveTask[] @relation("PreventiveTaskCreator")
   assignedPreventiveTasks PreventiveTask[] @relation("PreventiveTaskAssignee")
   assignedTickets Ticket[] @relation("TicketAssignee")
+  createdTickets  Ticket[] @relation("TicketCreator")
+  ticketWatchers  TicketWatcher[]
+  ticketDesvioLinks TicketDesvioLink[] @relation("TicketDesvioLinkCreator")
+  ticketRecurrences TicketRecurrence[] @relation("TicketRecurrenceCreator")
+  pushSubscriptions PushSubscription[]
   createdDashboards CustomDashboard[] @relation("DashboardCreator")
   preferredDashboard CustomDashboard? @relation("UserPreferredDashboard", fields: [preferredDashboardId], references: [id], onDelete: SetNull)
   feedbackItems UserFeedback[]
@@ -401,6 +613,10 @@ model User {
   savedTicketViews      SavedTicketView[] @relation("SavedTicketViewOwner")
   authoredHandovers     ShiftHandover[] @relation("HandoverAuthor")
   acknowledgedHandovers ShiftHandover[] @relation("HandoverAcknowledged")
+  bitacoraEntries       BitacoraEntry[] @relation("BitacoraAuthor")
+  ticketAssignmentRules TicketAssignmentRule[] @relation("TicketAssignmentRuleTechnician")
+  ticketDeletionRequests TicketDeletionRequest[] @relation("TicketDeletionRequester")
+  reviewedTicketDeletions TicketDeletionRequest[] @relation("TicketDeletionReviewer")
 }
 
 model UserFeedback {
@@ -492,7 +708,11 @@ model AuditEvent {
 ///   - `eventName` es snake_case con prefijo de dominio: `page_visit`,
 ///     `ticket_create_open`, `ticket_create_step`, `ticket_create_complete`,
 ///     `ticket_create_abandon`, `feedback_submit_open/complete/abandon`,
-///     `search_query`, `client_error`, `ticket_status_change`, etc.
+///     `search_query`, `client_error`, `ticket_status_change`, `ticket_resolved`, etc.
+///   - `ticket_resolved` (servidor): props JSON con `ticket_id`, `from_status`,
+///     `to_status`, `resolution_channel` (`status_change` | `create_closed` |
+///     `express` | `draft_promote`), `sla_met`, `assigned`, etc. Ver
+///     `trackTicketResolvedTelemetry` en `lib/ticket-resolution-telemetry.ts`.
 ///   - `sessionId` es un UUID generado en el cliente y persistido en
 ///     sessionStorage. Permite agrupar eventos de la misma pestaña.
 ///   - `path` es la ruta donde se disparó (`/tickets`, `/dashboard`...).
@@ -635,6 +855,7 @@ model Desvio {
   actualizado_en       DateTime     @updatedAt
   confirmado_por       String?
   confirmado_en        DateTime?
+  ticketLinks          TicketDesvioLink[]
 
   @@index([estado, fecha_inicio])
   @@index([referencia])
@@ -757,6 +978,38 @@ model ShiftHandover {
   acknowledgedBy    User?    @relation("HandoverAcknowledged",  fields: [acknowledgedById], references: [id], onDelete: SetNull)
 
   @@index([shiftDate, shift])
+  @@index([createdAt])
+}
+
+/// Tipo de entrada en la bitácora de turno (Conocimiento → Bitácora).
+enum BitacoraEntryKind {
+  nota
+  alerta
+  pendiente
+}
+
+/// Entrada de bitácora: log operativo continuo entre turnos M/T/N.
+/// El contenido se guarda como JSON de TipTap (`contentJson`).
+model BitacoraEntry {
+  id          String            @id @default(cuid())
+  /// yyyy-mm-dd del turno al que pertenece la nota.
+  shiftDate   String
+  /// "M" | "T" | "N".
+  shift       String
+  kind        BitacoraEntryKind @default(nota)
+  /// Título opcional para localizar la nota en el timeline.
+  title       String?
+  contentJson String
+  /// Las entradas fijadas se muestran arriba del timeline del turno.
+  pinned      Boolean           @default(false)
+  authorId    String?
+  authorName  String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  author      User?             @relation("BitacoraAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([shiftDate, shift, createdAt])
+  @@index([pinned, createdAt])
   @@index([createdAt])
 }
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { CHART_TYPES } from "@/lib/dashboard/chart-types";
 import { prisma } from "@/lib/prisma";
+import { canManageDashboards } from "@/lib/rbac";
 
 const createWidgetSchema = z.object({
   title: z.string().trim().min(2),
@@ -83,7 +84,7 @@ export async function POST(request: Request, context: ParamsContext) {
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para añadir widgets" }, { status: 401 });
     }
-    if (actor.role !== "gestor_centro_control") {
+    if (!canManageDashboards(actor.role)) {
       return NextResponse.json({ message: "Rol sin permisos para añadir widgets" }, { status: 403 });
     }
 
@@ -160,7 +161,7 @@ export async function PATCH(request: Request) {
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para ordenar widgets" }, { status: 401 });
     }
-    if (actor.role !== "gestor_centro_control") {
+    if (!canManageDashboards(actor.role)) {
       return NextResponse.json({ message: "Rol sin permisos para ordenar widgets" }, { status: 403 });
     }
 
@@ -241,7 +242,7 @@ export async function DELETE(request: Request) {
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para eliminar widgets" }, { status: 401 });
     }
-    if (actor.role !== "gestor_centro_control") {
+    if (!canManageDashboards(actor.role)) {
       return NextResponse.json({ message: "Rol sin permisos para eliminar widgets" }, { status: 403 });
     }
 

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ChangePasswordForm } from "@/components/change-password-form";
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
@@ -30,7 +31,10 @@ export default async function ChangePasswordPage({ searchParams }: PageProps) {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12 sm:px-6">
-      <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-lg sm:p-6">
+      <div className="ccmgc-hero rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-lg sm:p-6">
+        <SectionEyebrow pulse dotColor="var(--color-accent)" className="mb-3">
+          Seguridad
+        </SectionEyebrow>
         <ChangePasswordForm
           userName={user.name}
           userEmail={user.email}

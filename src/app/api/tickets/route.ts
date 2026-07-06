@@ -25,10 +25,25 @@ import {
   ticketUploadByteLimit,
 } from "@/lib/ticket-uploads";
 import { getSlaMinutesForPriority } from "@/lib/sla-config";
+import { recordTicketStatusChange } from "@/lib/ticket-status-history";
+import { linkTicketDesvio, suggestDesviosForTicket } from "@/lib/ticket-desvio-links";
 import { publishTicketEvent } from "@/lib/tickets-events";
+import { tryAutoAssignTicket } from "@/lib/ticket-auto-assign";
+import { pendingCompletionWhere } from "@/lib/tickets/pending-completion";
 import { addMinutesIso, calculatePriority } from "@/lib/ticketing";
 import type { NivelImpacto } from "@/lib/tipologia";
+import { trackTicketResolvedTelemetry } from "@/lib/ticket-resolution-telemetry";
 import { trackServerUxEvent } from "@/lib/ux-server";
+import {
+  CatalogIdFormatError,
+  collectOperatorPrefixes,
+  validateOptionalLineaLabel,
+} from "@/lib/catalog-id-format";
+import { resolveBusAndAssetForTicket } from "@/lib/ticket-bus-asset";
+import {
+  normalizeTicketPriorityFilter,
+  normalizeTicketStatusFilter,
+} from "@/lib/ticket-filters";
 
 const createTicketSchema = z.object({
   // El usuario puede teclear un bus que no esté en el catálogo: lo crearemos al
@@ -94,38 +109,16 @@ const createTicketSchema = z.object({
   { message: "Latitud y longitud deben enviarse juntas", path: ["latitude"] },
 );
 
-function normalizeStatus(value: string | null): TicketStatus | "todos" {
-  if (!value || value === "todos") {
-    return "todos";
-  }
-
-  if (
-    value === "abierto" ||
-    value === "en_proceso" ||
-    value === "esperando_repuesto" ||
-    value === "resuelto"
-  ) {
-    return value;
-  }
-
-  return "todos";
-}
-
-function normalizePriorityFilter(value: string | null): TicketPriority | "todos" {
-  if (!value || value === "todos") return "todos";
-  if (value === "alta" || value === "media" || value === "baja") return value;
-  return "todos";
-}
-
 export async function GET(request: Request) {
   try {
     const actor = await resolveRequestActor(request);
     await ensureCatalogSeeded();
     const { searchParams } = new URL(request.url);
-    const status = normalizeStatus(searchParams.get("status"));
-    const priority = normalizePriorityFilter(searchParams.get("priority"));
+    const status = normalizeTicketStatusFilter(searchParams.get("status"));
+    const priority = normalizeTicketPriorityFilter(searchParams.get("priority"));
     const operator = searchParams.get("operator");
     const busId = searchParams.get("busId");
+    const tipo = searchParams.get("tipo");
     const partCodeRaw = searchParams.get("partCode")?.trim() ?? "";
     // `mine=1` (o `assignee=me`) limita la bandeja a los tickets asignados al
     // usuario que hace la petición. Para gestores es útil para "ver lo mío",
@@ -156,10 +149,13 @@ export async function GET(request: Request) {
 
     const tickets = await prisma.ticket.findMany({
       where: {
-        status: status === "todos" ? undefined : status,
+        ...(status === "borrador"
+          ? pendingCompletionWhere()
+          : { status: status === "todos" ? undefined : status }),
         priority: priority === "todos" ? undefined : priority,
         busId: busId && busId !== "todas" ? busId : undefined,
         bus: operator && operator !== "todas" ? { operator } : undefined,
+        tipo: tipo && tipo !== "todos" ? tipo : undefined,
         ...(onlyMine ? { assignedToUserId: onlyMine } : {}),
         ...(partTicketIds !== null
           ? partTicketIds.length > 0
@@ -232,8 +228,11 @@ export async function GET(request: Request) {
         longitude: ticket.longitude ?? null,
         assignedToUserId: ticket.assignedToUserId ?? null,
         assignedToUserName: ticket.assignedTo?.name ?? null,
+        createdByUserId: ticket.createdByUserId ?? null,
         createdAt: ticket.createdAt.toISOString(),
         updatedAt: ticket.updatedAt.toISOString(),
+        incidentOccurredAt: ticket.incidentOccurredAt?.toISOString() ?? null,
+        needsCompletion: ticket.needsCompletion,
         attachments: ticket.attachments.map((a) => {
           const meta = metaById.get(a.id);
           const diskFileName = meta?.diskFileName ?? null;
@@ -377,68 +376,43 @@ export async function POST(request: Request) {
     } = parsed;
 
     // ====== Resolver bus + activo (creando al vuelo si no existen) ======
-    // El usuario puede teclear un bus que no esté en el catálogo: si no existe
-    // lo creamos con valores por defecto y un activo SAE-DEFAULT, para que el
-    // ticket pueda persistir. El gestor del catálogo lo completará después.
-    const busId = rawBusId.trim();
-    const existingBus = await prisma.bus.findUnique({
-      where: { id: busId },
-      include: { assets: true },
-    });
-
-    let asset;
-    let busWasCreated = false;
-    if (!existingBus) {
-      const defaultAssetId = `${busId}-SAE-DEFAULT`;
-      const created = await prisma.bus.create({
-        data: {
-          id: busId,
-          operator: "Sin asignar",
-          municipio: "Sin asignar",
-          lineas: "",
-          assets: {
-            create: [
-              {
-                id: defaultAssetId,
-                type: "sae",
-                serialNumber: `SN-${busId}-01`,
-              },
-            ],
-          },
-        },
-        include: { assets: true },
-      });
-      busWasCreated = true;
-      asset = created.assets[0];
-    } else {
-      const assetIdTrimmed = rawAssetId?.trim() ?? "";
-      if (assetIdTrimmed) {
-        const found = existingBus.assets.find((row) => row.id === assetIdTrimmed);
-        if (!found) {
-          return NextResponse.json(
-            { message: "Activo no valido para el bus indicado" },
-            { status: 400 },
-          );
-        }
-        asset = found;
-      } else {
-        // Sin assetId explícito: usamos el primer activo del bus (típicamente el SAE).
-        // Si el bus no tiene ningún activo (caso del catálogo recién importado),
-        // creamos SAE-DEFAULT al vuelo en lugar de fallar.
-        if (existingBus.assets.length === 0) {
-          const defaultAssetId = `${busId}-SAE-DEFAULT`;
-          asset = await prisma.asset.create({
-            data: {
-              id: defaultAssetId,
-              busId,
-              type: "sae",
-              serialNumber: `SN-${busId}-01`,
-            },
-          });
-        } else {
-          asset = existingBus.assets[0];
-        }
+    let resolvedLineaLabel = lineaLabel;
+    if (lineaLabel) {
+      const [lineaRows, busRows] = await Promise.all([
+        prisma.linea.findMany({ select: { id: true } }),
+        prisma.bus.findMany({ select: { id: true } }),
+      ]);
+      const knownPrefixes = collectOperatorPrefixes([
+        ...busRows.map((b) => b.id),
+        ...lineaRows.map((l) => l.id),
+      ]);
+      const lineaCheck = validateOptionalLineaLabel(
+        lineaLabel,
+        lineaRows.map((l) => l.id),
+        knownPrefixes,
+      );
+      if (!lineaCheck.ok) {
+        return NextResponse.json({ message: lineaCheck.message }, { status: 400 });
       }
+      resolvedLineaLabel = lineaCheck.normalized;
+    }
+
+    let busId: string;
+    let asset;
+    let busWasCreated: boolean;
+    try {
+      const resolved = await resolveBusAndAssetForTicket(rawBusId, rawAssetId);
+      busId = resolved.busId;
+      asset = resolved.asset;
+      busWasCreated = resolved.busWasCreated;
+    } catch (err) {
+      if (err instanceof CatalogIdFormatError) {
+        return NextResponse.json({ message: err.message }, { status: 400 });
+      }
+      if (err instanceof Error && err.message === "ASSET_INVALID") {
+        return NextResponse.json({ message: "Activo no valido para el bus indicado" }, { status: 400 });
+      }
+      throw err;
     }
 
     const priority = calculatePriority({
@@ -497,14 +471,12 @@ export async function POST(request: Request) {
         title,
         description,
         status: shouldCreateClosed ? "resuelto" : "abierto",
-        // Nota: el modelo Ticket no tiene un campo `resolvedAt` propio. El
-        // estado `resuelto` + `updatedAt` (que Prisma toca al crear) ya marca
-        // el momento de resolución. El frontend cae a `updatedAt` cuando lee
-        // tickets resueltos (ver tickets-module.tsx).
+        createdByUserId: actor.userId,
+        ...(shouldCreateClosed ? { resolvedAt: now } : {}),
         ...(shouldAssignToActor ? { assignedToUserId: actor.userId } : {}),
         priority,
         slaDeadline: new Date(addMinutesIso(now, slaMinutes)),
-        lineaLabel: lineaLabel ?? null,
+        lineaLabel: resolvedLineaLabel ?? null,
         servicioLabel: servicioLabel ?? null,
         conductorLabel: conductorLabel ?? null,
         ...(latitude !== undefined && longitude !== undefined
@@ -521,6 +493,30 @@ export async function POST(request: Request) {
 
     if (uploadedFiles.length > 0) {
       await saveTicketUploadFiles(created.id, uploadedFiles);
+    }
+
+    await recordTicketStatusChange({
+      ticketId: created.id,
+      fromStatus: null,
+      toStatus: shouldCreateClosed ? "resuelto" : "abierto",
+      changedByUserId: actor.userId,
+      changedByName: actor.displayName,
+      comment: shouldCreateClosed ? "Ticket creado ya resuelto" : "Ticket creado",
+    });
+
+    if (!shouldCreateClosed) {
+      const desvioSuggestions = await suggestDesviosForTicket({
+        busId,
+        lineaLabel: resolvedLineaLabel ?? null,
+      });
+      if (desvioSuggestions[0]) {
+        await linkTicketDesvio({
+          ticketId: created.id,
+          desvioId: desvioSuggestions[0].id,
+          kind: "auto",
+          createdByUserId: actor.userId,
+        });
+      }
     }
 
     // Reserva de repuesto solo si el ticket no nace ya resuelto: si nace
@@ -554,6 +550,16 @@ export async function POST(request: Request) {
       detail: auditDetailParts.join(" "),
     });
 
+    let assignedToUserId = created.assignedToUserId;
+    let assignedToUserName: string | null = shouldAssignToActor ? actor.displayName : null;
+    if (!shouldCreateClosed && !shouldAssignToActor) {
+      const auto = await tryAutoAssignTicket(created.id);
+      if (auto.assigned) {
+        assignedToUserId = auto.userId;
+        assignedToUserName = auto.userName;
+      }
+    }
+
     // Métrica server-side: complementa al evento de cliente `ticket_create_complete`.
     // El de cliente mide tiempo en formulario; éste cuenta CREATEs efectivos
     // (incluye los que entran por API directa, p.ej. /api/tickets/from-email).
@@ -573,6 +579,23 @@ export async function POST(request: Request) {
       },
     });
 
+    if (shouldCreateClosed) {
+      trackTicketResolvedTelemetry({
+        actor: { userId: actor.userId, role: actor.role },
+        request,
+        ticketId: created.id,
+        busId: created.busId,
+        fromStatus: null,
+        createdAt: created.createdAt,
+        resolvedAt: now,
+        slaDeadline: created.slaDeadline,
+        priority: created.priority,
+        tipo: created.tipo,
+        assignedToUserId: created.assignedToUserId,
+        resolutionChannel: "create_closed",
+      });
+    }
+
     publishTicketEvent("ticket_created", {
       id: created.id,
       busId: created.busId,
@@ -583,7 +606,8 @@ export async function POST(request: Request) {
           : "esperando_repuesto",
       priority: created.priority,
       title: created.title,
-      assignedToUserId: created.assignedToUserId,
+      assignedToUserId,
+      assignedToUserName,
       by: actor.displayName,
     });
 

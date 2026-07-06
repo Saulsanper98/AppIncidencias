@@ -1,7 +1,20 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { BookOpen, Check, ChevronDown, ExternalLink, Film, ImageIcon, Info, Plus, UploadCloud } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  ChevronDown,
+  ExternalLink,
+  Film,
+  ImageIcon,
+  MapPin,
+  RotateCcw,
+  UploadCloud,
+  UserRoundCheck,
+  Zap,
+  CircleCheckBig,
+} from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -15,11 +28,17 @@ import {
 } from "react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
+import { toast } from "@/components/toast-host";
 import { TicketTemplatePicker } from "@/components/tickets/TicketTemplatePicker";
+import { TipologiaPickerSection, applyGenericTipologiaToForm } from "@/components/tickets/TipologiaPickerSection";
+import { BusOperationalContextPanel } from "@/components/tickets/BusOperationalContextPanel";
+import { TicketDuplicateAlert } from "@/components/tickets/TicketDuplicateAlert";
+import { TypeaheadInput } from "@/components/ui/typeahead-input";
 import { VoiceInputButton } from "@/components/ui/VoiceInputButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
 import type {
   CatalogBus,
   CreateTicketPayload,
@@ -43,13 +62,16 @@ import {
 import type { SessionUser } from "@/lib/domain";
 import { calculatePriority, calculateSlaMinutes, toUiPriority } from "@/lib/ticketing";
 import {
-  GENERIC_SUBSUBTIPO,
-  GENERIC_SUBTIPO,
   GENERIC_TIPO,
-  getGenericTipologia,
   type TipologiaItem,
 } from "@/lib/tipologia";
 import { priorityBadgeProps } from "@/lib/ticket-ui";
+import {
+  collectOperatorPrefixes,
+  formatPrefixHint,
+  validateOptionalLineaLabel,
+} from "@/lib/catalog-id-format";
+import { resolveBusIdForForm } from "@/lib/ticket-bus-asset";
 import { cn } from "@/lib/utils";
 import { useTimedFlow } from "@/lib/ux-telemetry";
 
@@ -68,153 +90,224 @@ const TicketLocationPicker = dynamic(
   },
 );
 
-/**
- * Stepper visual de 4 pasos: círculos numerados con estado completado /
- * activo / pendiente, conectados por una línea de progreso continuo.
- * Mucho más legible que la barra de 4 segmentos del diseño anterior.
- */
-function FormStepper({
+/** Barra de progreso fina (sin caja contenedora). */
+function FormProgressBar({
   steps,
-  nextIndex,
   openIndex,
-  flashIndex,
-  onJump,
   percent,
+  onJump,
 }: {
   steps: boolean[];
-  nextIndex: number | null;
   openIndex: number;
-  flashIndex: number | null;
-  onJump: (i: number) => void;
   percent: number;
+  onJump?: (index: number) => void;
 }) {
   const labels = ["Equipo", "Tipología", "Detalle", "Adjuntos"] as const;
   return (
-    <div
-      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 pb-3 pt-3"
-      aria-label="Progreso del borrador"
-    >
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <span className="text-eyebrow">Progreso</span>
-        <span className="num-tabular text-[12px] font-semibold text-[var(--color-text-1)]">{percent}%</span>
+    <div className="ticket-form-progress" aria-label="Progreso del borrador">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
+          Progreso del borrador
+        </span>
+        <span className="num-tabular text-[12px] font-semibold text-[var(--color-text-2)]">{percent}%</span>
       </div>
-      <div className="relative flex items-center justify-between">
-        {/* Línea base */}
-        <div className="absolute left-3 right-3 top-3.5 h-px bg-[var(--color-border)]" aria-hidden />
-        {/* Línea de progreso (proporcional al porcentaje completado, capada al
-            tramo entre el primer y último paso). */}
-        <div
-          className="absolute left-3 top-3.5 h-px bg-[var(--color-accent)] transition-[width] duration-300 ease-out"
-          style={{ width: `calc(${percent}% - 24px * ${percent / 100})` }}
-          aria-hidden
-        />
-        {steps.map((done, i) => {
-          const isOpen = i === openIndex;
-          const isNext = i === nextIndex;
-          const flash = i === flashIndex;
+      <div
+        className="ticket-form-progress__track"
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div className="ticket-form-progress__fill" style={{ width: `${percent}%` }} />
+      </div>
+      <ul className="ticket-form-progress__steps">
+        {labels.map((label, i) => {
+          const stepState = steps[i] ? "done" : i === openIndex ? "current" : "pending";
+          const content = (
+            <>
+              <span className="ticket-form-progress__step-num" aria-hidden>
+                {steps[i] ? <Check size={11} strokeWidth={2.5} /> : i + 1}
+              </span>
+              {label}
+            </>
+          );
+          const className = cn(
+            "ticket-form-progress__step",
+            stepState === "done" && "ticket-form-progress__step--done",
+            stepState === "current" && "ticket-form-progress__step--current",
+            stepState === "pending" && "ticket-form-progress__step--pending",
+            onJump &&
+              "cursor-pointer transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/40",
+          );
           return (
-            <button
-              key={i}
-              type="button"
-              onClick={() => onJump(i)}
-              aria-current={isOpen ? "step" : undefined}
-              className="relative z-10 flex flex-col items-center gap-1.5 px-1"
-              title={labels[i]}
-            >
-              <span
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-full border-2 text-[11px] font-semibold transition-all duration-200",
-                  done
-                    ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
-                    : isNext || isOpen
-                      ? "border-[var(--color-accent)] bg-[var(--color-surface)] text-[var(--color-accent)]"
-                      : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-3)]",
-                  flash && "ccmgc-draft-step-flash",
-                )}
-              >
-                {done ? <Check size={13} strokeWidth={3} /> : i + 1}
-              </span>
-              <span
-                className={cn(
-                  "text-[10px] font-medium transition-colors",
-                  done
-                    ? "text-[var(--color-text-2)]"
-                    : isOpen || isNext
-                      ? "text-[var(--color-text-1)]"
-                      : "text-[var(--color-text-3)]",
-                )}
-              >
-                {labels[i]}
-              </span>
-            </button>
+            <li key={label}>
+              {onJump ? (
+                <button type="button" onClick={() => onJump(i)} className={className} title={`Ir a ${label}`}>
+                  {content}
+                </button>
+              ) : (
+                <span className={className}>{content}</span>
+              )}
+            </li>
           );
         })}
-      </div>
+      </ul>
     </div>
   );
 }
 
-function CollapsibleFormBlock({
+/** Plantillas + contexto operativo del bus, colapsado por defecto. */
+function FormHeaderExtras({
+  busId,
+  lineaLabel,
+  form,
+  setForm,
+  sessionUser,
+}: {
+  busId: string;
+  lineaLabel: string;
+  form: FormState;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  sessionUser: SessionUser | null;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-t border-[var(--color-border)] pt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 text-left text-[12px] text-[var(--color-text-2)] transition-colors hover:text-[var(--color-text-1)]"
+      >
+        <span>
+          <span className="font-medium text-[var(--color-accent)]">Más contexto</span>
+          <span className="text-[var(--color-text-3)]"> · plantillas y tickets del bus</span>
+        </span>
+        <ChevronDown
+          size={16}
+          className={cn("shrink-0 text-[var(--color-text-3)] transition-transform duration-200", open && "rotate-180")}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div className="mt-3 space-y-4 border-t border-[var(--color-border)]/60 pt-3">
+          <BusOperationalContextPanel busId={busId} lineaLabel={lineaLabel} plain />
+          <TicketTemplatePicker form={form} setForm={setForm} sessionUser={sessionUser} embedded />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Sección plana (`account-section`). Plegable solo en móvil. */
+function FormSection({
   title,
   subtitle,
   stepLabel,
+  sectionId,
   open,
   onToggle,
+  sectionValid,
   children,
 }: {
   title: string;
   subtitle?: string;
   stepLabel?: string;
+  sectionId?: TicketFormSectionId;
   open: boolean;
   onToggle: () => void;
+  sectionValid?: boolean;
   children: ReactNode;
 }) {
   const reduceMotion = useReducedMotion();
-  return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 transition-shadow duration-200",
-        open && "ring-2 ring-[var(--color-accent)]/30 shadow-[0_0_0_1px_rgba(37,99,235,0.12)]",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors duration-200 hover:bg-[var(--color-surface-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]"
+  const [mobile, setMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const sync = () => setMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const expanded = mobile ? open : true;
+
+  const heading = (
+    <>
+      <span
+        className="account-section-icon"
+        style={{ ["--section-tone" as string]: "var(--color-accent)" }}
+        aria-hidden
       >
-        <div className="min-w-0">
-          <p className="flex flex-wrap items-center gap-2 text-label text-[var(--color-text-1)]">
-            {stepLabel ? (
-              <span className="shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-1.5 py-0.5 font-mono text-[10px] font-medium text-[var(--color-text-3)]">
-                {stepLabel}
-              </span>
-            ) : null}
-            {title}
-          </p>
-          {subtitle ? <p className="truncate text-caption text-[var(--color-text-3)]">{subtitle}</p> : null}
-        </div>
+        {stepLabel ? stepLabel.split("/")[0] : "·"}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="account-section-pretitle">
+          <span
+            className="account-section-pretitle-dot"
+            style={{ ["--section-tone" as string]: "var(--color-accent)" }}
+            aria-hidden
+          />
+          Paso {stepLabel ?? ""}
+        </p>
+        <h3 className="account-section-title !text-base sm:!text-[1.05rem]">
+          {title}
+          {sectionValid ? (
+            <Check
+              size={15}
+              strokeWidth={2.5}
+              className="ml-1.5 inline shrink-0 text-[var(--color-success)]"
+              aria-label="Completado"
+            />
+          ) : null}
+        </h3>
+        {subtitle ? <p className="mt-0.5 truncate text-caption text-[var(--color-text-3)]">{subtitle}</p> : null}
+      </div>
+      {mobile ? (
         <ChevronDown
-          size={16}
-          className={cn("shrink-0 text-[var(--color-text-3)] transition-transform duration-200 ease-out", open && "rotate-180")}
+          size={18}
+          className={cn(
+            "shrink-0 text-[var(--color-text-3)] transition-transform duration-200",
+            open && "rotate-180",
+          )}
           aria-hidden
         />
-      </button>
+      ) : null}
+    </>
+  );
+
+  return (
+    <section
+      id={sectionId ? `ticket-form-section-${sectionId}` : undefined}
+      className="ticket-form-section scroll-mt-4 border-b border-[var(--color-border)] py-5 last:border-b-0"
+    >
+      {mobile ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="account-section-head w-full text-left transition-colors hover:bg-[var(--color-surface-2)]/30"
+        >
+          {heading}
+        </button>
+      ) : (
+        <header className="account-section-head">{heading}</header>
+      )}
       <AnimatePresence initial={false}>
-        {open ? (
+        {expanded ? (
           <motion.div
-            key="block"
-            initial={{ height: 0, opacity: 0.6 }}
+            key="body"
+            initial={mobile && !reduceMotion ? { height: 0, opacity: 0.6 } : false}
             animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0.6 }}
+            exit={mobile && !reduceMotion ? { height: 0, opacity: 0.6 } : undefined}
             transition={reduceMotion ? { duration: 0 } : { duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
-            className="overflow-hidden border-t border-[var(--color-border)]"
+            className={expanded ? "overflow-visible" : "overflow-hidden"}
           >
-            <div className="px-3 py-3">{children}</div>
+            <div className="ticket-form-section__body mt-4 space-y-4">{children}</div>
           </motion.div>
         ) : null}
       </AnimatePresence>
-    </div>
+    </section>
   );
 }
 
@@ -233,6 +326,8 @@ export type TicketCreateFormProps = {
   setNotice: (value: string | null) => void;
   setNoticeTone: (value: "success" | "warning" | "info") => void;
   setNoticePlacement: (value: "card" | "toast" | "center") => void;
+  /** Dentro de un desplegable en Gestión (sin marco ni título duplicado). */
+  embedded?: boolean;
 };
 
 export function TicketCreateForm({
@@ -246,11 +341,30 @@ export function TicketCreateForm({
   setNotice,
   setNoticeTone,
   setNoticePlacement,
+  embedded = false,
 }: TicketCreateFormProps) {
   const [form, setForm] = useState<FormState>(defaultForm());
   const [formSectionOpen, setFormSectionOpen] = useState<Record<TicketFormSectionId, boolean>>(() =>
     normalizeAccordionOpen(undefined, "equipment"),
   );
+
+  // En escritorio mostramos todas las secciones abiertas (formulario continuo).
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const expandAll = () => {
+      if (mq.matches) {
+        setFormSectionOpen({
+          equipment: true,
+          tipologia: true,
+          detail: true,
+          attachments: true,
+        });
+      }
+    };
+    expandAll();
+    mq.addEventListener("change", expandAll);
+    return () => mq.removeEventListener("change", expandAll);
+  }, []);
 
   // Telemetría: medimos el tiempo total de creación de ticket, paso a paso.
   // El flujo se "abre" al montar el formulario y se "completa" cuando el
@@ -365,6 +479,19 @@ export function TicketCreateForm({
   }, [form.title, form.description]);
 
   const trimmedBusId = form.busId.trim();
+  const titleInvalid = form.title.trim().length > 0 && form.title.trim().length < 3;
+  const catalogPrefixes = useMemo(
+    () => collectOperatorPrefixes([...catalog.map((bus) => bus.id), ...lineas]),
+    [catalog, lineas],
+  );
+  const busIdValidation = useMemo(
+    () => resolveBusIdForForm(trimmedBusId, catalog.map((bus) => bus.id), catalogPrefixes),
+    [trimmedBusId, catalog, catalogPrefixes],
+  );
+  const lineaValidation = useMemo(
+    () => validateOptionalLineaLabel(form.lineaLabel, lineas, catalogPrefixes),
+    [form.lineaLabel, lineas, catalogPrefixes],
+  );
   const selectedBus = useMemo(() => catalog.find((bus) => bus.id === trimmedBusId), [catalog, trimmedBusId]);
   /**
    * Pedro pidió poder teclear un bus que no esté en el catálogo. Si el usuario
@@ -372,7 +499,22 @@ export function TicketCreateForm({
    * "nuevo": al guardar, el backend lo creará al vuelo con un activo
    * SAE-DEFAULT y se ocultará el selector de activo.
    */
-  const isNewBus = trimmedBusId !== "" && !selectedBus;
+  const isNewBus = busIdValidation.ok && "isNew" in busIdValidation && busIdValidation.isNew;
+  const busTypeaheadOptions = useMemo(
+    () =>
+      catalog.map((bus) => ({
+        value: bus.id,
+        hint: [bus.operator || "Sin asignar", bus.municipio].filter(Boolean).join(" · "),
+      })),
+    [catalog],
+  );
+  const lineaTypeaheadOptions = useMemo(
+    () =>
+      Array.from(new Set([...(selectedBus?.lineas ?? []), ...lineas])).map((linea) => ({
+        value: linea,
+      })),
+    [selectedBus?.lineas, lineas],
+  );
   // El activo se asigna automaticamente en backend (SAE-DEFAULT del bus). Solo
   // conservamos `selectedAsset` para el SLA del catalogo si existiera explicito.
   const selectedAsset = (selectedBus?.assets ?? []).find((asset) => asset.id === form.assetId);
@@ -392,13 +534,6 @@ export function TicketCreateForm({
       ),
     [tipologias, form.tipo],
   );
-  const availableSubsubtipos = useMemo(
-    () =>
-      tipologias
-        .filter((item) => item.tipo === form.tipo && item.subtipo === form.subtipo)
-        .map((item) => item.subsubtipo),
-    [tipologias, form.tipo, form.subtipo],
-  );
   const selectedTipologia = useMemo(
     () =>
       tipologias.find(
@@ -406,6 +541,32 @@ export function TicketCreateForm({
       ),
     [tipologias, form.tipo, form.subtipo, form.subsubtipo],
   );
+
+  const applyTipologiaSelection = useCallback((item: TipologiaItem) => {
+    setForm((prev) => ({
+      ...prev,
+      tipo: item.tipo,
+      subtipo: item.subtipo,
+      subsubtipo: item.subsubtipo,
+      dominio: item.dominio,
+      nivelImpacto: item.nivelImpacto,
+      origenTecnico: item.origenTecnico,
+      observaciones: item.observaciones,
+    }));
+  }, []);
+
+  const resetTipologiaForSearch = useCallback(() => {
+    setForm((prev) => ({
+      ...prev,
+      tipo: "",
+      subtipo: "",
+      subsubtipo: "",
+      dominio: "",
+      nivelImpacto: "Medio",
+      origenTecnico: "",
+      observaciones: "",
+    }));
+  }, []);
 
   const computedPriority = useMemo(() => {
     if (selectedAsset) {
@@ -434,9 +595,9 @@ export function TicketCreateForm({
       ? selectedAsset.slaMinutes
       : calculateSlaMinutes(computedPriority, slaOverride);
   const ticketFormProgress = useMemo(() => {
+    const equipmentValid = busIdValidation.ok && lineaValidation.ok;
     const checks = [
-      // Paso 1: hay bus indicado (el activo se asigna automaticamente en backend).
-      Boolean(trimmedBusId),
+      equipmentValid,
       Boolean(form.tipo && form.subtipo && form.subsubtipo),
       form.title.trim().length >= 3,
       form.description.trim().length >= 8,
@@ -450,30 +611,38 @@ export function TicketCreateForm({
       checks,
       nextStepIndex: nextStepIndex === -1 ? null : nextStepIndex,
     };
-  }, [form, trimmedBusId, isNewBus]);
+  }, [form, busIdValidation, lineaValidation]);
+  const equipmentMissingHint = useMemo(() => {
+    if (!trimmedBusId) return "Bus";
+    if (!busIdValidation.ok) return "Bus con prefijo de operadora";
+    if (!lineaValidation.ok) return "Línea con prefijo de operadora";
+    return "Equipo indicado";
+  }, [trimmedBusId, busIdValidation, lineaValidation]);
 
   const reduceMotionUi = useReducedMotion();
   const prevFormProgressFilledRef = useRef(ticketFormProgress.filled);
-  const [draftStepFlashIndex, setDraftStepFlashIndex] = useState<number | null>(null);
+  const clearConfirmCancelRef = useRef<HTMLButtonElement>(null);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+
+  const hasMapPin = Boolean(form.mapLatitude.trim() && form.mapLongitude.trim());
 
   useEffect(() => {
-    const prev = prevFormProgressFilledRef.current;
-    if (ticketFormProgress.filled > prev) {
-      setDraftStepFlashIndex(ticketFormProgress.filled - 1);
-      const flashTimer = window.setTimeout(() => setDraftStepFlashIndex(null), 700);
-      // Antes auto-avanzábamos al siguiente paso cerrando la sección activa,
-      // pero eso "robaba" el foco mientras el usuario aún estaba escribiendo
-      // (por ejemplo, al teclear el 3er carácter del título). Ahora SOLO
-      // mostramos el flash visual del ✓ y dejamos que el usuario navegue a
-      // mano (o pulse al botón principal cuando esté listo). El stepper
-      // superior sigue indicando qué paso falta.
-      prevFormProgressFilledRef.current = ticketFormProgress.filled;
-      return () => {
-        window.clearTimeout(flashTimer);
-      };
-    }
     prevFormProgressFilledRef.current = ticketFormProgress.filled;
   }, [ticketFormProgress.filled]);
+
+  const jumpToFormSection = useCallback((index: number) => {
+    const id = TICKET_FORM_SECTION_ORDER[index];
+    if (!id) return;
+    setFormSectionOpen({
+      equipment: id === "equipment",
+      tipologia: id === "tipologia",
+      detail: id === "detail",
+      attachments: id === "attachments",
+    });
+    requestAnimationFrame(() => {
+      document.getElementById(`ticket-form-section-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   const toggleFormSection = useCallback((id: TicketFormSectionId) => {
     setFormSectionOpen((prev) => {
@@ -486,6 +655,47 @@ export function TicketCreateForm({
       };
     });
   }, []);
+
+  const isFormDirty = useMemo(() => {
+    if (stagedUploadFiles.length > 0) return true;
+    if (createAsResolved || resolutionNote.trim()) return true;
+    if (form.comment.trim()) return true;
+    if (form.lineaLabel.trim() || form.servicioLabel.trim() || form.conductorLabel.trim()) return true;
+    if (form.mapLatitude.trim() || form.mapLongitude.trim() || form.mapPlaceMunicipio.trim()) return true;
+    if (ticketFormProgress.filled > 0) return true;
+    return false;
+  }, [form, stagedUploadFiles, createAsResolved, resolutionNote, ticketFormProgress.filled]);
+
+  const performClearTicketForm = useCallback(() => {
+    const startingBus = catalog[0]?.id ?? "";
+    setForm(defaultForm(startingBus));
+    setStagedUploadFiles([]);
+    setFormSectionOpen(normalizeAccordionOpen(undefined, "equipment"));
+    setCreateAsResolved(false);
+    setResolutionNote("");
+    setAssignToMe(canActorAssumeTicket);
+    setKbSuggestions([]);
+    setKbSuggestDismissed(false);
+    setMapLocationHint(null);
+    prevFormProgressFilledRef.current = 0;
+    lastSectionRef.current = null;
+    try {
+      sessionStorage.removeItem(TICKET_FORM_DRAFT_KEY);
+    } catch {
+      /* cuota o modo privado */
+    }
+    createFlow.start();
+    setClearConfirmOpen(false);
+    toast.info("Formulario limpio");
+  }, [catalog, canActorAssumeTicket, createFlow]);
+
+  const requestClearTicketForm = useCallback(() => {
+    if (isFormDirty) {
+      setClearConfirmOpen(true);
+      return;
+    }
+    performClearTicketForm();
+  }, [isFormDirty, performClearTicketForm]);
 
   const formSectionLiveMessage = useMemo(() => {
     const id = TICKET_FORM_SECTION_ORDER.find((k) => formSectionOpen[k]);
@@ -667,12 +877,14 @@ export function TicketCreateForm({
   };
 
   return (
-    <motion.article
+    <article
       id="tickets-new-form-anchor"
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-      className="flex min-h-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition-shadow duration-200 hover:shadow-md sm:p-5 xl:col-span-5 xl:min-h-[min(520px,68vh)]"
+      className={cn(
+        "ticket-form-shell flex min-h-0 flex-col",
+        embedded
+          ? "bg-transparent p-0 xl:col-span-full xl:min-h-0"
+          : "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:p-5 xl:col-span-5 xl:min-h-[min(520px,68vh)]",
+      )}
       aria-labelledby="tickets-new-form-title"
       aria-describedby="tickets-new-form-summary"
     >
@@ -684,90 +896,85 @@ export function TicketCreateForm({
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {formSectionLiveMessage}
       </p>
-      {/* ── Cabecera con 3 zonas verticales bien separadas (premium iter. 4) ── */}
-      <header className="mb-4 space-y-3">
-        {/* 1. Título + icono + identidad del ticket en una línea. */}
+      {/* Cabecera plana: título, identidad inline y progreso */}
+      <header className={cn("mb-1 space-y-3 border-b border-[var(--color-border)] pb-4", embedded && "sr-only")}>
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)]">
-              <Plus size={16} strokeWidth={1.5} className="text-[var(--color-accent)]" />
-            </div>
-            <div className="min-w-0">
-              <h3 id="tickets-new-form-title" className="text-[15px] font-semibold leading-tight text-[var(--color-text-1)]">
-                Nuevo ticket
-              </h3>
-              <p className="mt-0.5 text-[12px] leading-tight text-[var(--color-text-3)]">
-                Ancla la incidencia a un bus y activo concreto
-              </p>
+          <div className="min-w-0">
+            <h3 id="tickets-new-form-title" className="text-lg font-semibold leading-tight text-[var(--color-text-1)]">
+              Nuevo ticket
+            </h3>
+            <div className="ticket-form-identity-row">
+              <span className="ticket-form-identity-chip ticket-form-identity-chip--bus">
+                {busIdValidation.ok ? busIdValidation.normalized : trimmedBusId || "Sin bus"}
+              </span>
+              {isNewBus ? (
+                <span className="ticket-form-identity-chip ticket-form-identity-chip--new" title="Se creará en catálogo al guardar">
+                  nuevo
+                </span>
+              ) : null}
+              <span className="ticket-form-identity-chip ticket-form-identity-chip--asset">
+                {selectedAsset
+                  ? `${selectedAsset.id} (${selectedAsset.type})`
+                  : isNewBus
+                    ? "SAE por defecto"
+                    : selectedBus
+                      ? "Selecciona activo"
+                      : "Bus o activo"}
+              </span>
             </div>
           </div>
-          <FeedbackTargetButton id="tickets/formulario-nuevo" label="Formulario de nuevo ticket" />
-        </div>
-
-        {/* 2. Chip identidad: Bus + estado del activo. Limpio, una sola línea. */}
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 text-[12px] leading-snug text-[var(--color-text-2)]">
-          <span className="text-eyebrow shrink-0">Identidad</span>
-          <span className="num-tabular font-mono text-[13px] font-semibold text-[var(--color-text-1)]">
-            {trimmedBusId || "—"}
-          </span>
-          {isNewBus ? (
-            <span
-              className="inline-flex items-center rounded-full border border-[rgba(245,158,11,0.35)] bg-[var(--color-warning-light)] px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-[var(--color-warning)]"
-              title="Este bus se creará en el catálogo al guardar"
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={requestClearTicketForm}
+              disabled={!formDraftHydrated || saving}
+              className="ccmgc-form-clear-btn"
+              title="Limpiar borrador y empezar de cero"
+              aria-label="Limpiar borrador y empezar de cero"
             >
-              nuevo
-            </span>
-          ) : null}
-          <span className="text-[var(--color-text-3)]/60">·</span>
-          <span className="min-w-0 truncate">
-            {selectedAsset
-              ? `${selectedAsset.id} (${selectedAsset.type})`
-              : isNewBus
-                ? "SAE por defecto (auto)"
-                : selectedBus
-                  ? "Selecciona activo"
-                  : "Selecciona o teclea un bus"}
-          </span>
+              <RotateCcw size={13} strokeWidth={2} aria-hidden />
+              <span className="hidden sm:inline">Limpiar</span>
+            </button>
+            <FeedbackTargetButton id="tickets/formulario-nuevo" label="Formulario de nuevo ticket" />
+          </div>
         </div>
 
-        {/* 3. Stepper visual: círculos numerados conectados por línea, con
-              estado completado / activo / pendiente. Auto-clicable. */}
-        <FormStepper
+        <FormProgressBar
           steps={ticketFormProgress.checks}
-          nextIndex={ticketFormProgress.nextStepIndex}
           openIndex={TICKET_FORM_SECTION_ORDER.findIndex((id) => formSectionOpen[id])}
-          flashIndex={!reduceMotionUi ? draftStepFlashIndex : null}
-          onJump={(idx) => {
-            const id = TICKET_FORM_SECTION_ORDER[idx];
-            setFormSectionOpen({
-              equipment: id === "equipment",
-              tipologia: id === "tipologia",
-              detail: id === "detail",
-              attachments: id === "attachments",
-            });
-          }}
           percent={ticketFormProgress.pct}
+          onJump={jumpToFormSection}
+        />
+
+        <FormHeaderExtras
+          busId={trimmedBusId}
+          lineaLabel={form.lineaLabel}
+          form={form}
+          setForm={setForm}
+          sessionUser={sessionUser}
         />
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="space-y-3">
-          <TicketTemplatePicker form={form} setForm={setForm} sessionUser={sessionUser} />
-          <CollapsibleFormBlock
+        <div>
+          <FormSection
+            sectionId="equipment"
             title="Equipo afectado"
             stepLabel="1/4"
+            sectionValid={ticketFormProgress.checks[0]}
             subtitle={
               selectedBus
                 ? [
-                    `${selectedBus.id}${selectedBus.operator ? ` · ${selectedBus.operator}` : ""}`,
+                    selectedBus.operator ? selectedBus.operator : null,
+                    selectedBus.municipio ? selectedBus.municipio : null,
                     form.lineaLabel.trim() ? `Línea ${form.lineaLabel.trim()}` : null,
                     form.servicioLabel.trim() ? `Servicio ${form.servicioLabel.trim()}` : null,
                     form.conductorLabel.trim() ? form.conductorLabel.trim() : null,
                   ]
                     .filter(Boolean)
-                    .join(" · ")
+                    .join(" · ") || "Línea, servicio y conductor (opcional)"
                 : isNewBus
-                  ? `${trimmedBusId} · bus nuevo`
+                  ? "Bus nuevo en catálogo al guardar"
                   : "Bus, línea, servicio y conductor"
             }
             open={formSectionOpen.equipment}
@@ -782,49 +989,49 @@ export function TicketCreateForm({
              *  - Conductor: texto libre puro.
              * El activo SAE-DEFAULT se asigna automaticamente en backend.
              */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="ticket-form-panel">
+              <div className="ticket-form-equipment-grid">
               <label className="block space-y-1">
                 <span className="text-label">Bus</span>
-                <Input
-                  list="ticket-bus-options"
+                <TypeaheadInput
                   value={form.busId}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, busId: event.target.value, assetId: "" }))
-                  }
-                  placeholder="Teclea o selecciona…"
+                  onValueChange={(next) => setForm((prev) => ({ ...prev, busId: next, assetId: "" }))}
+                  options={busTypeaheadOptions}
+                  maxSuggestions={15}
+                  placeholder={catalogPrefixes.length ? `Ej: ${formatPrefixHint(catalogPrefixes)}` : "Ej: GF-11018"}
                   autoComplete="off"
                   spellCheck={false}
+                  emptyMessage="Sin buses en catálogo con ese criterio"
+                  aria-invalid={trimmedBusId !== "" && !busIdValidation.ok}
                 />
-                <datalist id="ticket-bus-options">
-                  {catalog.map((bus) => (
-                    <option key={bus.id} value={bus.id}>
-                      {bus.operator}
-                      {bus.municipio ? ` · ${bus.municipio}` : ""}
-                    </option>
-                  ))}
-                </datalist>
+                {trimmedBusId && !busIdValidation.ok ? (
+                  <p className="text-[11px] leading-snug text-[var(--color-danger)]" role="alert">
+                    {busIdValidation.message}
+                  </p>
+                ) : null}
               </label>
               <label className="block space-y-1">
                 <span className="text-label">
                   Línea
                   <span className="ml-1 text-[10px] font-normal text-[var(--color-text-3)]">(opcional)</span>
                 </span>
-                <Input
-                  list="ticket-linea-options"
+                <TypeaheadInput
                   value={form.lineaLabel}
-                  onChange={(event) => setForm((prev) => ({ ...prev, lineaLabel: event.target.value }))}
-                  placeholder="Ej: GL-1, GL-30…"
+                  onValueChange={(next) => setForm((prev) => ({ ...prev, lineaLabel: next }))}
+                  options={lineaTypeaheadOptions}
+                  maxSuggestions={15}
+                  placeholder={catalogPrefixes.length ? `Ej: ${formatPrefixHint(catalogPrefixes)}` : "Ej: GL-1, GL-30…"}
                   maxLength={120}
                   autoComplete="off"
                   spellCheck={false}
+                  emptyMessage="Sin líneas con ese criterio"
+                  aria-invalid={form.lineaLabel.trim() !== "" && !lineaValidation.ok}
                 />
-                <datalist id="ticket-linea-options">
-                  {Array.from(
-                    new Set([...(selectedBus?.lineas ?? []), ...lineas]),
-                  ).map((linea) => (
-                    <option key={linea} value={linea} />
-                  ))}
-                </datalist>
+                {form.lineaLabel.trim() && !lineaValidation.ok ? (
+                  <p className="text-[11px] leading-snug text-[var(--color-danger)]" role="alert">
+                    {lineaValidation.message}
+                  </p>
+                ) : null}
               </label>
               <label className="block space-y-1">
                 <span className="text-label">
@@ -852,34 +1059,27 @@ export function TicketCreateForm({
                   autoComplete="off"
                 />
               </label>
+              </div>
             </div>
 
             {isNewBus ? (
               <p className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[12px] leading-snug text-amber-100">
                 <span className="font-medium">Bus nuevo:</span> al guardar se creará{" "}
-                <span className="font-mono">{trimmedBusId}</span> en el catálogo. El gestor podrá completar
-                operador, municipio y líneas más tarde desde Administración → Catálogo.
+                <span className="font-mono">{busIdValidation.normalized}</span> en el catálogo. Usa el prefijo de la
+                operadora ({formatPrefixHint(catalogPrefixes)}). El gestor podrá completar operador, municipio y líneas
+                más tarde desde Administración → Catálogo.
               </p>
             ) : null}
-            {form.busId && !isNewBus ? (
-              <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] leading-snug text-[var(--color-text-2)]">
-                <Link
-                  href="/inventory"
-                  className="shrink-0 font-medium text-[var(--color-accent)] underline-offset-2 transition-colors hover:underline"
-                >
-                  Ver inventario
-                </Link>
-                <span className="min-w-0 text-[var(--color-text-3)]">Stock de repuestos (referencia rápida).</span>
-              </p>
-            ) : null}
-          </CollapsibleFormBlock>
+          </FormSection>
 
-          <CollapsibleFormBlock
+          <FormSection
+            sectionId="tipologia"
             title="Tipología de incidencia"
             stepLabel="2/4"
+            sectionValid={ticketFormProgress.checks[1]}
             subtitle={
               isGenericTipo
-                ? "Generica (sin clasificar)"
+                ? "Sin clasificar — describe en Detalle"
                 : form.subsubtipo
                   ? `${form.tipo} · ${form.subtipo}`
                   : "Tipo, subtipo e incidencia"
@@ -887,155 +1087,62 @@ export function TicketCreateForm({
             open={formSectionOpen.tipologia}
             onToggle={() => toggleFormSection("tipologia")}
           >
-            <div
-              className={cn(
-                "grid grid-cols-1 gap-3",
-                isGenericTipo ? "md:grid-cols-1" : "md:grid-cols-3",
-              )}
-            >
-              <label className="block space-y-1">
-                <span className="text-label">Tipo</span>
-                <Select
-                  value={form.tipo}
-                  onChange={(event) => {
-                    const nextTipo = event.target.value;
-                    if (nextTipo === GENERIC_TIPO) {
-                      const generic = getGenericTipologia();
-                      setForm((prev) => ({
-                        ...prev,
-                        tipo: GENERIC_TIPO,
-                        subtipo: GENERIC_SUBTIPO,
-                        subsubtipo: GENERIC_SUBSUBTIPO,
-                        dominio: generic.dominio,
-                        nivelImpacto: generic.nivelImpacto,
-                        origenTecnico: generic.origenTecnico,
-                        observaciones: generic.observaciones,
-                      }));
-                      return;
-                    }
-                    setForm((prev) => ({
-                      ...prev,
-                      tipo: nextTipo,
-                      subtipo: "",
-                      subsubtipo: "",
-                      dominio: "",
-                      nivelImpacto: "Medio",
-                      origenTecnico: "",
-                      observaciones: "",
-                    }));
-                  }}
-                >
-                  <option value="">Selecciona tipo</option>
-                  {availableTipos.map((tipo) => (
-                    <option key={tipo} value={tipo}>
-                      {tipo === GENERIC_TIPO ? `${tipo} (sin clasificar)` : tipo}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              {isGenericTipo ? null : (
-                <>
-                  <label className="block space-y-1">
-                    <span className="text-label">Subtipo</span>
-                    <Select
-                      value={form.subtipo}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          subtipo: event.target.value,
-                          subsubtipo: "",
-                          dominio: "",
-                          nivelImpacto: "Medio",
-                          origenTecnico: "",
-                          observaciones: "",
-                        }))
-                      }
-                      disabled={!form.tipo}
-                    >
-                      <option value="">Selecciona subtipo</option>
-                      {availableSubtipos.map((subtipo) => (
-                        <option key={subtipo} value={subtipo}>
-                          {subtipo}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="text-label">Incidencia</span>
-                    <Select
-                      value={form.subsubtipo}
-                      onChange={(event) => {
-                        const chosen = tipologias.find(
-                          (item) =>
-                            item.tipo === form.tipo &&
-                            item.subtipo === form.subtipo &&
-                            item.subsubtipo === event.target.value,
-                        );
-                        setForm((prev) => ({
-                          ...prev,
-                          subsubtipo: event.target.value,
-                          dominio: chosen?.dominio ?? "",
-                          nivelImpacto: chosen?.nivelImpacto ?? "Medio",
-                          origenTecnico: chosen?.origenTecnico ?? "",
-                          observaciones: chosen?.observaciones ?? "",
-                        }));
-                      }}
-                      disabled={!form.subtipo}
-                    >
-                      <option value="">Selecciona incidencia</option>
-                      {availableSubsubtipos.map((subsubtipo) => (
-                        <option key={subsubtipo} value={subsubtipo}>
-                          {subsubtipo}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                </>
-              )}
+            <div className="ticket-form-panel">
+              <TipologiaPickerSection
+                tipologias={tipologias}
+                isGenericTipo={isGenericTipo}
+                tipo={form.tipo}
+                subtipo={form.subtipo}
+                availableTipos={availableTipos}
+                availableSubtipos={availableSubtipos}
+                selectedTipologia={selectedTipologia}
+                onSelect={applyTipologiaSelection}
+                onSearchStart={resetTipologiaForSearch}
+                onTipoChange={(nextTipo) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    tipo: nextTipo,
+                    subtipo: "",
+                    subsubtipo: "",
+                    dominio: "",
+                    nivelImpacto: "Medio",
+                    origenTecnico: "",
+                    observaciones: "",
+                  }))
+                }
+                onSubtipoChange={(nextSubtipo) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    subtipo: nextSubtipo,
+                    subsubtipo: "",
+                    dominio: "",
+                    nivelImpacto: "Medio",
+                    origenTecnico: "",
+                    observaciones: "",
+                  }))
+                }
+                onGenericTipoSelect={() => setForm((prev) => ({ ...prev, ...applyGenericTipologiaToForm() }))}
+              />
             </div>
             {isGenericTipo ? (
-              <div
-                className="mt-3 flex items-start gap-3 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/45 p-3 text-xs text-[var(--color-text-2)]"
-                role="status"
-              >
-                <span
-                  className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/30"
-                  aria-hidden
-                >
-                  <Info size={14} strokeWidth={1.8} />
-                </span>
-                <div className="min-w-0 space-y-1.5">
-                  <p className="text-[12.5px] font-semibold text-[var(--color-text-1)]">
-                    Tipo gen&eacute;rico seleccionado
-                  </p>
-                  <p className="leading-relaxed">
-                    &Uacute;salo cuando la incidencia <strong>no encaja en ning&uacute;n caso</strong> del cuadro de
-                    tipolog&iacute;as. <em>Subtipo</em> e <em>Incidencia</em> no aplican: describe lo ocurrido con
-                    todo detalle en el bloque <strong>&ldquo;Detalle de la incidencia&rdquo;</strong> (t&iacute;tulo
-                    + descripci&oacute;n). El gestor podr&aacute; reclasificar el ticket m&aacute;s tarde si procede.
-                  </p>
-                </div>
-              </div>
-            ) : selectedTipologia ? (
-              <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3 text-xs text-[var(--color-text-2)]">
-                <p>
-                  Dominio: <span className="font-medium text-[var(--color-text-1)]">{selectedTipologia.dominio}</span>
+              <details className="mt-3 text-[12px] text-[var(--color-text-2)]">
+                <summary className="cursor-pointer font-medium text-[var(--color-accent)] hover:underline">
+                  Tipo genérico — ¿cuándo usarlo?
+                </summary>
+                <p className="mt-2 leading-relaxed text-[var(--color-text-3)]">
+                  Úsalo cuando la incidencia no encaja en el cuadro de tipologías. Subtipo e incidencia quedan
+                  bloqueados: describe lo ocurrido en <strong className="text-[var(--color-text-2)]">Detalle</strong>{" "}
+                  (título + descripción). El gestor podrá reclasificar el ticket más tarde.
                 </p>
-                <p>
-                  Origen tecnico:{" "}
-                  <span className="font-medium text-[var(--color-text-1)]">{selectedTipologia.origenTecnico}</span>
-                </p>
-                <p>
-                  Nivel impacto:{" "}
-                  <span className="font-medium text-[var(--color-text-1)]">{selectedTipologia.nivelImpacto}</span>
-                </p>
-              </div>
+              </details>
             ) : null}
-          </CollapsibleFormBlock>
+          </FormSection>
 
-          <CollapsibleFormBlock
+          <FormSection
+            sectionId="detail"
             title="Detalle de la incidencia"
             stepLabel="3/4"
+            sectionValid={ticketFormProgress.checks[2] && ticketFormProgress.checks[3]}
             subtitle={
               form.title.trim()
                 ? `${form.title.trim().slice(0, 48)}${form.title.trim().length > 48 ? "…" : ""}`
@@ -1044,12 +1151,22 @@ export function TicketCreateForm({
             open={formSectionOpen.detail}
             onToggle={() => toggleFormSection("detail")}
           >
+            <TicketDuplicateAlert
+              busId={trimmedBusId}
+              title={form.title}
+              description={form.description}
+              tipo={form.tipo}
+              subtipo={form.subtipo}
+            />
+
+            <div className="ticket-form-panel">
             <label className="block space-y-1">
               <span className="text-label">Título</span>
               <Input
                 value={form.title}
                 onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
                 placeholder="Ej: Router sin senal LTE"
+                className={cn(titleInvalid && "ccmgc-input-error")}
               />
             </label>
 
@@ -1071,8 +1188,9 @@ export function TicketCreateForm({
                 placeholder="Incluye síntomas, contexto y pruebas realizadas."
                 value={form.description}
                 onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                className="min-h-[80px]"
+                className="min-h-[96px]"
               />
+            </div>
             </div>
 
             {kbSuggestions.length > 0 && !kbSuggestDismissed ? (
@@ -1127,28 +1245,39 @@ export function TicketCreateForm({
               </div>
             ) : null}
 
-            <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-label">Ubicación en mapa (opcional)</span>
+            <div className="ticket-form-map-panel">
+              <div className="ticket-form-map-panel__head">
+                <span className="ticket-form-map-panel__icon" aria-hidden>
+                  <MapPin size={16} strokeWidth={2} />
+                </span>
+                <div className="min-w-0">
+                  <p className="ticket-form-map-panel__title">Ubicación en mapa</p>
+                  <p className="ticket-form-map-panel__hint">
+                    Marca el punto de la incidencia en Gran Canaria. Opcional, pero ayuda en desplazamientos y reportes.
+                  </p>
+                </div>
+                {hasMapPin ? <span className="ticket-form-map-panel__badge">Pin colocado</span> : null}
               </div>
-              {mapLocationHint ? (
-                <p className="mb-2 text-[12px] text-[var(--color-error)]">{mapLocationHint}</p>
-              ) : null}
-              <TicketLocationPicker
-                mapLatitude={form.mapLatitude}
-                mapLongitude={form.mapLongitude}
-                mapPlaceMunicipio={form.mapPlaceMunicipio}
-                onMapLatitudeChange={(v) => setForm((prev) => ({ ...prev, mapLatitude: v }))}
-                onMapLongitudeChange={(v) => setForm((prev) => ({ ...prev, mapLongitude: v }))}
-                onMapPlaceMunicipioChange={(v) =>
-                  setForm((prev) => ({ ...prev, mapPlaceMunicipio: v?.trim() ? v.trim() : "" }))
-                }
-                busMunicipio={selectedBus?.municipio ?? ""}
-                onNotify={setMapLocationHint}
-              />
+              <div className="ticket-form-map-panel__body">
+                {mapLocationHint ? (
+                  <p className="mb-2 text-[12px] text-[var(--color-error)]">{mapLocationHint}</p>
+                ) : null}
+                <TicketLocationPicker
+                  mapLatitude={form.mapLatitude}
+                  mapLongitude={form.mapLongitude}
+                  mapPlaceMunicipio={form.mapPlaceMunicipio}
+                  onMapLatitudeChange={(v) => setForm((prev) => ({ ...prev, mapLatitude: v }))}
+                  onMapLongitudeChange={(v) => setForm((prev) => ({ ...prev, mapLongitude: v }))}
+                  onMapPlaceMunicipioChange={(v) =>
+                    setForm((prev) => ({ ...prev, mapPlaceMunicipio: v?.trim() ? v.trim() : "" }))
+                  }
+                  busMunicipio={selectedBus?.municipio ?? ""}
+                  onNotify={setMapLocationHint}
+                />
+              </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="ticket-form-impact-panel">
               <label className="block space-y-1">
                 <span className="text-label">Líneas afectadas</span>
                 <Input
@@ -1164,31 +1293,33 @@ export function TicketCreateForm({
                   }
                 />
               </label>
-              <div
-                onClick={() => setForm((prev) => ({ ...prev, serviceStopped: !prev.serviceStopped }))}
-                className={cn(
-                  "flex h-full cursor-pointer flex-col justify-center rounded-lg border p-3 transition-all duration-200",
-                  form.serviceStopped
-                    ? "border-[var(--color-warning)] bg-[var(--color-warning-light)]"
-                    : "border-[var(--color-border)] bg-[var(--color-surface-2)] hover:border-[var(--color-border-hover)]",
-                )}
-              >
-                <span className="mb-1 text-label">Servicio detenido</span>
-                <span
-                  className={cn(
-                    "text-sm font-medium transition-colors",
-                    form.serviceStopped ? "text-[var(--color-warning)]" : "text-[var(--color-text-3)]",
-                  )}
-                >
-                  {form.serviceStopped ? "Si — servicio parado" : "No — en servicio"}
+              <label className="ticket-form-impact-panel__stop">
+                <input
+                  type="checkbox"
+                  checked={form.serviceStopped}
+                  onChange={(e) => setForm((prev) => ({ ...prev, serviceStopped: e.target.checked }))}
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-[var(--color-warning)] focus:ring-[var(--color-warning)]/40"
+                />
+                <span className="min-w-0">
+                  <span className="block text-label">Servicio detenido</span>
+                  <span
+                    className={cn(
+                      "block text-[11px] leading-snug",
+                      form.serviceStopped ? "font-medium text-[var(--color-warning)]" : "text-[var(--color-text-3)]",
+                    )}
+                  >
+                    {form.serviceStopped ? "Sí — servicio parado" : "No — en servicio"}
+                  </span>
                 </span>
-              </div>
+              </label>
             </div>
-          </CollapsibleFormBlock>
+          </FormSection>
 
-          <CollapsibleFormBlock
+          <FormSection
+            sectionId="attachments"
             title="Adjuntos y notas"
             stepLabel="4/4"
+            sectionValid={ticketFormProgress.nextStepIndex === null}
             subtitle={
               stagedUploadFiles.length || form.comment.trim()
                 ? `${stagedUploadFiles.length} archivo(s) · comentario ${form.comment.trim() ? "rellenado" : "opcional"}`
@@ -1197,13 +1328,16 @@ export function TicketCreateForm({
             open={formSectionOpen.attachments}
             onToggle={() => toggleFormSection("attachments")}
           >
-            <div className="space-y-2">
-              <span className="text-label">Fotos y vídeos adjuntos</span>
-              <p className="text-[12px] leading-snug text-[var(--color-text-3)]">
-                Hasta {TICKET_ATTACH_MAX_FILES} archivos · imágenes hasta {Math.round(TICKET_ATTACH_MAX_IMAGE_BYTES / (1024 * 1024))} MB · vídeos hasta {Math.round(TICKET_ATTACH_MAX_VIDEO_BYTES / (1024 * 1024))} MB · tope combinado {Math.round(TICKET_ATTACH_MAX_TOTAL_BYTES / (1024 * 1024))} MB.
-                <br />
-                Formatos: JPG, PNG, WEBP, GIF · MP4, WEBM, MOV.
-              </p>
+            <div className="ticket-form-panel ticket-form-attach-panel">
+              <div className="ticket-form-attach-intro">
+                <span className="text-label">Fotos y vídeos adjuntos</span>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--color-text-3)]">
+                  Hasta {TICKET_ATTACH_MAX_FILES} archivos · imágenes hasta{" "}
+                  {Math.round(TICKET_ATTACH_MAX_IMAGE_BYTES / (1024 * 1024))} MB · vídeos hasta{" "}
+                  {Math.round(TICKET_ATTACH_MAX_VIDEO_BYTES / (1024 * 1024))} MB · tope combinado{" "}
+                  {Math.round(TICKET_ATTACH_MAX_TOTAL_BYTES / (1024 * 1024))} MB.
+                </p>
+              </div>
               <input
                 ref={photoFileInputRef}
                 type="file"
@@ -1213,19 +1347,29 @@ export function TicketCreateForm({
                 aria-label="Seleccionar imágenes y vídeos adjuntos"
                 onChange={handlePhotoInputChange}
               />
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="!min-h-0 py-2"
-                onClick={() => photoFileInputRef.current?.click()}
-              >
-                <UploadCloud size={14} aria-hidden />
-                Elegir archivos
-              </Button>
+              <div className="ticket-form-upload-zone">
+                <span className="ticket-form-upload-zone__icon" aria-hidden>
+                  <UploadCloud size={18} strokeWidth={1.8} />
+                </span>
+                <p className="text-[12px] text-[var(--color-text-2)]">
+                  Arrastra archivos o selecciónalos desde tu dispositivo
+                </p>
+                <p className="text-[10.5px] text-[var(--color-text-3)]">
+                  JPG, PNG, WEBP, GIF · MP4, WEBM, MOV
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-1 !min-h-0 py-2"
+                  onClick={() => photoFileInputRef.current?.click()}
+                >
+                  Elegir archivos
+                </Button>
+              </div>
               {stagedUploadFiles.length > 0 ? (
                 <>
-                  <ul className="mt-2 space-y-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)]/40 p-2">
+                  <ul className="mt-4 space-y-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)]/40 p-2">
                     {stagedUploadFiles.map((file, index) => {
                       const kind = classifyAttachFile(file);
                       const sizeMb = file.size / (1024 * 1024);
@@ -1307,66 +1451,89 @@ export function TicketCreateForm({
               className="min-h-[64px]"
               wrapperClassName="mt-3"
             />
-          </CollapsibleFormBlock>
+          </FormSection>
 
           {/* Asignación y cierre rápido — sugerencias Ibrahim (1b + 1c).
               Solo visible para técnicos y gestores, que son los únicos
               roles que pueden ser asignados y cerrar tickets. */}
           {canActorAssumeTicket ? (
-            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-3">
-              <div className="flex items-center gap-2">
-                <span className="text-label">Asignación y cierre</span>
-                <span className="text-[10.5px] text-[var(--color-text-3)]">
-                  (opcional, atajos para técnicos)
+            <section className="ticket-form-section ticket-form-shortcuts-panel border-b border-[var(--color-border)] py-5 last:border-b-0">
+              <header className="ticket-form-shortcuts-head">
+                <span className="ticket-form-shortcuts-head__icon" aria-hidden>
+                  <Zap size={16} strokeWidth={2} />
                 </span>
-              </div>
-              <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="group flex cursor-pointer items-start gap-2.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-2.5 transition-colors hover:border-[var(--color-accent)]/40">
+                <div className="min-w-0 flex-1">
+                  <p className="ticket-form-shortcuts-head__eyebrow">Atajos opcionales</p>
+                  <h3 className="ticket-form-shortcuts-head__title">Asignación y cierre rápido</h3>
+                  <p className="ticket-form-shortcuts-head__hint">
+                    Acelera el alta cuando ya sabes quién lo atiende o si quedó resuelto en el acto.
+                  </p>
+                </div>
+              </header>
+              <div className="ticket-form-shortcuts-grid">
+                <label
+                  className={cn(
+                    "ticket-form-shortcut-card ticket-form-shortcut-card--assign",
+                    assignToMe && "ticket-form-shortcut-card--active",
+                  )}
+                >
                   <input
                     type="checkbox"
                     checked={assignToMe}
                     onChange={(e) => setAssignToMe(e.target.checked)}
-                    className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]/40"
+                    className="sr-only"
                   />
-                  <span className="min-w-0">
-                    <span className="block text-[12.5px] font-medium text-[var(--color-text-1)]">
-                      Asignármelo a mí
-                    </span>
-                    <span className="block text-[11px] leading-snug text-[var(--color-text-3)]">
+                  <span className="ticket-form-shortcut-card__icon" aria-hidden>
+                    <UserRoundCheck size={17} strokeWidth={2} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="ticket-form-shortcut-card__title">Asignármelo a mí</span>
+                    <span className="ticket-form-shortcut-card__desc">
                       {sessionUser?.name
-                        ? `Marca a ${sessionUser.name} como responsable.`
+                        ? `Te marca a ti (${sessionUser.name}) como responsable.`
                         : "Marca al usuario actual como responsable."}
                     </span>
                   </span>
+                  <span className="ticket-form-shortcut-card__toggle" aria-hidden />
                 </label>
-                <label className="group flex cursor-pointer items-start gap-2.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-2.5 transition-colors hover:border-emerald-500/40">
+                <label
+                  className={cn(
+                    "ticket-form-shortcut-card ticket-form-shortcut-card--resolve",
+                    createAsResolved && "ticket-form-shortcut-card--active",
+                  )}
+                >
                   <input
                     type="checkbox"
                     checked={createAsResolved}
                     onChange={(e) => setCreateAsResolved(e.target.checked)}
-                    className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-emerald-500 focus:ring-emerald-400/40"
+                    className="sr-only"
                   />
-                  <span className="min-w-0">
-                    <span className="block text-[12.5px] font-medium text-[var(--color-text-1)]">
+                  <span className="ticket-form-shortcut-card__icon ticket-form-shortcut-card__icon--resolve" aria-hidden>
+                    <CircleCheckBig size={17} strokeWidth={2} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="ticket-form-shortcut-card__title">
                       Crear ya como <span className="text-emerald-300">resuelto</span>
                     </span>
-                    <span className="block text-[11px] leading-snug text-[var(--color-text-3)]">
-                      Para casos resueltos in situ. Deja trazabilidad sin pasos extra.
+                    <span className="ticket-form-shortcut-card__desc">
+                      Para incidencias cerradas in situ, sin pasos extra en la bandeja.
                     </span>
                   </span>
+                  <span className="ticket-form-shortcut-card__toggle" aria-hidden />
                 </label>
               </div>
               {createAsResolved ? (
-                <Textarea
-                  label="Nota de resolución"
-                  placeholder="¿Qué se hizo para solucionarlo? Ej: Reinicio del SAE, pieza X sustituida…"
-                  value={resolutionNote}
-                  onChange={(e) => setResolutionNote(e.target.value)}
-                  className="min-h-[56px]"
-                  wrapperClassName="mt-2.5"
-                />
+                <div className="ticket-form-shortcuts-resolve-note">
+                  <Textarea
+                    label="Nota de resolución"
+                    placeholder="¿Qué se hizo para solucionarlo? Ej: Reinicio del SAE, pieza X sustituida…"
+                    value={resolutionNote}
+                    onChange={(e) => setResolutionNote(e.target.value)}
+                    className="min-h-[56px]"
+                  />
+                </div>
               ) : null}
-            </div>
+            </section>
           ) : null}
         </div>
         <div className="min-h-3 flex-1 xl:min-h-10" aria-hidden />
@@ -1374,57 +1541,61 @@ export function TicketCreateForm({
 
       <div
         className={cn(
-          "rounded-lg border-l-4 p-4 transition-all duration-200",
-          computedPriority === "alta"
-            ? "border-l-[var(--color-error)] bg-[var(--color-error-light)]"
-            : computedPriority === "media"
-              ? "border-l-[var(--color-warning)] bg-[var(--color-warning-light)]"
-              : "border-l-[var(--color-success)] bg-[var(--color-success-light)]",
+          "ticket-form-footer -mx-4 -mb-4 mt-4 sticky bottom-0 z-10 rounded-b-xl border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm sm:-mx-5 sm:-mb-5",
         )}
       >
-        <div className="flex items-center justify-between">
-          <span className="text-label">Prioridad calculada</span>
-          {(() => {
-            const pr = priorityBadgeProps(computedPriority);
-            return (
-              <Badge variant={pr.variant} className={cn("whitespace-nowrap", pr.className)}>
-                {toUiPriority(computedPriority)}
-              </Badge>
-            );
-          })()}
-        </div>
-        <p className="mt-1 text-sm text-[var(--color-text-2)]">
-          SLA objetivo: <span className="font-medium text-[var(--color-text-1)]">{computedSla} minutos</span>
-        </p>
-      </div>
-
-      {/* Footer sticky: indicador del siguiente requisito + CTA principal.
-       *  Mantiene visible el botón al hacer scroll del formulario largo.   */}
-      <div className="-mx-5 -mb-5 mt-3 sticky bottom-0 z-10 rounded-b-xl border-t border-[var(--color-border)] bg-[var(--color-surface)]/95 px-4 py-3 shadow-[0_-10px_28px_rgba(0,0,0,0.35)] backdrop-blur-sm">
-        {ticketFormProgress.nextStepIndex !== null ? (
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] text-[var(--color-text-3)]" aria-live="polite">
-            <span className="h-1 w-1 rounded-full bg-[var(--color-warning)]" />
-            Falta:&nbsp;
-            <span className="font-medium text-[var(--color-text-2)]">
-              {
-                (["Equipo con activo", "Tipología completa", "Título (mín. 3 caracteres)", "Descripción (mín. 8)"] as const)[
-                  ticketFormProgress.nextStepIndex
-                ]
-              }
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          {ticketFormProgress.nextStepIndex !== null ? (
+            <p className="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--color-text-3)]" aria-live="polite">
+              <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--color-warning)]" />
+              Falta:&nbsp;
+              <span className="font-medium text-[var(--color-text-2)]">
+                {
+                  (
+                    [
+                      equipmentMissingHint,
+                      "Tipología completa",
+                      "Título (mín. 3 caracteres)",
+                      "Descripción (mín. 8)",
+                    ] as const
+                  )[ticketFormProgress.nextStepIndex]
+                }
+              </span>
+            </p>
+          ) : (
+            <p className="flex items-center gap-1.5 text-[11px] text-[var(--color-success)]" aria-live="polite">
+              <span className="h-1 w-1 rounded-full bg-[var(--color-success)]" />
+              Listo para crear
+            </p>
+          )}
+          <div className="flex shrink-0 items-center gap-2 text-[11px]">
+            <span className="text-[var(--color-text-3)]">
+              SLA <span className="num-tabular font-medium text-[var(--color-text-2)]">{computedSla}m</span>
             </span>
-          </p>
-        ) : (
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] text-[var(--color-success)]" aria-live="polite">
-            <span className="h-1 w-1 rounded-full bg-[var(--color-success)]" />
-            Listo para crear
-          </p>
-        )}
+            {(() => {
+              const pr = priorityBadgeProps(computedPriority);
+              return (
+                <Badge
+                  key={computedPriority}
+                  variant={pr.variant}
+                  className={cn(
+                    "whitespace-nowrap transition-all duration-300",
+                    !reduceMotionUi && "ccmgc-badge-pop",
+                    pr.className,
+                  )}
+                >
+                  {toUiPriority(computedPriority)}
+                </Badge>
+              );
+            })()}
+          </div>
+        </div>
         <Button
           variant="primary"
           size="lg"
           onClick={() => void submitCreate()}
           disabled={saving || ticketFormProgress.nextStepIndex !== null}
-          className="login-primary-cta-premium w-full"
+          className="ccmgc-primary-cta w-full"
         >
           {saving ? (
             <>
@@ -1444,6 +1615,40 @@ export function TicketCreateForm({
           )}
         </Button>
       </div>
-    </motion.article>
+
+      <ModalShell
+        open={clearConfirmOpen}
+        onClose={() => setClearConfirmOpen(false)}
+        size="md"
+        initialFocusRef={clearConfirmCancelRef}
+        title={
+          <span className="flex items-center gap-2 text-base font-semibold">
+            <RotateCcw size={16} className="text-[var(--color-warning)]" aria-hidden />
+            Limpiar borrador
+          </span>
+        }
+        footer={
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              ref={clearConfirmCancelRef}
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setClearConfirmOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" variant="danger" size="sm" onClick={performClearTicketForm}>
+              Limpiar y empezar de cero
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-body text-[var(--color-text-2)]">
+          Se perderán todos los datos del formulario que estás rellenando: tipología, detalle, adjuntos y notas.
+        </p>
+        <p className="mt-2 text-caption text-[var(--color-text-3)]">Esta acción no se puede deshacer.</p>
+      </ModalShell>
+    </article>
   );
 }

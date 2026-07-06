@@ -16,6 +16,8 @@ import { notFound, redirect } from "next/navigation";
 
 import { ArticleActions } from "@/components/kb/ArticleActions";
 import { ArticleToc } from "@/components/kb/ArticleToc";
+import { KbArticleCrumbSync } from "@/components/kb/KbArticleCrumbSync";
+import { KbReadingProgress } from "@/components/kb/KbReadingProgress";
 import { MarkdownView } from "@/components/kb/MarkdownView";
 import { extractHeadings } from "@/lib/kb-toc";
 import { prisma } from "@/lib/prisma";
@@ -111,6 +113,8 @@ export default async function KbArticlePage({
 
   return (
     <article className="mx-auto max-w-6xl space-y-4 pb-12">
+      <KbReadingProgress />
+      <KbArticleCrumbSync slug={slug} title={article.title} />
       {/* Breadcrumb */}
       <nav aria-label="Migas de pan" className="flex items-center gap-1 text-[11.5px] text-[var(--color-text-3)]">
         <Link
@@ -146,6 +150,10 @@ export default async function KbArticlePage({
               className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
             />
             <div className="relative space-y-3">
+              <div className="ccmgc-eyebrow dashboard-pretitle">
+                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+                CCMGC · Conocimiento
+              </div>
               <div className="flex flex-wrap items-center gap-1.5 text-[10.5px]">
                 {article.category ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-surface-2)] px-2.5 py-0.5 font-medium text-[var(--color-text-2)]">
@@ -170,13 +178,27 @@ export default async function KbArticlePage({
                 </span>
               </div>
 
-              <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-[var(--color-text-1)]">
+              <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-[var(--color-text-1)] sm:text-[32px]">
                 {article.title}
               </h1>
               {article.summary ? (
                 <p className="max-w-3xl text-[15px] leading-relaxed text-[var(--color-text-2)]">
                   {article.summary}
                 </p>
+              ) : null}
+              {tags.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {tags.map((t) => (
+                    <Link
+                      key={t}
+                      href={`/kb?tag=${encodeURIComponent(t)}`}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-accent)]"
+                    >
+                      <Tag size={9} strokeWidth={1.6} aria-hidden />
+                      {t}
+                    </Link>
+                  ))}
+                </div>
               ) : null}
 
               <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
@@ -212,8 +234,19 @@ export default async function KbArticlePage({
           </header>
 
           {/* Cuerpo del artículo */}
-          <section className="ccmgc-card p-4 sm:p-6">
-            <MarkdownView source={article.contentMd} />
+          <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-sm">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[var(--color-accent)]/50 to-transparent"
+            />
+            <div className="prose-reading border-b border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/20 px-4 py-2 sm:px-6">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Contenido del artículo
+              </span>
+            </div>
+            <div className="px-4 py-6 sm:px-8 sm:py-8">
+              <MarkdownView source={article.contentMd} />
+            </div>
           </section>
 
           {/* Footer del artículo */}

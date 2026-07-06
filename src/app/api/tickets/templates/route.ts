@@ -15,6 +15,7 @@ import { NextResponse } from "next/server";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import type { TicketPriority } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
+import { canCreateGlobalTicketTemplate } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
 
   const requestedScope =
     typeof body.scope === "string" && body.scope === "global" ? "global" : "personal";
-  if (requestedScope === "global" && actor.role !== "gestor_centro_control") {
+  if (requestedScope === "global" && !canCreateGlobalTicketTemplate(actor.role)) {
     return NextResponse.json(
       { message: "Solo los gestores pueden crear plantillas globales" },
       { status: 403 },

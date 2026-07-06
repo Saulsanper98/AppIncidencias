@@ -36,7 +36,7 @@ export async function POST(
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion" }, { status: 401 });
     }
-    if (!canUploadAttachment(actor.role)) {
+    if (!canUploadAttachment(actor.role, actor.isReadOnly)) {
       return NextResponse.json(
         { message: "Rol sin permisos para subir adjuntos" },
         { status: 403 },

@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 
 import { resolveRequestActor } from "@/lib/auth-context";
 import { getScheduler } from "@/lib/scheduler";
+import { canUseScheduler } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
   if (!actor.userId) {
     return NextResponse.json({ message: "Debes iniciar sesión" }, { status: 401 });
   }
-  if (actor.role !== "gestor_centro_control") {
+  if (!canUseScheduler(actor.role)) {
     return NextResponse.json({ message: "Solo gestores" }, { status: 403 });
   }
   return NextResponse.json({ status: getScheduler().status() });
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
   if (!actor.userId) {
     return NextResponse.json({ message: "Debes iniciar sesión" }, { status: 401 });
   }
-  if (actor.role !== "gestor_centro_control") {
+  if (!canUseScheduler(actor.role)) {
     return NextResponse.json({ message: "Solo gestores" }, { status: 403 });
   }
 

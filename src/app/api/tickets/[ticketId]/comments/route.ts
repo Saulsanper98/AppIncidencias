@@ -17,7 +17,7 @@ export async function POST(request: Request, context: { params: Promise<{ ticket
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion" }, { status: 401 });
     }
-    if (!canAddTicketComment(actor.role)) {
+    if (!canAddTicketComment(actor.role, actor.isReadOnly)) {
       return NextResponse.json({ message: "Rol sin permisos para añadir notas" }, { status: 403 });
     }
 

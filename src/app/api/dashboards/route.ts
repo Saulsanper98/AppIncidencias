@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { canManageDashboards } from "@/lib/rbac";
 
 const createDashboardSchema = z.object({
   name: z.string().trim().min(3),
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para crear dashboards" }, { status: 401 });
     }
-    if (actor.role !== "gestor_centro_control") {
+    if (!canManageDashboards(actor.role)) {
       return NextResponse.json({ message: "Rol sin permisos para crear dashboards" }, { status: 403 });
     }
 

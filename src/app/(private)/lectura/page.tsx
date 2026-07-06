@@ -10,8 +10,9 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
  * Página /lectura — Visor de incidencias en SOLO LECTURA.
  *
  * Diseñada como "wallboard" del centro de control. La cuenta
- * `read@movilidadgc.org` (marcada con `isReadOnly`) solo puede ver esta
- * pantalla y `/account`. El resto de usuarios también pueden entrar a
+ * `etra@etramovilidad.org` (ETRA, `isReadOnly`) usa /lectura, /mapa, detalle
+ * de tickets y /account. Puede comentar, adjuntar, cerrar y corregir datos
+ * técnicos de tickets. El resto de usuarios también pueden entrar a
  * mirar, pero ven el resto de la app con normalidad.
  *
  * Ver: src/lib/auth-context.ts (bloqueo de mutaciones para readOnly)

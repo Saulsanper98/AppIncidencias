@@ -7,8 +7,10 @@ import {
   Inbox,
   Megaphone,
   MessageSquareHeart,
+  Signal,
   ShieldCheck,
   Sparkles,
+  TriangleAlert,
   UserCircle2,
   Users,
 } from "lucide-react";
@@ -16,6 +18,8 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { KpiPill } from "@/components/ui/kpi-pill";
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
 import { activeAnnouncementWhere } from "@/lib/announcements";
 import { prisma } from "@/lib/prisma";
 import {
@@ -146,18 +150,28 @@ export default async function AdminHomePage() {
   // devolvemos 0 silenciosamente.
   let uxEventsLast24h = 0;
   let uxSessionsLast24h = 0;
+  let clientErrors24h = 0;
   if (showAnalytics) {
     try {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const rows = await prisma.$queryRawUnsafe<
+      const [rows, errRows] = await Promise.all([
+      prisma.$queryRawUnsafe<
         { events: bigint; sessions: bigint }[]
       >(
         `SELECT COUNT(*) AS events, COUNT(DISTINCT sessionId) AS sessions
            FROM "UxEvent" WHERE createdAt >= ?`,
         since,
-      );
+      ),
+      prisma.$queryRawUnsafe<{ n: bigint }[]>(
+        `SELECT COUNT(*) AS n
+           FROM "UxEvent"
+          WHERE eventName = 'client_error' AND createdAt >= ?`,
+        since,
+      ),
+      ]);
       uxEventsLast24h = Number(rows[0]?.events ?? 0);
       uxSessionsLast24h = Number(rows[0]?.sessions ?? 0);
+      clientErrors24h = Number(errRows[0]?.n ?? 0);
     } catch {
       /* tabla aún no migrada o sin datos */
     }
@@ -179,10 +193,10 @@ export default async function AdminHomePage() {
   return (
     <div className="space-y-5">
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
+      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[color-mix(in_oklab,var(--hero-accent-admin)_12%,transparent)] p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
+          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[var(--hero-accent-admin)]/15 blur-3xl"
         />
         {/* En movil apilamos vertical (col): titulo arriba, KPIs debajo.
             En tablet+ volvemos al layout horizontal con flex-wrap. Esto
@@ -194,12 +208,9 @@ export default async function AdminHomePage() {
               <ShieldCheck size={18} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-3)]">
-                <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold text-[var(--color-text-3)]">
-                  CCMGC
-                </span>
-                Centro administrativo
-              </div>
+              <SectionEyebrow pulse dotColor="var(--hero-accent-admin)">
+                Administración
+              </SectionEyebrow>
               <h1 className="mt-0.5 text-[22px] font-semibold tracking-tight text-[var(--color-text-1)]">
                 Administración
               </h1>
@@ -221,26 +232,30 @@ export default async function AdminHomePage() {
 
           {/* KPIs globales en vivo */}
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-            <KpiStat
+            <KpiPill
+              layout="stacked"
               icon={<Users size={11} strokeWidth={1.7} aria-hidden />}
               label="Activos"
               value={activeUsers}
               hint={inactiveUsers > 0 ? `${inactiveUsers} inactivos` : "0 inactivos"}
             />
-            <KpiStat
+            <KpiPill
+              layout="stacked"
               icon={<Boxes size={11} strokeWidth={1.7} aria-hidden />}
               label="Buses"
               value={totalBuses}
               hint={`${operadorasCount} operadora${operadorasCount === 1 ? "" : "s"}`}
             />
-            <KpiStat
+            <KpiPill
+              layout="stacked"
               icon={<Inbox size={11} strokeWidth={1.7} aria-hidden />}
               label="Pendientes"
               value={feedbackPendiente}
               hint={`${feedbackUltimos7} en 7d`}
               tone={feedbackPendiente > 0 ? "warning" : "neutral"}
             />
-            <KpiStat
+            <KpiPill
+              layout="stacked"
               icon={<BookOpenCheck size={11} strokeWidth={1.7} aria-hidden />}
               label="Artículos"
               value={kbPublicados}
@@ -249,6 +264,44 @@ export default async function AdminHomePage() {
           </div>
         </div>
       </header>
+
+      <section className="grid gap-2 sm:grid-cols-2">
+        <Link
+          href="/admin/analytics"
+          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 hover:border-cyan-400/40"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Salud · errores cliente
+              </p>
+              <p className="mt-1 text-sm text-[var(--color-text-2)]">
+                Revisa errores de frontend agrupados y su tendencia.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/10 px-2 py-0.5 text-xs font-semibold text-rose-200">
+              <TriangleAlert size={12} aria-hidden />
+              {clientErrors24h} / 24h
+            </span>
+          </div>
+        </Link>
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Salud · cola offline
+              </p>
+              <p className="mt-1 text-sm text-[var(--color-text-2)]">
+                Si hay pendientes offline, el indicador aparecerá en la esquina inferior.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-200">
+              <Signal size={12} aria-hidden />
+              Indicador activo
+            </span>
+          </div>
+        </div>
+      </section>
 
       {/* ── CARDS DE SECCIÓN ─────────────────────────────────────────────── */}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -319,8 +372,8 @@ export default async function AdminHomePage() {
             href="/novedades"
             tone="novedades"
             icon={<Megaphone size={20} strokeWidth={1.6} aria-hidden />}
-            title="Avisos y novedades"
-            description="Publica avisos en vivo (reinicios, mantenimientos) y entradas de changelog."
+            title="Gestionar avisos"
+            description="Publica avisos operativos y novedades de producto para el equipo."
             stats={[
               { label: "Avisos activos", value: avisosActivos, accent: true, warn: avisosActivos > 0 },
               { label: "Novedades", value: novedadesPublicadas },
@@ -356,49 +409,6 @@ export default async function AdminHomePage() {
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────
 
-type KpiTone = "neutral" | "warning" | "success";
-
-function KpiStat({
-  icon,
-  label,
-  value,
-  hint,
-  tone = "neutral",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  hint?: string;
-  tone?: KpiTone;
-}) {
-  const toneCls =
-    tone === "warning"
-      ? "ring-[var(--color-warning)]/30 bg-[var(--color-warning-light)] text-[var(--color-warning)]"
-      : tone === "success"
-        ? "ring-[var(--color-success)]/30 bg-[var(--color-success-light)] text-[var(--color-success)]"
-        : "ring-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)]";
-  return (
-    <div
-      className={`flex min-w-[8.5rem] flex-col rounded-lg px-2.5 py-1.5 ring-1 ${toneCls}`}
-    >
-      <div className="flex items-center gap-1 text-[9.5px] uppercase tracking-wider opacity-80">
-        {icon}
-        {label}
-      </div>
-      <div className="flex items-baseline justify-between gap-1">
-        <span className="num-tabular text-[16px] font-semibold leading-tight text-[var(--color-text-1)]">
-          {value}
-        </span>
-        {hint ? (
-          <span className="truncate text-[10px] opacity-70" title={hint}>
-            {hint}
-          </span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 function SectionCard({
   href,
   tone,
@@ -418,14 +428,14 @@ function SectionCard({
   return (
     <Link
       href={href}
-      className={`group relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition-all ${t.ring} hover:-translate-y-0.5 hover:shadow-md`}
+      className={`group admin-hub-card-glow relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition-all duration-200 ${t.ring} hover:-translate-y-0.5 hover:shadow-md hover:shadow-[color-mix(in_oklab,var(--hero-accent-admin)_8%,transparent)]`}
     >
       {/* Acento lateral */}
       <span aria-hidden className={`absolute inset-y-3 left-0 w-0.5 rounded-r ${t.accentBar}`} />
       {/* Glow esquina */}
       <div
         aria-hidden
-        className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br ${t.glow} to-transparent blur-2xl opacity-60 transition-opacity duration-300 group-hover:opacity-100`}
+        className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br ${t.glow} to-transparent blur-2xl opacity-50 transition-[opacity,transform] duration-300 group-hover:scale-110 group-hover:opacity-100`}
       />
 
       <div className="relative">

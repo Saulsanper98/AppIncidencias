@@ -1,6 +1,6 @@
 export type AssetType = "validadora" | "sae" | "router" | "pantalla";
 
-export type TicketStatus = "abierto" | "en_proceso" | "esperando_repuesto" | "resuelto";
+export type TicketStatus = "borrador" | "abierto" | "en_proceso" | "esperando_repuesto" | "resuelto";
 
 export type TicketPriority = "alta" | "media" | "baja";
 
@@ -49,8 +49,13 @@ export type Ticket = {
   mapPlaceMunicipio?: string | null;
   assignedToUserId?: string | null;
   assignedToUserName?: string | null;
+  createdByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Hora real de la incidencia (apunte express); puede diferir de createdAt. */
+  incidentOccurredAt?: string | null;
+  /** Apunte express u otro alta mínima sin completar (tipología, adjuntos…). */
+  needsCompletion?: boolean;
 };
 
 export type TicketComment = {
@@ -232,6 +237,8 @@ export type KbArticleSummary = {
   authorName?: string | null;
   publishedAt: string | null;
   updatedAt: string;
+  /** Primera imagen del contenido (miniatura en listados). */
+  coverUrl?: string | null;
 };
 
 export type KbArticleDetail = KbArticleSummary & {

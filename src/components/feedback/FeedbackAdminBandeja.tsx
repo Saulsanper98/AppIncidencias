@@ -10,16 +10,24 @@ import {
   Download,
   FileText,
   Lightbulb,
-  Loader2,
   MapPin,
   Search,
   Star,
   TrendingUp,
   X,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Input, Textarea } from "@/components/ui/input";
+import { KpiPill } from "@/components/ui/kpi-pill";
+import { Skeleton } from "@/components/ui/skeleton";
+import { hapticLight } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 import type { FeedbackCategory, FeedbackStatus, FeedbackType, FeedbackUrgency, UserFeedback } from "@/lib/domain";
 
 type StatsEntry = { type: string; status: string; _count: { id: number } };
@@ -36,19 +44,20 @@ type ApiResponse = {
 
 const TYPE_META: Record<FeedbackType, {
   label: string; icon: React.ElementType;
-  color: string; bg: string; borderColor: string; pill: string;
+  badge: "warning" | "error" | "success";
+  borderColor: string;
 }> = {
-  idea:   { label: "Idea",   icon: Lightbulb,   color: "text-[#f59e0b]",              bg: "bg-[rgba(245,158,11,0.14)]",    borderColor: "#f59e0b",             pill: "bg-[rgba(245,158,11,0.12)] text-[#f59e0b] border border-[rgba(245,158,11,0.3)]" },
-  error:  { label: "Error",  icon: AlertCircle, color: "text-[var(--color-error)]",   bg: "bg-[var(--color-error-light)]", borderColor: "var(--color-error)",  pill: "bg-[var(--color-error-light)] text-[var(--color-error)] border border-[rgba(220,38,38,0.3)]" },
-  mejora: { label: "Mejora", icon: TrendingUp,  color: "text-[var(--color-success)]", bg: "bg-[var(--color-success-light)]",borderColor: "var(--color-success)",pill: "bg-[var(--color-success-light)] text-[var(--color-success)] border border-[rgba(5,150,105,0.3)]" },
+  idea:   { label: "Idea",   icon: Lightbulb,   badge: "warning", borderColor: "var(--color-warning)" },
+  error:  { label: "Error",  icon: AlertCircle, badge: "error",   borderColor: "var(--color-error)" },
+  mejora: { label: "Mejora", icon: TrendingUp,  badge: "success", borderColor: "var(--color-success)" },
 };
 
-const STATUS_META: Record<FeedbackStatus, { label: string; color: string; dot: string; ring: string }> = {
-  pendiente:    { label: "Pendiente",    color: "text-[var(--color-text-2)]",  dot: "bg-[var(--color-text-3)]",   ring: "border-[var(--color-border)] bg-[var(--color-surface-2)]" },
-  en_revision:  { label: "En revisión", color: "text-[#f59e0b]",              dot: "bg-[#f59e0b]",               ring: "border-[rgba(245,158,11,0.4)] bg-[rgba(245,158,11,0.1)]" },
-  planificado:  { label: "Planificado", color: "text-[var(--color-accent)]",  dot: "bg-[var(--color-accent)]",   ring: "border-[rgba(37,99,235,0.4)] bg-[var(--color-accent-light)]" },
-  implementado: { label: "Implementado",color: "text-[var(--color-success)]", dot: "bg-[var(--color-success)]",  ring: "border-[rgba(5,150,105,0.4)] bg-[var(--color-success-light)]" },
-  descartado:   { label: "Descartado",  color: "text-[var(--color-text-3)]",  dot: "bg-[var(--color-surface-3)]",ring: "border-[var(--color-border)] bg-[var(--color-surface-3)]" },
+const STATUS_META: Record<FeedbackStatus, { label: string; badge: "neutral" | "warning" | "info" | "success" }> = {
+  pendiente:    { label: "Pendiente",    badge: "neutral" },
+  en_revision:  { label: "En revisión", badge: "warning" },
+  planificado:  { label: "Planificado", badge: "info" },
+  implementado: { label: "Implementado", badge: "success" },
+  descartado:   { label: "Descartado",  badge: "neutral" },
 };
 
 const _URGENCY_META: Record<FeedbackUrgency, { label: string; color: string; dot: string }> = {
@@ -73,18 +82,10 @@ const STATUS_EDIT_OPTIONS: MenuSelectOption[] = ALL_STATUSES.map((s) => ({
   value: s, label: STATUS_META[s].label,
 }));
 
-const TINT: Record<string, { icon: string; iconBg: string; bar: string; glow: string }> = {
-  blue:    { icon: "text-[var(--color-accent)]",   iconBg: "bg-[var(--color-accent-light)]",  bar: "bg-[var(--color-accent)]",  glow: "rgba(37,99,235,0.07)" },
-  amber:   { icon: "text-[#f59e0b]",               iconBg: "bg-[rgba(245,158,11,0.14)]",      bar: "bg-[#f59e0b]",              glow: "rgba(245,158,11,0.07)" },
-  red:     { icon: "text-[var(--color-error)]",    iconBg: "bg-[var(--color-error-light)]",   bar: "bg-[var(--color-error)]",   glow: "rgba(220,38,38,0.07)" },
-  green:   { icon: "text-[var(--color-success)]",  iconBg: "bg-[var(--color-success-light)]", bar: "bg-[var(--color-success)]", glow: "rgba(5,150,105,0.07)" },
-  neutral: { icon: "text-[var(--color-text-2)]",   iconBg: "bg-[var(--color-surface-2)]",     bar: "bg-[var(--color-text-3)]",  glow: "transparent" },
-};
-
 const ROLE_AVATAR: Record<string, string> = {
   gestor_centro_control: "bg-[var(--color-accent-light)] text-[var(--color-accent)]",
-  tecnico_campo:         "bg-[var(--color-success-light)] text-[var(--color-success)]",
-  conductor:             "bg-[rgba(245,158,11,0.15)] text-[#f59e0b]",
+  tecnico_campo: "bg-[var(--color-success-light)] text-[var(--color-success)]",
+  conductor: "bg-[var(--color-warning-light)] text-[var(--color-warning)]",
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ function StarDisplay({ value }: { value: number }) {
     <span className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((s) => (
         <Star key={s} size={10} fill="currentColor"
-          className={s <= value ? "text-[#f59e0b]" : "text-[var(--color-surface-3)]"}
+          className={s <= value ? "text-[var(--color-warning)]" : "text-[var(--color-surface-3)]"}
         />
       ))}
     </span>
@@ -136,32 +137,36 @@ function TypeTabs({ value, onChange, counts }: {
   value: string; onChange: (v: string) => void; counts: Record<string, number>;
 }) {
   const TABS = [
-    { value: "",       label: "Todos",   icon: null,        color: "" },
-    { value: "idea",   label: "Ideas",   icon: Lightbulb,   color: "#f59e0b" },
-    { value: "error",  label: "Errores", icon: AlertCircle, color: "var(--color-error)" },
-    { value: "mejora", label: "Mejoras", icon: TrendingUp,  color: "var(--color-success)" },
+    { value: "", label: "Todos", icon: null as React.ElementType | null, tone: "neutral" as const },
+    { value: "idea", label: "Ideas", icon: Lightbulb, tone: "warning" as const },
+    { value: "error", label: "Errores", icon: AlertCircle, tone: "error" as const },
+    { value: "mejora", label: "Mejoras", icon: TrendingUp, tone: "success" as const },
   ] as const;
 
   return (
-    <div className="flex gap-0.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-1">
-      {TABS.map(({ value: v, label, icon: Icon, color }) => {
+    <div className="flex flex-wrap gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-1">
+      {TABS.map(({ value: v, label, icon: Icon, tone }) => {
         const active = v === value;
         const count = v === "" ? undefined : counts[v];
         return (
-          <button key={v} type="button" onClick={() => onChange(v)}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-150 ${
-              active
-                ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-text-1)]"
-                : "text-[var(--color-text-3)] hover:text-[var(--color-text-2)]"
-            }`}
-          >
-            {Icon && <Icon size={12} style={{ color: active ? color : undefined }} className="transition-colors" />}
-            {label}
-            {count !== undefined && count > 0 && (
-              <span className={`min-w-[18px] rounded-full px-1 py-px text-center text-[10px] tabular-nums leading-none ${
-                active ? "bg-[var(--color-surface-2)] text-[var(--color-text-2)]" : "bg-[var(--color-surface-3)] text-[var(--color-text-3)]"
-              }`}>{count}</span>
+          <button
+            key={v}
+            type="button"
+            onClick={() => onChange(v)}
+            className={cn(
+              "filter-chip",
+              active && "filter-chip--active",
+              !active && "border-transparent bg-transparent",
             )}
+            style={active && tone !== "neutral" ? { ["--dot-color" as string]: `var(--color-${tone})` } : undefined}
+          >
+            {Icon ? <Icon size={12} aria-hidden /> : null}
+            {label}
+            {count !== undefined && count > 0 ? (
+              <span className="min-w-[18px] rounded-full bg-[var(--color-surface-3)] px-1 py-px text-center text-[10px] tabular-nums leading-none">
+                {count}
+              </span>
+            ) : null}
           </button>
         );
       })}
@@ -181,51 +186,27 @@ function StatusPipeline({ current }: { current: FeedbackStatus }) {
         const isPast = !isDiscarded && i < currentIdx;
         return (
           <Fragment key={step}>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all ${
-              isActive ? `border ${sm.ring} ${sm.color}` :
-              isPast ? "text-[var(--color-text-3)] opacity-50" :
-              "text-[var(--color-text-3)] opacity-30"
-            }`}>
-              {isActive && <span className={`h-1.5 w-1.5 rounded-full ${sm.dot}`} />}
+            <Badge
+              variant={isActive ? sm.badge : "neutral"}
+              className={cn(!isActive && (isPast ? "opacity-50" : "opacity-30"))}
+            >
               {sm.label}
-            </span>
+            </Badge>
             {i < STATUS_PIPELINE.length - 1 && (
-              <ChevronRight size={10} className={`shrink-0 ${isPast ? "text-[var(--color-text-3)] opacity-50" : "text-[var(--color-border)]"}`} />
+              <ChevronRight size={10} className={cn("shrink-0", isPast ? "text-[var(--color-text-3)] opacity-50" : "text-[var(--color-border)]")} />
             )}
           </Fragment>
         );
       })}
-      {isDiscarded && (
-        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${STATUS_META.descartado.ring} ${STATUS_META.descartado.color}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META.descartado.dot}`} />
-          Descartado
-        </span>
-      )}
+      {isDiscarded ? (
+        <Badge variant="neutral">Descartado</Badge>
+      ) : null}
     </div>
   );
 }
 
-// KPI card
-type KpiCardProps = { label: string; value: string | number; sub?: string; icon: React.ElementType; tint: "blue" | "amber" | "red" | "green" | "neutral" };
-
-function KpiCard({ label, value, sub, icon: Icon, tint }: KpiCardProps) {
-  const t = TINT[tint];
-  return (
-    <div
-      className="relative overflow-hidden rounded-xl border border-[var(--color-border)] p-4"
-      style={{ background: `radial-gradient(ellipse at 80% 0%, ${t.glow} 0%, transparent 60%), var(--color-surface)` }}
-    >
-      <div className={`absolute bottom-0 left-0 right-0 h-0.5 ${t.bar}`} />
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">{label}</p>
-        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${t.iconBg}`}>
-          <Icon size={14} className={t.icon} />
-        </div>
-      </div>
-      <p className="text-3xl font-bold tabular-nums text-[var(--color-text-1)]">{value}</p>
-      {sub && <p className="mt-1 text-xs text-[var(--color-text-3)]">{sub}</p>}
-    </div>
-  );
+function listStaggerClass(index: number) {
+  return `ccmgc-stagger-in ccmgc-stagger-in-${(index % 6) + 1}`;
 }
 
 // Skeleton row
@@ -233,16 +214,16 @@ function SkeletonRow() {
   return (
     <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
       <div className="flex items-start gap-3">
-        <div className="h-9 w-9 animate-pulse rounded-full bg-[var(--color-surface-2)]" />
+        <Skeleton className="h-9 w-9 rounded-full" />
         <div className="flex-1 space-y-2.5">
           <div className="flex gap-2">
-            <div className="h-5 w-14 animate-pulse rounded-md bg-[var(--color-surface-2)]" />
-            <div className="h-5 w-20 animate-pulse rounded-md bg-[var(--color-surface-2)]" />
+            <Skeleton className="h-5 w-14 rounded-md" />
+            <Skeleton className="h-5 w-20 rounded-md" />
           </div>
-          <div className="h-4 w-3/4 animate-pulse rounded bg-[var(--color-surface-2)]" />
-          <div className="h-3 w-1/2 animate-pulse rounded bg-[var(--color-surface-2)]" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
         </div>
-        <div className="h-5 w-20 animate-pulse rounded-full bg-[var(--color-surface-2)]" />
+        <Skeleton className="h-5 w-20 rounded-full" />
       </div>
     </div>
   );
@@ -250,7 +231,7 @@ function SkeletonRow() {
 
 // ─── Feedback row ──────────────────────────────────────────────────────────────
 
-function FeedbackRow({ item, onUpdated }: { item: UserFeedback; onUpdated: (u: UserFeedback) => void }) {
+function FeedbackRow({ item, onUpdated, staggerIndex }: { item: UserFeedback; onUpdated: (u: UserFeedback) => void; staggerIndex: number }) {
   const rm = useReducedMotion();
   const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -275,6 +256,7 @@ function FeedbackRow({ item, onUpdated }: { item: UserFeedback; onUpdated: (u: U
       if (!res.ok) throw new Error();
       onUpdated((await res.json()) as UserFeedback);
       setSaved(true);
+      hapticLight();
       setTimeout(() => setSaved(false), 2500);
     } catch { /* silencio */ }
     finally { setSaving(false); }
@@ -282,7 +264,10 @@ function FeedbackRow({ item, onUpdated }: { item: UserFeedback; onUpdated: (u: U
 
   return (
     <div
-      className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] transition-[border-color,box-shadow] duration-150 hover:border-[var(--color-border-hover)] hover:shadow-lg hover:shadow-black/20"
+      className={cn(
+        "ccmgc-card-clickable overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] transition-[border-color,box-shadow] duration-150 hover:border-[var(--color-border-hover)] hover:shadow-lg hover:shadow-black/20",
+        listStaggerClass(staggerIndex),
+      )}
       style={{ borderLeftWidth: "3px", borderLeftColor: tm?.borderColor }}
     >
       {/* Header (clickable, toggles expand) */}
@@ -296,18 +281,18 @@ function FeedbackRow({ item, onUpdated }: { item: UserFeedback; onUpdated: (u: U
         <div className="min-w-0 flex-1 space-y-1.5">
           {/* Chips */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${tm?.pill ?? ""}`}>
-              <Icon size={10} />
+            <Badge variant={tm?.badge ?? "neutral"} className="inline-flex items-center gap-1">
+              <Icon size={10} aria-hidden />
               {tm?.label}
-            </span>
-            <span className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-text-3)]">
+            </Badge>
+            <Badge variant="neutral">
               {CATEGORY_LABEL[item.category as FeedbackCategory] ?? item.category}
-            </span>
+            </Badge>
             {item.urgency === "alta" && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--color-error)]">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-error)]" />
+              <Badge variant="error" className="inline-flex items-center gap-1">
+                <span className="ccmgc-pulse-dot h-1.5 w-1.5 rounded-full bg-current" />
                 Urgente
-              </span>
+              </Badge>
             )}
           </div>
 
@@ -328,10 +313,7 @@ function FeedbackRow({ item, onUpdated }: { item: UserFeedback; onUpdated: (u: U
         {/* Right meta */}
         <div className="flex shrink-0 flex-col items-end gap-2 pt-0.5">
           {item.rating !== null && <StarDisplay value={item.rating} />}
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap ${sm.color} ${sm.ring}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${sm.dot}`} />
-            {sm.label}
-          </span>
+          <Badge variant={sm.badge}>{sm.label}</Badge>
           {expanded
             ? <ChevronUp size={14} className="text-[var(--color-text-3)]" />
             : <ChevronDown size={14} className="text-[var(--color-text-3)]" />}
@@ -424,13 +406,13 @@ function FeedbackRow({ item, onUpdated }: { item: UserFeedback; onUpdated: (u: U
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-label text-[var(--color-text-2)]">Notas internas</label>
-                    <textarea
+                    <Textarea
                       value={localNotes}
                       onChange={(e) => setLocalNotes(e.target.value)}
                       placeholder="Apuntes para el equipo…"
                       rows={2}
                       maxLength={1000}
-                      className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] transition-colors focus:border-[var(--color-accent)] focus:outline-none"
+                      wrapperClassName="space-y-0"
                     />
                   </div>
                 </div>
@@ -446,15 +428,15 @@ function FeedbackRow({ item, onUpdated }: { item: UserFeedback; onUpdated: (u: U
                       </motion.span>
                     )}
                   </AnimatePresence>
-                  <button
+                  <Button
                     type="button"
                     onClick={save}
                     disabled={saving || !hasChanges}
-                    className="inline-flex min-h-[36px] items-center gap-2 rounded-lg bg-[var(--color-accent)] px-5 py-2 text-sm font-medium text-white transition-all hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                    loading={saving}
+                    size="sm"
                   >
-                    {saving && <Loader2 size={13} className="animate-spin" />}
                     Guardar cambios
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -462,6 +444,40 @@ function FeedbackRow({ item, onUpdated }: { item: UserFeedback; onUpdated: (u: U
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function KanbanColumn({
+  title,
+  tone,
+  items,
+  onUpdated,
+}: {
+  title: string;
+  tone: "neutral" | "warning" | "success";
+  items: UserFeedback[];
+  onUpdated: (u: UserFeedback) => void;
+}) {
+  return (
+    <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/35 p-2.5">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-semibold text-[var(--color-text-1)]">{title}</span>
+        <Badge variant={tone} className="tabular-nums">
+          {items.length}
+        </Badge>
+      </div>
+      {items.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-[var(--color-border)] px-2 py-1.5 text-xs text-[var(--color-text-3)]">
+          Sin elementos
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item, index) => (
+            <FeedbackRow key={item.id} item={item} onUpdated={onUpdated} staggerIndex={index} />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -476,6 +492,7 @@ export function FeedbackAdminBandeja() {
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"lista" | "kanban">("lista");
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -485,22 +502,27 @@ export function FeedbackAdminBandeja() {
 
   useEffect(() => { setPage(1); }, [typeFilter, statusFilter, debouncedSearch]);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true); setError(null);
-      try {
-        const p = new URLSearchParams({ page: String(page) });
-        if (typeFilter) p.set("type", typeFilter);
-        if (statusFilter) p.set("status", statusFilter);
-        if (debouncedSearch) p.set("q", debouncedSearch);
-        const res = await fetch(`/api/feedback?${p}`);
-        if (!res.ok) throw new Error();
-        setData((await res.json()) as ApiResponse);
-      } catch { setError("No se pudo cargar el feedback"); }
-      finally { setLoading(false); }
-    };
-    void load();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const p = new URLSearchParams({ page: String(page) });
+      if (typeFilter) p.set("type", typeFilter);
+      if (statusFilter) p.set("status", statusFilter);
+      if (debouncedSearch) p.set("q", debouncedSearch);
+      const res = await fetch(`/api/feedback?${p}`);
+      if (!res.ok) throw new Error();
+      setData((await res.json()) as ApiResponse);
+    } catch {
+      setError("No se pudo cargar el feedback");
+    } finally {
+      setLoading(false);
+    }
   }, [page, typeFilter, statusFilter, debouncedSearch]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const handleUpdated = (u: UserFeedback) =>
     setData((prev) => prev ? { ...prev, items: prev.items.map((i) => (i.id === u.id ? u : i)) } : prev);
@@ -541,18 +563,32 @@ export function FeedbackAdminBandeja() {
     URL.revokeObjectURL(url);
   };
 
+  const clearFilters = () => {
+    setSearch("");
+    setTypeFilter("");
+    setStatusFilter("");
+  };
+
   const hasFilters = typeFilter || statusFilter || search;
+  const kanbanColumns = useMemo(() => {
+    const items = data?.items ?? [];
+    return {
+      todo: items.filter((i) => i.status === "pendiente"),
+      review: items.filter((i) => i.status === "en_revision" || i.status === "planificado"),
+      done: items.filter((i) => i.status === "implementado"),
+    };
+  }, [data?.items]);
 
   return (
     <div className="space-y-5">
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard label="Total" value={data?.total ?? "—"} sub="recibidos" icon={ClipboardList} tint="blue" />
-        <KpiCard label="Pendientes" value={pendingCount} sub="sin revisar" icon={AlertCircle} tint={pendingCount > 0 ? "amber" : "neutral"} />
-        <KpiCard label="Ideas" value={kpiByType.idea} icon={Lightbulb} tint="amber" />
-        <KpiCard label="Errores" value={kpiByType.error} icon={AlertCircle} tint="red" />
-        <KpiCard label="Satisfacción" value={data?.avgRating ? `${data.avgRating.toFixed(1)} ★` : "—"} sub="valoración media" icon={Star} tint="green" />
+        <KpiPill layout="stacked" label="Total" value={data?.total ?? 0} hint="recibidos" tone="accent" icon={<ClipboardList size={12} aria-hidden />} animateValue={!!data} />
+        <KpiPill layout="stacked" label="Pendientes" value={pendingCount} hint="sin revisar" tone={pendingCount > 0 ? "warning" : "neutral"} pulse={pendingCount > 0} icon={<AlertCircle size={12} aria-hidden />} animateValue={!!data} />
+        <KpiPill layout="stacked" label="Ideas" value={kpiByType.idea} tone="warning" icon={<Lightbulb size={12} aria-hidden />} animateValue={!!data} />
+        <KpiPill layout="stacked" label="Errores" value={kpiByType.error} tone="error" icon={<AlertCircle size={12} aria-hidden />} animateValue={!!data} />
+        <KpiPill layout="stacked" label="Satisfacción" textValue={data?.avgRating ? `${data.avgRating.toFixed(1)} ★` : "—"} hint="valoración media" tone="success" icon={<Star size={12} aria-hidden />} animateValue={false} />
       </div>
 
       {/* Filters */}
@@ -561,39 +597,74 @@ export function FeedbackAdminBandeja() {
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]" />
-            <input
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-[var(--color-text-3)]" aria-hidden />
+            <Input
               ref={searchRef}
               type="search"
               placeholder="Buscar en título o descripción…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] py-2 pl-9 pr-8 text-sm text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors focus:border-[var(--color-accent)] focus:outline-none"
+              className="pl-9 pr-8"
             />
-            {search && (
-              <button type="button" onClick={() => setSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-3)] hover:text-[var(--color-text-1)]">
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-3)] hover:text-[var(--color-text-1)]"
+                aria-label="Limpiar búsqueda"
+              >
                 <X size={13} />
               </button>
-            )}
+            ) : null}
           </div>
 
           <div className="w-44 shrink-0">
             <MenuSelect value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} aria-label="Filtrar por estado" />
           </div>
-
-          {hasFilters && (
-            <button type="button" onClick={() => { setSearch(""); setTypeFilter(""); setStatusFilter(""); }}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-2 text-xs font-medium text-[var(--color-text-2)] transition-colors hover:text-[var(--color-text-1)]">
-              <X size={12} /> Limpiar
+          <div className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-1">
+            <button
+              type="button"
+              onClick={() => setViewMode("lista")}
+              className={cn(
+                "rounded px-2 py-1 text-[11px] font-semibold",
+                viewMode === "lista"
+                  ? "bg-[var(--color-accent)] text-white"
+                  : "text-[var(--color-text-2)]",
+              )}
+            >
+              Lista
             </button>
-          )}
+            <button
+              type="button"
+              onClick={() => setViewMode("kanban")}
+              className={cn(
+                "rounded px-2 py-1 text-[11px] font-semibold",
+                viewMode === "kanban"
+                  ? "bg-[var(--color-accent)] text-white"
+                  : "text-[var(--color-text-2)]",
+              )}
+            >
+              Kanban
+            </button>
+          </div>
 
-          <button type="button" onClick={exportCsv} disabled={!data?.items.length}
-            title="Exportar a CSV"
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text-2)] transition-colors hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)] disabled:opacity-40">
-            <Download size={14} /> CSV
-          </button>
+          {hasFilters ? (
+            <Button type="button" variant="secondary" size="sm" onClick={clearFilters} startIcon={<X size={12} />}>
+              Limpiar
+            </Button>
+          ) : null}
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={exportCsv}
+            disabled={!data?.items.length}
+            startIcon={<Download size={14} />}
+            className="ml-auto"
+          >
+            CSV
+          </Button>
         </div>
       </div>
 
@@ -608,56 +679,52 @@ export function FeedbackAdminBandeja() {
 
       {/* List */}
       {loading ? (
-        <div className="space-y-2.5">
+        <div className="space-y-2.5" aria-busy="true">
           <SkeletonRow /><SkeletonRow /><SkeletonRow />
         </div>
       ) : error ? (
-        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--color-error)]/30 bg-[var(--color-error-light)] p-4 text-sm text-[var(--color-error)]">
-          <AlertCircle size={16} className="shrink-0" />
-          {error}
-        </div>
+        <ErrorState
+          icon={AlertCircle}
+          title="Error al cargar feedback"
+          hint={error}
+          onRetry={() => void load()}
+        />
       ) : !data?.items.length ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--color-border)] py-20 text-center">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-surface-2)]">
-            <ClipboardList size={26} className="text-[var(--color-text-3)]" />
-          </div>
-          <p className="font-medium text-[var(--color-text-2)]">
-            {hasFilters ? "Sin resultados para estos filtros" : "Aún no hay feedback"}
-          </p>
-          <p className="mt-1 text-sm text-[var(--color-text-3)]">
-            {hasFilters ? "Prueba a cambiar los filtros" : "Los feedbacks de los usuarios aparecerán aquí"}
-          </p>
-          {hasFilters && (
-            <button type="button" onClick={() => { setSearch(""); setTypeFilter(""); setStatusFilter(""); }}
-              className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-2 text-xs font-medium text-[var(--color-text-2)] transition-colors hover:text-[var(--color-text-1)]">
-              Limpiar filtros
-            </button>
-          )}
+        <EmptyState
+          icon={ClipboardList}
+          title={hasFilters ? "Sin resultados para estos filtros" : "Aún no hay feedback"}
+          hint={hasFilters ? "Prueba a cambiar los filtros" : "Los feedbacks de los usuarios aparecerán aquí"}
+          actionLabel={hasFilters ? "Limpiar filtros" : undefined}
+          onAction={hasFilters ? clearFilters : undefined}
+        />
+      ) : viewMode === "lista" ? (
+        <div className="space-y-2.5">
+          {data.items.map((item, index) => (
+            <FeedbackRow key={item.id} item={item} onUpdated={handleUpdated} staggerIndex={index} />
+          ))}
         </div>
       ) : (
-        <div className="space-y-2.5">
-          {data.items.map((item) => (
-            <FeedbackRow key={item.id} item={item} onUpdated={handleUpdated} />
-          ))}
+        <div className="grid gap-3 lg:grid-cols-3">
+          <KanbanColumn title="Todo" tone="neutral" items={kanbanColumns.todo} onUpdated={handleUpdated} />
+          <KanbanColumn title="En revisión" tone="warning" items={kanbanColumns.review} onUpdated={handleUpdated} />
+          <KanbanColumn title="Hecho" tone="success" items={kanbanColumns.done} onUpdated={handleUpdated} />
         </div>
       )}
 
       {/* Pagination */}
-      {data && data.pages > 1 && (
+      {data && data.pages > 1 ? (
         <div className="flex items-center justify-center gap-2 pt-1">
-          <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}
-            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-1.5 text-sm text-[var(--color-text-2)] transition-colors hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)] disabled:opacity-40">
+          <Button type="button" variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
             ← Anterior
-          </button>
+          </Button>
           <span className="min-w-[6rem] text-center text-sm text-[var(--color-text-2)]">
             Página {page} de {data.pages}
           </span>
-          <button type="button" disabled={page >= data.pages} onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-1.5 text-sm text-[var(--color-text-2)] transition-colors hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)] disabled:opacity-40">
+          <Button type="button" variant="secondary" size="sm" disabled={page >= data.pages} onClick={() => setPage((p) => p + 1)}>
             Siguiente →
-          </button>
+          </Button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

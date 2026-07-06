@@ -69,9 +69,13 @@ export type SelectProps = {
   onChange?: (event: { target: { value: string; name?: string } }) => void;
   onValueChange?: (value: string) => void;
   disabled?: boolean;
+  /** default = formularios; compact = filtros inline */
+  size?: "default" | "compact";
   className?: string;
   wrapperClassName?: string;
   panelClassName?: string;
+  /** Cabecera opcional dentro del panel (p. ej. nombre del filtro). */
+  panelTitle?: string;
   placeholder?: string;
   id?: string;
   name?: string;
@@ -133,9 +137,11 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
     onChange,
     onValueChange,
     disabled = false,
+    size = "default",
     className,
     wrapperClassName,
     panelClassName,
+    panelTitle,
     placeholder,
     id,
     name,
@@ -353,7 +359,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
 
   const panelStyle: CSSProperties | undefined = useMemo(() => {
     if (!anchor) return undefined;
-    const minWidth = Math.max(anchor.width, 180);
+    const minWidth = Math.max(anchor.width, size === "compact" ? 220 : 200);
     if (anchor.openUp) {
       return {
         position: "fixed",
@@ -369,7 +375,9 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
       left: anchor.left,
       minWidth,
     };
-  }, [anchor]);
+  }, [anchor, size]);
+
+  const isCompact = size === "compact";
 
   let flatIndex = 0;
 
@@ -390,27 +398,35 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
         disabled={disabled}
         onClick={() => (open ? handleClose() : handleOpen())}
         onKeyDown={handleTriggerKeyDown}
+        data-open={open ? "true" : undefined}
         className={cn(
-          "group/select flex w-full items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-left text-sm font-medium text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] min-h-[44px] transition-colors duration-150 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-3)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] disabled:cursor-not-allowed disabled:opacity-50",
-          open && "border-[var(--color-accent)]/45 bg-[var(--color-surface-3)] ring-2 ring-[var(--color-accent)]/35",
+          "group/select ccmgc-input-focus flex w-full items-center justify-between gap-2 text-left font-medium text-[var(--color-text-1)] transition-[border-color,box-shadow,background-color] duration-150 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+          isCompact
+            ? "ccmgc-select-trigger-compact min-h-7 h-7 rounded-md border-0 bg-transparent px-1.5 py-0 text-[11px] shadow-none hover:bg-[var(--color-surface-3)]/55 focus-visible:!border-0 focus-visible:!shadow-none focus-visible:ring-0 focus-visible:outline-none"
+            : "ccmgc-select-trigger rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] min-h-[44px] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-3)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]",
+          open &&
+            (isCompact
+              ? "bg-[var(--color-surface-3)]/70 text-[var(--color-accent)]"
+              : "border-[var(--color-accent)]/45 bg-[var(--color-surface-3)] ring-2 ring-[var(--color-accent)]/35"),
           className,
         )}
       >
         <span
           className={cn(
-            "truncate",
+            "min-w-0 truncate",
             isPlaceholder ? "text-[var(--color-text-3)] font-normal" : "text-[var(--color-text-1)]",
+            open && isCompact && !isPlaceholder && "text-[var(--color-accent)]",
           )}
         >
           {triggerLabel || (placeholder ?? "")}
           {triggerLabel === "" && !placeholder ? "\u00a0" : ""}
         </span>
         <ChevronDown
-          size={14}
+          size={isCompact ? 12 : 14}
           strokeWidth={1.8}
           aria-hidden
           className={cn(
-            "shrink-0 text-[var(--color-text-3)] transition-transform duration-150",
+            "shrink-0 text-[var(--color-text-3)] transition-transform duration-200 ease-out",
             open && "rotate-180 text-[var(--color-accent)]",
           )}
         />
@@ -433,19 +449,25 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
               }
               style={panelStyle}
               className={cn(
-                /*
-                 * z-index alto (mayor que cualquier modal de la app, que
-                 * suele estar entre 50 y 100) para que el panel se monte
-                 * SIEMPRE encima del contenedor desde el que se abre.
-                 * Si en el futuro algún modal sube de 200, ajustar aquí.
-                 */
-                "z-[200] overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] shadow-2xl shadow-black/40 ring-1 ring-black/20 backdrop-blur",
-                "animate-in fade-in-0 zoom-in-95 duration-100",
+                "ccmgc-select-panel z-[200] overflow-hidden rounded-xl border backdrop-blur-md",
+                isCompact && "ccmgc-select-panel--compact",
                 panelClassName,
               )}
             >
+              {panelTitle ? (
+                <div className="ccmgc-select-panel-header">
+                  <span>{panelTitle}</span>
+                  <span className="ccmgc-select-panel-count">
+                    <span className="ccmgc-select-panel-count-dot" aria-hidden />
+                    {flat.length}
+                  </span>
+                </div>
+              ) : null}
               <ul
-                className="max-h-[18rem] overflow-y-auto overscroll-contain py-1 [-webkit-overflow-scrolling:touch]"
+                className={cn(
+                  "ccmgc-select-list max-h-[18rem] overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]",
+                  panelTitle ? "py-1" : "py-1.5",
+                )}
               >
                 {items.map((item, sectionIdx) => {
                   if (item.kind === "group") {
@@ -463,6 +485,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
                                 option={opt}
                                 idx={idx}
                                 triggerId={triggerId}
+                                compact={isCompact}
                                 isFocused={focusedIdx === idx}
                                 isSelected={opt.value === value}
                                 onHover={() => setFocusedIdx(idx)}
@@ -488,6 +511,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
                       option={item}
                       idx={idx}
                       triggerId={triggerId}
+                      compact={isCompact}
                       isFocused={focusedIdx === idx}
                       isSelected={item.value === value}
                       onHover={() => setFocusedIdx(idx)}
@@ -525,6 +549,7 @@ type SelectOptionProps = {
   option: OptionItem;
   idx: number;
   triggerId: string;
+  compact?: boolean;
   isFocused: boolean;
   isSelected: boolean;
   onSelect: () => void;
@@ -532,7 +557,7 @@ type SelectOptionProps = {
 };
 
 const SelectOption = forwardRef<HTMLLIElement, SelectOptionProps>(function SelectOption(
-  { option, idx, triggerId, isFocused, isSelected, onSelect, onHover },
+  { option, idx, triggerId, compact, isFocused, isSelected, onSelect, onHover },
   ref,
 ) {
   return (
@@ -548,23 +573,23 @@ const SelectOption = forwardRef<HTMLLIElement, SelectOptionProps>(function Selec
       }}
       onMouseEnter={onHover}
       className={cn(
-        "mx-1 flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm text-[var(--color-text-1)] transition-colors duration-100",
+        "ccmgc-select-option",
+        compact && "ccmgc-select-option--compact",
+        isSelected && "ccmgc-select-option--selected",
+        isFocused && !isSelected && "ccmgc-select-option--focused",
         option.disabled && "cursor-not-allowed opacity-40",
-        !option.disabled && isFocused && "bg-[var(--color-accent)]/12 text-[var(--color-text-1)]",
-        !option.disabled && !isFocused && "hover:bg-[var(--color-surface-3)]",
-        isSelected && "font-medium",
       )}
     >
-      <Check
-        size={14}
-        strokeWidth={2}
-        aria-hidden
+      <span
         className={cn(
-          "shrink-0 text-[var(--color-accent)] transition-opacity",
-          isSelected ? "opacity-100" : "opacity-0",
+          "ccmgc-select-check",
+          isSelected && "ccmgc-select-check--on",
         )}
-      />
-      <span className="min-w-0 flex-1 truncate">{option.label}</span>
+        aria-hidden
+      >
+        <Check size={compact ? 10 : 11} strokeWidth={2.5} />
+      </span>
+      <span className="ccmgc-select-option-label">{option.label}</span>
     </li>
   );
 });

@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { canCreateHandover } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
   if (!actor.userId) {
     return NextResponse.json({ message: "Debes iniciar sesión" }, { status: 401 });
   }
-  if (actor.role !== "gestor_centro_control" && actor.role !== "tecnico_campo") {
+  if (!canCreateHandover(actor.role)) {
     return NextResponse.json(
       { message: "Solo el personal del centro de control puede pasar turno" },
       { status: 403 },

@@ -21,6 +21,7 @@ import { useEffect, useState } from "react";
 import { Award, BarChart3, CheckCircle2, Clock3, Layers, Target, Trophy } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type MetricsPayload = {
   resolvedByMe: { last7: number; last30: number; last90: number };
@@ -81,12 +82,12 @@ export function MyMetricsCard() {
   if (loading) {
     return (
       <div className="account-section">
-        <div className="mb-4 h-4 w-40 animate-pulse rounded bg-[var(--color-surface-2)]" />
+        <Skeleton className="mb-4 h-4 w-40" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div
+            <Skeleton
               key={i}
-              className="h-28 animate-pulse rounded-xl bg-[var(--color-surface-2)]/60"
+              className="h-28 rounded-xl"
             />
           ))}
         </div>
@@ -109,7 +110,7 @@ export function MyMetricsCard() {
   const maxTipoCount = Math.max(1, ...data.topTipologias.map((t) => t.count));
 
   return (
-    <section aria-labelledby="my-metrics-heading" className="account-section">
+    <section aria-labelledby="my-metrics-heading" className="account-section ccmgc-stagger-in ccmgc-stagger-in-2">
       <div className="account-section-head flex-wrap justify-between">
         <div className="flex items-center gap-3">
           <span

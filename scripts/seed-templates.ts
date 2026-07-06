@@ -7,10 +7,7 @@
  * (TicketTemplate no tiene unique compuesto en BD). Re-ejecutar actualiza
  * los campos existentes sin duplicar filas.
  *
- * Las plantillas vienen pensadas para el modo "Ticket rápido": tipo +
- * subtipo + subsubtipo válidos según `src/lib/tipologia.ts`, título y
- * descripción listos, y variables operativas (impactedLines/serviceStopped/
- * lineaLabel/servicioLabel/commentInitial) precargadas cuando aplica.
+ * Tipologías alineadas con CCMGC-PRO-OPS-INC-2026-V1 (`src/lib/tipologia.ts`).
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -61,6 +58,19 @@ const TEMPLATES: TemplateSeed[] = [
     commentInitial: "Validadora apagada. Conductor avisado de no validar.",
   },
   {
+    name: "Sin operatividad EMV",
+    category: "Billetaje",
+    title: "Sin operatividad EMV en validadora",
+    description:
+      "La validadora no procesa pagos con tarjeta bancaria (EMV). Revisar estado del terminal, conectividad y reinicio; escalar a billetaje si persiste.",
+    tipo: "Billetaje",
+    subtipo: "Error",
+    subsubtipo: "Sin operatividad EMV",
+    impactedLines: 1,
+    serviceStopped: false,
+    commentInitial: "EMV no operativo. Solo efectivo/título de transporte.",
+  },
+  {
     name: "Salto de viaje",
     category: "Planificación",
     title: "Salto de viaje detectado",
@@ -74,21 +84,21 @@ const TEMPLATES: TemplateSeed[] = [
     commentInitial: "Salto de viaje reportado. Pendiente confirmar con conductor.",
   },
   {
-    name: "Fallo apertura/cierre puertas",
-    category: "Operativa",
-    title: "Fallo apertura/cierre de puertas",
+    name: "Servicio desconocido",
+    category: "Planificación",
+    title: "Servicio desconocido en pupitre",
     description:
-      "Las puertas no responden correctamente al pulsador del conductor (no abren, no cierran o se quedan a medias). Revisar mecanismo, fotocélulas y sistema neumático.",
-    tipo: "Operativa",
-    subtipo: "Error operativo",
-    subsubtipo: "No abrir/cerrar puertas",
+      "El conductor no reconoce el servicio asignado en el pupitre o no aparece en la planificación esperada. Verificar carga de servicios y confirmar con planificación.",
+    tipo: "Planificacion",
+    subtipo: "Incorrecto",
+    subsubtipo: "Servicio desconocido",
     impactedLines: 1,
     serviceStopped: false,
-    commentInitial: "Fallo intermitente en accionamiento de puertas.",
+    commentInitial: "Conductor reporta servicio no reconocido.",
   },
   {
     name: "Pantalla informativa apagada",
-    category: "Hardware",
+    category: "Estado general",
     title: "Pantalla informativa apagada",
     description:
       "La pantalla del visor está apagada o sin señal. El conductor no ve información operativa del SAE. Revisar alimentación, cableado y, si persiste, sustituir pantalla.",
@@ -125,7 +135,36 @@ const TEMPLATES: TemplateSeed[] = [
     serviceStopped: false,
     commentInitial: "Bus sin posición GPS válida en el mapa.",
   },
+  {
+    name: "Desvío no cargado",
+    category: "Desvíos",
+    title: "Desvío no cargado en pupitre",
+    description:
+      "El desvío activo no aparece cargado en el sistema del vehículo. Verificar configuración en planificación y recarga de itinerario.",
+    tipo: "Desvios",
+    subtipo: "Configuracion incorrecta",
+    subsubtipo: "Desvio no cargado",
+    impactedLines: 1,
+    serviceStopped: false,
+    commentInitial: "Desvío operativo sin reflejar en pupitre.",
+  },
+  {
+    name: "Falta papel impresora",
+    category: "Impresión",
+    title: "Falta papel en impresora de tickets",
+    description:
+      "La impresora del pupitre indica falta de papel. Sustituir rollo y comprobar que imprime correctamente antes de cerrar.",
+    tipo: "Impresion",
+    subtipo: "Estado del papel",
+    subsubtipo: "Falta papel",
+    impactedLines: 1,
+    serviceStopped: false,
+    commentInitial: "Impresora sin papel. Pendiente recarga.",
+  },
 ];
+
+/** Plantillas retiradas del catálogo 2026: se desactivan si existían. */
+const RETIRED_TEMPLATE_NAMES = ["Fallo apertura/cierre puertas"];
 
 async function upsertTemplate(seed: TemplateSeed) {
   const existing = await prisma.ticketTemplate.findFirst({
@@ -156,8 +195,18 @@ async function upsertTemplate(seed: TemplateSeed) {
   return { action: "created", id: created.id, name: seed.name };
 }
 
+async function retireTemplates() {
+  for (const name of RETIRED_TEMPLATE_NAMES) {
+    const rows = await prisma.ticketTemplate.findMany({ where: { name, scope: "global" } });
+    for (const row of rows) {
+      await prisma.ticketTemplate.delete({ where: { id: row.id } });
+      console.log(`  [retirada] ${name}  (${row.id})`);
+    }
+  }
+}
+
 async function main() {
-  console.log(`Sembrando ${TEMPLATES.length} plantillas globales...`);
+  console.log(`Sembrando ${TEMPLATES.length} plantillas globales…`);
   for (const seed of TEMPLATES) {
     try {
       const result = await upsertTemplate(seed);
@@ -166,6 +215,8 @@ async function main() {
       console.error(`  [ERROR  ] ${seed.name}:`, error);
     }
   }
+  console.log("Retirando plantillas obsoletas…");
+  await retireTemplates();
   console.log("Hecho.");
 }
 

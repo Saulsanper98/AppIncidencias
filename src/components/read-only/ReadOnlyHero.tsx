@@ -1,20 +1,17 @@
 "use client";
 
-/**
- * ReadOnlyHero — Cabecera grande para la página /lectura.
- *
- * Pensada para que se vea bien en una pantalla del centro de control:
- *   - Icono grande con halo de color.
- *   - Título tipográficamente fuerte + badge "EN VIVO".
- *   - Reloj en vivo con tipografía premium: HH:MM grande, segundos
- *     pequeños y discretos (no compiten con el contenido principal).
- *   - Pie con info contextual (última incidencia, total visible, etc).
- */
-
-import { Activity, Eye } from "lucide-react";
+import { Activity, Eye, MessageSquare, Monitor, Paperclip, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
+import { CENTRAL_VIEWER_HINT, CENTRAL_VIEWER_LABEL } from "@/lib/central-viewer";
+
 export function ReadOnlyHero({ userName }: { userName: string }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
@@ -30,82 +27,92 @@ export function ReadOnlyHero({ userName }: { userName: string }) {
     day: "numeric",
     month: "long",
   });
+  const lecturaMuro = pathname.startsWith("/lectura") && searchParams.get("muro") === "1";
+  const muroHref = lecturaMuro ? "/lectura" : "/lectura?muro=1";
 
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-5 sm:px-7 sm:py-6"
-      style={{
-        background:
-          "radial-gradient(ellipse at 8% 50%, rgba(37,99,235,0.18) 0%, transparent 55%), radial-gradient(ellipse at 100% 30%, rgba(220,38,38,0.10) 0%, transparent 50%), linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-2) 100%)",
-      }}
+    <header
+      className="ccmgc-hero ccmgc-stagger-in ccmgc-stagger-in-1 relative overflow-hidden rounded-2xl border border-[var(--color-border)] px-5 py-5 sm:px-7 sm:py-6"
+      style={{ ["--hero-accent-operacion" as string]: "var(--hero-accent-lectura)" }}
     >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
-      />
-      {/* Grid de puntos decorativo */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle, rgba(255,255,255,0.6) 1px, transparent 1px)",
-          backgroundSize: "16px 16px",
-        }}
-      />
-
       <div className="relative flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-        {/* Bloque izquierdo: icono + título */}
-        <div className="flex items-center gap-4 sm:gap-5">
-          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-accent-light)] ring-1 ring-inset ring-[var(--color-accent)]/40 shadow-lg shadow-[var(--color-accent)]/10 sm:h-[64px] sm:w-[64px]">
-            <Eye size={28} className="text-[var(--color-accent)]" strokeWidth={2.2} />
+        <div className="flex min-w-0 items-start gap-4 sm:gap-5">
+          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[color-mix(in_oklab,var(--hero-accent-lectura)_14%,var(--color-surface))] ring-1 ring-[color-mix(in_oklab,var(--hero-accent-lectura)_35%,transparent)] shadow-lg shadow-[color-mix(in_oklab,var(--hero-accent-lectura)_12%,transparent)] sm:h-16 sm:w-16">
+            <Eye size={28} className="text-[var(--hero-accent-lectura)]" strokeWidth={2.2} />
             <span
               aria-hidden
               className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-[var(--color-surface)] ring-2 ring-[var(--color-surface)]"
             >
-              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 ring-2 ring-emerald-400/30" />
+              <span className="ccmgc-pulse-dot h-2 w-2 rounded-full bg-[var(--color-success)] ring-2 ring-[color-mix(in_oklab,var(--color-success)_30%,transparent)]" />
             </span>
           </div>
 
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold leading-tight tracking-tight text-[var(--color-text-1)] sm:text-[28px]">
-                Lectura de incidencias
-              </h1>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-300 ring-1 ring-inset ring-emerald-500/30">
-                <Activity size={9} className="animate-pulse" />
+            <SectionEyebrow pulse dotColor="var(--hero-accent-lectura)">
+              {CENTRAL_VIEWER_LABEL}
+            </SectionEyebrow>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h1 className="dashboard-hero-title text-xl sm:text-[28px]">Lectura de incidencias</h1>
+              <Badge variant="success" className="inline-flex items-center gap-1 uppercase tracking-widest">
+                <Activity size={9} className="ccmgc-pulse-dot" aria-hidden />
                 En vivo
-              </span>
+              </Badge>
             </div>
             <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-[var(--color-text-2)] sm:text-[13.5px]">
-              Bandeja de incidencias en tiempo real para{" "}
-              <strong className="font-semibold text-[var(--color-text-1)]">
-                {userName}
-              </strong>
-              . Solo consulta: refresca cada 30 segundos y no hay botones de edición.
+              Bandeja en tiempo real para{" "}
+              <strong className="font-semibold text-[var(--color-text-1)]">{userName}</strong>
+              . Refresco automático cada 30 s. Pulsa un ticket para abrir el detalle y gestionar la incidencia.
             </p>
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              <Badge variant="info" className="inline-flex items-center gap-1">
+                <MessageSquare size={10} aria-hidden />
+                Comentar
+              </Badge>
+              <Badge variant="info" className="inline-flex items-center gap-1">
+                <Paperclip size={10} aria-hidden />
+                Adjuntar
+              </Badge>
+              <Badge variant="success" className="inline-flex items-center gap-1">
+                <CheckCircle2 size={10} aria-hidden />
+                Cerrar ticket
+              </Badge>
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--color-text-3)]">{CENTRAL_VIEWER_HINT}</p>
           </div>
         </div>
 
-        {/* Bloque derecho: reloj. HH:MM grande, segundos pequeños y sutiles. */}
-        <div className="flex w-full items-center justify-end sm:w-auto">
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 px-4 py-2.5 text-right shadow-inner backdrop-blur">
-            <div className="flex items-baseline justify-end gap-1">
-              <p className="font-mono text-[36px] font-bold leading-none tracking-tight text-[var(--color-text-1)] tabular-nums sm:text-[42px]">
-                {hh}
-                <span className="mx-0.5 animate-pulse text-[var(--color-accent)]">:</span>
-                {mm}
-              </p>
-              <p className="font-mono text-[13px] font-medium leading-none text-[var(--color-text-3)] tabular-nums">
-                :{ss}
+        <div className="flex w-full shrink-0 items-center justify-end sm:w-auto">
+          <div className="flex flex-col items-end gap-2">
+            <Link
+              href={muroHref}
+              title={
+                lecturaMuro
+                  ? "Salir del modo muro"
+                  : "Activar modo muro para videowall (oculta menú y cabecera)"
+              }
+              className="desvios-action-chip"
+            >
+              <Monitor size={13} strokeWidth={1.7} aria-hidden />
+              {lecturaMuro ? "Salir muro" : "Modo muro"}
+            </Link>
+            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 px-4 py-2.5 text-right shadow-inner backdrop-blur">
+              <div className="flex items-baseline justify-end gap-1">
+                <p className="font-mono text-[36px] font-bold leading-none tracking-tight text-[var(--color-text-1)] tabular-nums sm:text-[42px]">
+                  {hh}
+                  <span className="ccmgc-pulse-dot mx-0.5 text-[var(--hero-accent-lectura)]">:</span>
+                  {mm}
+                </p>
+                <p className="font-mono text-[13px] font-medium leading-none text-[var(--color-text-3)] tabular-nums">
+                  :{ss}
+                </p>
+              </div>
+              <p className="mt-1.5 text-[10.5px] font-medium uppercase tracking-[0.16em] text-[var(--color-text-3)]">
+                {dateLong}
               </p>
             </div>
-            <p className="mt-1.5 text-[10.5px] font-medium uppercase tracking-[0.16em] text-[var(--color-text-3)]">
-              {dateLong}
-            </p>
           </div>
         </div>
       </div>
-    </div>
+    </header>
   );
 }

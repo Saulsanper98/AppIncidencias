@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import type { TicketPriority } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
+import { canCreateGlobalTicketTemplate } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,7 +66,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   let nextScope = template.scope;
   if (typeof body.scope === "string" && (body.scope === "personal" || body.scope === "global")) {
     if (body.scope !== template.scope) {
-      if (actor.role !== "gestor_centro_control") {
+      if (!canCreateGlobalTicketTemplate(actor.role)) {
         return NextResponse.json(
           { message: "Solo los gestores pueden cambiar el ámbito" },
           { status: 403 },

@@ -34,9 +34,10 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FeedbackAttachmentsPicker } from "@/components/feedback/FeedbackAttachmentsPicker";
+import { Button } from "@/components/ui/button";
 import { VoiceInputButton } from "@/components/ui/VoiceInputButton";
 import type { FeedbackCategory, FeedbackType, FeedbackUrgency } from "@/lib/domain";
 import { cn } from "@/lib/utils";
@@ -273,6 +274,13 @@ export function FeedbackForm({
 
   const selectedType = TYPES.find((t) => t.value === form.type);
 
+  const wizardProgress = useMemo(() => {
+    let step = 0;
+    if (form.type) step = 1;
+    if (form.type && form.title.trim().length >= 5 && form.description.trim().length >= 15) step = 2;
+    return step;
+  }, [form.type, form.title, form.description]);
+
   /**
    * Inserta la plantilla del tipo en el textarea. Se llama desde dos sitios:
    *  - Automáticamente al elegir tipo si la descripción está vacía y el
@@ -414,9 +422,25 @@ export function FeedbackForm({
           initial={rm ? {} : { scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.1, type: "spring", stiffness: 260, damping: 18 }}
-          className="flex h-20 w-20 items-center justify-center rounded-full bg-[var(--color-success-light)]"
+          className="relative flex h-20 w-20 items-center justify-center rounded-full bg-[var(--color-success-light)]"
         >
-          <CheckCircle2 size={44} className="text-[var(--color-success)]" />
+          <motion.svg
+            viewBox="0 0 24 24"
+            className="h-11 w-11 text-[var(--color-success)]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            initial={rm ? {} : { pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.45, ease: "easeOut" }}
+          >
+            <motion.circle cx="12" cy="12" r="10" strokeWidth={1.5} opacity={0.25} />
+            <motion.path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M8.5 12.5l2.5 2.5 5-5.5"
+            />
+          </motion.svg>
         </motion.div>
         <div>
           <h2 className="text-xl font-semibold text-[var(--color-text-1)]">¡Gracias por tu feedback!</h2>
@@ -439,6 +463,31 @@ export function FeedbackForm({
 
   return (
     <div className="space-y-5">
+      {/* Indicador de progreso del formulario (p16) */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-[10.5px] font-medium uppercase tracking-wider text-[var(--color-text-3)]">
+          {["Tipo", "Detalles", "Listo"].map((label, i) => (
+            <span
+              key={label}
+              className={cn(
+                "transition-colors duration-200",
+                wizardProgress >= i ? "text-[var(--color-accent)]" : undefined,
+              )}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+        <div className="feedback-wizard-progress">
+          <motion.div
+            className="feedback-wizard-progress-fill"
+            initial={false}
+            animate={{ width: `${(wizardProgress / 2) * 100}%` }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          />
+        </div>
+      </div>
+
       {/* Banner de prefill (cuando se invoca desde un modal contextual) */}
       {prefillTarget && (
         <div className="flex items-center gap-2 rounded-lg border border-[var(--color-accent)]/20 bg-[var(--color-accent-light)] px-3 py-2">
@@ -686,22 +735,18 @@ export function FeedbackForm({
 
       {/* Acciones */}
       <div className="flex items-center justify-end gap-3 pt-1">
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="lg"
           onClick={handleSubmit}
           disabled={submitting}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[var(--color-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[var(--color-accent)]/20 transition-all duration-150 hover:bg-[var(--color-accent-hover)] hover:shadow-[var(--color-accent)]/30 disabled:cursor-not-allowed disabled:opacity-60"
+          loading={submitting}
+          startIcon={<Send size={15} aria-hidden />}
+          className="rounded-xl px-6 shadow-lg shadow-[var(--color-accent)]/20 hover:shadow-[var(--color-accent)]/30"
         >
-          {submitting ? (
-            <>
-              <Loader2 size={16} className="animate-spin" /> Enviando…
-            </>
-          ) : (
-            <>
-              <Send size={15} /> Enviar feedback
-            </>
-          )}
-        </button>
+          {submitting ? "Enviando…" : "Enviar feedback"}
+        </Button>
       </div>
     </div>
   );

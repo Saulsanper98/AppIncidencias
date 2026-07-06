@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { AssetType } from "@/lib/domain";
 
 type StockRow = {
@@ -56,32 +57,17 @@ export function InventoryCompactWidget() {
   }, [load]);
 
   if (loading) {
-    return <div className="h-24 animate-pulse rounded-lg bg-[var(--color-surface-2)]" />;
+    return <Skeleton className="h-24 rounded-lg" />;
   }
 
   if (err) {
     return <p className="text-xs text-[var(--color-error)]">{err}</p>;
   }
 
-  const bajos = rows.filter((r) => r.status === "bajo").length;
-  const agot = rows.filter((r) => r.status === "agotado").length;
-
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-2 text-[11px] text-[var(--color-text-3)]">
-          {bajos > 0 ? (
-            <span className="rounded border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 px-2 py-0.5 text-[var(--color-warning)]">
-              {bajos} bajo mínimo
-            </span>
-          ) : null}
-          {agot > 0 ? (
-            <span className="rounded border border-[var(--color-error)]/40 bg-[var(--color-error-light)] px-2 py-0.5 text-[var(--color-error)]">
-              {agot} agotado{agot > 1 ? "s" : ""}
-            </span>
-          ) : null}
-          {bajos === 0 && agot === 0 ? <span>Resumen de piezas</span> : null}
-        </div>
+        <span className="text-[11px] text-[var(--color-text-3)]">Resumen de piezas</span>
         <Link href="/inventory" className="shrink-0 text-[11px] font-medium text-[var(--color-accent)] hover:underline">
           Inventario completo
         </Link>

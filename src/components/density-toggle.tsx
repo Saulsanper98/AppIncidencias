@@ -9,9 +9,11 @@
  *   html[data-density="compact"] .my-card { padding: 8px; }
  */
 
+import { AnimatePresence, motion } from "framer-motion";
 import { Rows3, Rows2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useFramerTransition } from "@/hooks/use-reduced-motion-framer";
 import { cn } from "@/lib/utils";
 
 type Density = "comfortable" | "compact";
@@ -25,6 +27,7 @@ function applyDensity(value: Density) {
 
 export function DensityToggle() {
   const [density, setDensity] = useState<Density>("comfortable");
+  const transition = useFramerTransition();
 
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY) as Density | null;
@@ -43,7 +46,6 @@ export function DensityToggle() {
   };
 
   const isCompact = density === "compact";
-  const Icon = isCompact ? Rows2 : Rows3;
   return (
     <button
       type="button"
@@ -52,12 +54,29 @@ export function DensityToggle() {
       aria-label={isCompact ? "Cambiar a densidad comoda" : "Cambiar a densidad compacta"}
       aria-pressed={isCompact}
       className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-2)] transition-all duration-150",
-        "hover:bg-[var(--color-surface)]/60 hover:text-[var(--color-text-1)]",
-        isCompact && "bg-[var(--color-accent-light)] text-[var(--color-accent)]",
+        "inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-2)] transition-colors",
+        "hover:bg-[var(--color-surface-2)]/70 hover:text-[var(--color-text-1)]",
+        isCompact && "bg-[var(--color-accent-light)]/80 text-[var(--color-accent)]",
       )}
     >
-      <Icon size={15} strokeWidth={1.6} />
+      <span className="relative inline-flex h-[15px] w-[15px] items-center justify-center">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={isCompact ? "compact" : "comfortable"}
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={transition}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            {isCompact ? (
+              <Rows2 size={15} strokeWidth={1.6} aria-hidden />
+            ) : (
+              <Rows3 size={15} strokeWidth={1.6} aria-hidden />
+            )}
+          </motion.span>
+        </AnimatePresence>
+      </span>
     </button>
   );
 }

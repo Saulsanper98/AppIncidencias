@@ -4,23 +4,24 @@ import L from "leaflet";
 import {
   AlertTriangle,
   ChevronDown,
-  ChevronUp,
   Copy,
+  ArrowRight,
   ExternalLink,
   HelpCircle,
   ImageDown,
+  Inbox,
   MapPinned,
   Maximize2,
   Monitor,
   PanelLeftClose,
   RefreshCw,
   SlidersHorizontal,
-  Sparkles,
   Timer,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   useCallback,
   useDeferredValue,
@@ -28,10 +29,11 @@ import {
   useMemo,
   useRef,
   useState,
+  Fragment,
   type ReactNode,
   type RefObject,
 } from "react";
-import { LayersControl, MapContainer, Pane, ScaleControl, TileLayer, useMap } from "react-leaflet";
+import { LayersControl, MapContainer, Pane, ScaleControl, TileLayer, useMap, useMapEvents } from "react-leaflet";
 
 import { MapDateField } from "@/components/mapa/map-date-field";
 import { MapClusteredMarkers } from "@/components/mapa/map-clustered-markers";
@@ -41,10 +43,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { kpiToneValueClass, type KpiTone } from "@/components/ui/kpi-pill";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select";
 import type { TicketPriority, TicketStatus, UserRole } from "@/lib/domain";
+import type { TicketScopeFilter } from "@/lib/ticket-filters";
 import { formatSlaOverdueLabel } from "@/lib/ticketing";
 import { GRAN_CANARIA_BOUNDS, GRAN_CANARIA_CENTER, type MapTicketFeature } from "@/lib/gran-canaria-map-geo";
+import { motionTransition, slideFromRight } from "@/lib/motion";
 import {
   priorityBadgeProps,
   ticketStatusBadgeClassName,
@@ -69,6 +75,7 @@ import "leaflet/dist/leaflet.css";
 import "./map-leaflet-ccmgc.css";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
+  borrador: "Pendiente de completar",
   abierto: "Abierto",
   en_proceso: "En Proceso",
   esperando_repuesto: "Esperando repuesto",
@@ -81,11 +88,20 @@ const PRIORITY_LABEL: Record<TicketPriority, string> = {
   baja: "Baja",
 };
 
+const SCOPE_LABEL: Record<TicketScopeFilter, string> = {
+  activos: "En curso",
+  resueltos: "Resueltos",
+  todos: "Todos",
+};
+
+const MAP_SCOPE_OPTIONS: TicketScopeFilter[] = ["activos", "resueltos", "todos"];
+
 const MAP_STORAGE_KEY = "ccmgc_map_filters_v1";
 const MAP_PRESETS_KEY = "ccmgc_map_presets_v1";
 
 type MapFilterPreset = {
   name: string;
+  scope: TicketScopeFilter;
   status: TicketStatus | "todos";
   priority: TicketPriority | "todos";
   operator: string;
@@ -102,6 +118,7 @@ function AsideSection({
   defaultOpen = true,
   className,
   bodyClassName,
+  variant = "default",
 }: {
   title: string;
   children: ReactNode;
@@ -109,28 +126,172 @@ function AsideSection({
   className?: string;
   /** Clases del cuerpo bajo el summary (p. ej. flex-1 min-h-0 para secciones que ocupan alto). */
   bodyClassName?: string;
+  variant?: "default" | "flat";
 }) {
   return (
     <details
       open={defaultOpen}
       className={cn(
-        "group rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/18 p-3",
+        variant === "flat"
+          ? "mapa-options-section group border-b border-[var(--color-border)]/55 pb-3 last:border-b-0 last:pb-0"
+          : "group rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/18 p-3",
         className,
       )}
     >
-      <summary className="flex shrink-0 cursor-pointer list-none items-center justify-between gap-2 text-label text-[var(--color-text-2)] [&::-webkit-details-marker]:hidden">
+      <summary
+        className={cn(
+          "flex shrink-0 cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden",
+          variant === "flat"
+            ? "py-2 text-[11px] font-bold uppercase tracking-wider text-[var(--color-accent)]"
+            : "text-label text-[var(--color-text-2)]",
+        )}
+      >
         <span>{title}</span>
         <ChevronDown
-          className="h-4 w-4 shrink-0 text-[var(--color-text-3)] transition-transform group-open:rotate-180 lg:hidden"
+          className="h-4 w-4 shrink-0 text-[var(--color-text-3)] transition-transform duration-200 group-open:rotate-180"
           aria-hidden
         />
       </summary>
-      <div className={cn("mt-3", bodyClassName)}>{children}</div>
+      <div className={cn(variant === "flat" ? "pt-1" : "mt-3", bodyClassName)}>{children}</div>
     </details>
+  );
+}
+
+function MapScopeToggle({
+  scope,
+  onChange,
+  size = "default",
+}: {
+  scope: TicketScopeFilter;
+  onChange: (scope: TicketScopeFilter) => void;
+  size?: "default" | "muro";
+}) {
+  return (
+    <div
+      className={cn(
+        "flex gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 p-0.5",
+        size === "muro" && "lg:gap-2 lg:rounded-xl lg:p-1",
+      )}
+      role="group"
+      aria-label="Ámbito de tickets en el mapa"
+    >
+      {MAP_SCOPE_OPTIONS.map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onChange(s)}
+          aria-pressed={scope === s}
+          className={cn(
+            "min-h-8 flex-1 rounded-md px-2 text-[11px] font-semibold transition-colors",
+            scope === s
+              ? "segmented-pill--active"
+              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]",
+            size === "muro" &&
+              "lg:min-h-14 lg:rounded-lg lg:px-4 lg:text-xl lg:font-bold min-[2200px]:lg:min-h-[4.5rem] min-[2200px]:lg:text-2xl",
+          )}
+        >
+          {SCOPE_LABEL[s]}
+        </button>
+      ))}
+    </div>
   );
 }
 const PART_DEBOUNCE_MS = 380;
 const URL_DEBOUNCE_MS = 320;
+
+const GRAN_CANARIA_HERO_PATH =
+  "M 84.36,0 L 82.38,2.24 L 80.89,2.5 L 80.37,4.21 L 82.38,5.48 L 82.61,7.97 L 79.63,11.44 L 75.15,12.67 L 72.92,9.95 L 71.65,10.44 L 69.42,8.2 L 68.45,8.46 L 65.95,7.19 L 65.43,7.97 L 63.2,5.7 L 61.96,5.96 L 61.48,6.71 L 60.73,6.45 L 60.73,6.97 L 58.98,7.71 L 56.49,7.71 L 52.24,8.2 L 50.52,7.45 L 48.03,8.2 L 46.54,6.97 L 45.27,7.45 L 44.53,5.96 L 43.78,5.96 L 43.04,4.73 L 43.3,3.99 L 41.81,2.24 L 41.55,2.72 L 40.54,1.72 L 39.31,2.5 L 38.31,3.47 L 37.33,3.24 L 34.09,4.73 L 31.6,3.99 L 31.11,1.98 L 29.85,1.98 L 29.1,3.24 L 27.61,3.73 L 25.86,2.98 L 26.12,4.47 L 28.36,6.22 L 26.87,8.46 L 27.61,8.94 L 27.87,10.69 L 26.61,11.18 L 25.86,13.42 L 26.12,13.68 L 26.61,14.19 L 26.12,14.19 L 26.38,16.43 L 25.12,17.18 L 26.12,18.89 L 25.38,21.65 L 23.4,24.89 L 20.64,26.38 L 19.9,28.62 L 18.89,29.1 L 18.15,29.62 L 13.94,30.85 L 13.68,32.6 L 12.67,33.83 L 8.69,36.82 L 5.96,37.56 L 4.21,37.07 L 2.46,37.82 L 3.47,39.83 L 2.24,43.82 L 1.49,44.3 L 1.49,45.53 L 0,48.03 L 1.23,53.76 L 0,59.99 L 0.23,61.96 L 3.24,65.69 L 6.97,73.66 L 9.2,79.14 L 10.95,80.4 L 12.19,82.12 L 13.19,83.13 L 16.43,84.13 L 16.92,85.36 L 17.92,85.62 L 19.41,87.86 L 21.13,87.86 L 21.39,88.86 L 22.65,89.61 L 22.39,90.35 L 24.14,91.58 L 24.63,90.84 L 24.89,91.58 L 25.38,91.33 L 25.12,91.84 L 27.13,93.33 L 27.35,94.34 L 28.13,93.59 L 29.36,94.08 L 30.85,96.8 L 30.59,97.81 L 31.34,97.55 L 32.83,99.3 L 32.83,98.55 L 33.57,97.81 L 35.58,97.32 L 37.82,98.55 L 42.07,100.3 L 43.78,99.3 L 47.28,102.28 L 52.01,102.8 L 53.76,102.05 L 54.74,97.32 L 56.23,96.32 L 61.48,94.57 L 63.94,92.1 L 66.44,92.1 L 70.42,89.35 L 80.14,87.86 L 83.13,86.63 L 84.62,84.13 L 84.1,82.64 L 85.1,78.39 L 86.11,76.9 L 86.37,76.9 L 86.85,76.64 L 87.86,76.64 L 89.09,74.67 L 90.84,75.15 L 91.84,74.41 L 91.58,71.43 L 92.82,70.2 L 91.84,70.42 L 91.1,69.45 L 90.09,66.7 L 90.84,65.46 L 91.58,64.2 L 91.84,60.47 L 92.33,57.98 L 94.57,56.49 L 97.06,57.98 L 97.29,56.75 L 95.31,55.74 L 95.31,54.25 L 93.08,53.51 L 92.82,52.76 L 93.56,52.27 L 92.59,51.53 L 93.33,50.26 L 93.08,49.78 L 92.33,49.78 L 92.33,48.03 L 92.82,47.02 L 93.82,47.28 L 93.33,45.31 L 95.57,43.56 L 95.05,42.29 L 94.08,42.07 L 94.31,41.06 L 93.82,40.32 L 94.31,39.31 L 92.07,37.82 L 91.58,34.84 L 89.83,34.09 L 86.85,32.12 L 85.85,30.59 L 86.11,29.36 L 84.88,27.13 L 86.37,23.88 L 85.62,21.91 L 86.59,17.92 L 84.62,13.68 L 84.1,13.42 L 83.87,13.19 L 82.87,11.7 L 83.87,10.44 L 83.87,10.21 L 82.87,10.21 L 83.35,8.94 L 83.35,7.71 L 84.1,8.72 L 84.1,7.71 L 84.62,7.71 L 85.85,7.71 L 86.85,6.71 L 87.34,4.73 L 87.6,9.69 L 87.86,3.73 L 88.83,3.47 L 87.86,3.24 L 88.34,1.72 L 87.6,0.49 L 84.36,0 Z";
+
+function MapHeroBandejaCta({ href }: { href: string }) {
+  return (
+    <Link href={href} className="ccmgc-module-cta ccmgc-module-cta--secondary group">
+      <span className="ccmgc-module-cta__icon" aria-hidden>
+        <Inbox size={16} strokeWidth={2} />
+      </span>
+      <span className="ccmgc-module-cta__body">
+        <span className="ccmgc-module-cta__label">Ir a bandeja</span>
+        <span className="ccmgc-module-cta__hint">Listado operativo en vivo</span>
+      </span>
+      <span className="ccmgc-module-cta__arrow" aria-hidden>
+        <ArrowRight size={14} strokeWidth={2.2} />
+      </span>
+    </Link>
+  );
+}
+
+function MapHeroKpiStrip({
+  urgentCount,
+  mapCount,
+  listCount,
+  listFiltered,
+  className,
+}: {
+  urgentCount: number;
+  mapCount: number;
+  listCount: number;
+  listFiltered?: boolean;
+  className?: string;
+}) {
+  const items: { value: number; label: string; tone: KpiTone; pulse?: boolean; title?: string }[] = [
+    ...(urgentCount > 0
+      ? [
+          {
+            value: urgentCount,
+            label: "SLA",
+            tone: "error" as const,
+            pulse: true,
+            title: "Tickets fuera de SLA visibles en el mapa",
+          },
+        ]
+      : []),
+    {
+      value: mapCount,
+      label: "Mapa",
+      tone: "accent",
+      title: "Tickets visibles en el mapa",
+    },
+    {
+      value: listCount,
+      label: listFiltered ? "Lista*" : "Lista",
+      tone: "success",
+      title: listFiltered ? "Tickets en la lista filtrada (búsqueda activa)" : "Tickets en la lista filtrada",
+    },
+  ];
+
+  return (
+    <div
+      className={cn("flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-x-3", className)}
+      aria-label="Indicadores del mapa"
+    >
+      {items.map((item, index) => (
+        <Fragment key={item.label}>
+          {index > 0 ? (
+            <span className="hidden h-3 w-px shrink-0 bg-[var(--color-border)]/50 sm:inline" aria-hidden />
+          ) : null}
+          <span
+            className={cn(
+              "inline-flex items-baseline gap-1 whitespace-nowrap",
+              item.pulse && "animate-pulse",
+            )}
+            title={item.title ?? `${item.value} ${item.label}`}
+          >
+            <span
+              className={cn(
+                "text-[13px] font-bold tabular-nums leading-none sm:text-sm",
+                item.value === 0 ? "text-[var(--color-text-3)]" : kpiToneValueClass(item.tone),
+              )}
+            >
+              {item.value}
+            </span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
+              {item.label}
+            </span>
+          </span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
 
 type MapApiResponse = {
   center: [number, number];
@@ -160,6 +321,56 @@ function MapResizeHandler() {
     };
   }, [map]);
   return null;
+}
+
+/** Evita que Leaflet robe foco/scroll al hacer clic en el mapa. */
+function MapPreventFocusScroll() {
+  const map = useMap();
+  useEffect(() => {
+    const container = map.getContainer();
+    container.setAttribute("tabindex", "-1");
+    container.style.outline = "none";
+    if (map.keyboard?.enabled?.()) {
+      map.keyboard.disable();
+    }
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+    };
+    container.addEventListener("mousedown", onMouseDown);
+    return () => container.removeEventListener("mousedown", onMouseDown);
+  }, [map]);
+
+  useMapEvents({
+    click() {
+      map.getContainer().blur();
+      const main = document.getElementById("main-content");
+      const y = main?.scrollTop ?? window.scrollY;
+      const x = main?.scrollLeft ?? window.scrollX;
+      requestAnimationFrame(() => {
+        if (main) {
+          main.scrollTop = y;
+          main.scrollLeft = x;
+        } else {
+          window.scrollTo(x, y);
+        }
+      });
+    },
+  });
+
+  return null;
+}
+
+function scrollListItemIntoView(listEl: HTMLElement, itemEl: HTMLElement) {
+  const itemTop = itemEl.offsetTop;
+  const itemBottom = itemTop + itemEl.offsetHeight;
+  const viewTop = listEl.scrollTop;
+  const viewBottom = viewTop + listEl.clientHeight;
+  if (itemTop < viewTop) {
+    listEl.scrollTo({ top: itemTop, behavior: "smooth" });
+  } else if (itemBottom > viewBottom) {
+    listEl.scrollTo({ top: itemBottom - listEl.clientHeight, behavior: "smooth" });
+  }
 }
 
 /** Leaflet calcula mal el ancho si el panel cambia (Enfoque / móvil) sin un resize. */
@@ -774,12 +985,14 @@ export function MapaView() {
   const mapaMuro = searchParams.get("muro") === "1";
 
   const [status, setStatus] = useState<TicketStatus | "todos">("todos");
+  const [scope, setScope] = useState<TicketScopeFilter>("activos");
   const [priority, setPriority] = useState<TicketPriority | "todos">("todos");
   const [operator, setOperator] = useState<"todas" | string>("todas");
   const [busId, setBusId] = useState<"todas" | string>("todas");
   const [partCodeInput, setPartCodeInput] = useState("");
   const [partCodeDebounced, setPartCodeDebounced] = useState("");
   const [urgentOnly, setUrgentOnly] = useState(false);
+  const [soloCriticos, setSoloCriticos] = useState(false);
   const [createdAfter, setCreatedAfter] = useState("");
   const [createdBefore, setCreatedBefore] = useState("");
   const [listSearch, setListSearch] = useState("");
@@ -816,6 +1029,7 @@ export function MapaView() {
   const [mapPresets, setMapPresets] = useState<MapFilterPreset[]>([]);
 
   const listItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const listScrollRef = useRef<HTMLDivElement>(null);
   const listSearchRef = useRef<HTMLInputElement>(null);
   const mapShellRef = useRef<HTMLElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -931,6 +1145,7 @@ export function MapaView() {
   useEffect(() => {
     if (!mapaMuro) return;
     setPresentationMode(false);
+    setLegendOpen(true);
   }, [mapaMuro]);
 
   /**
@@ -1021,6 +1236,7 @@ export function MapaView() {
   const buildApiQuery = useCallback(() => {
     const p = new URLSearchParams();
     if (status !== "todos") p.set("status", status);
+    else if (scope !== "todos") p.set("scope", scope);
     if (priority !== "todos") p.set("priority", priority);
     if (operator !== "todas") p.set("operator", operator);
     if (busId !== "todas") p.set("busId", busId);
@@ -1029,13 +1245,14 @@ export function MapaView() {
     if (createdAfter.trim()) p.set("createdAfter", new Date(createdAfter).toISOString());
     if (createdBefore.trim()) p.set("createdBefore", new Date(createdBefore).toISOString());
     return p.toString();
-  }, [status, priority, operator, busId, partCodeDebounced, urgentOnly, createdAfter, createdBefore]);
+  }, [scope, status, priority, operator, busId, partCodeDebounced, urgentOnly, createdAfter, createdBefore]);
 
   /** Query de página `/mapa` (filtros + ticket + opcional `muro`), alineado con el efecto que sincroniza la URL. */
   const buildMapPageSearchParams = useCallback(
     (opts: { includeMuro: boolean }) => {
       const p = new URLSearchParams();
       if (status !== "todos") p.set("status", status);
+      else if (scope !== "todos") p.set("scope", scope);
       if (priority !== "todos") p.set("priority", priority);
       if (operator !== "todas") p.set("operator", operator);
       if (busId !== "todas") p.set("busId", busId);
@@ -1047,8 +1264,31 @@ export function MapaView() {
       if (opts.includeMuro) p.set("muro", "1");
       return p;
     },
-    [status, priority, operator, busId, partCodeDebounced, urgentOnly, createdAfter, createdBefore, selectedId],
+    [scope, status, priority, operator, busId, partCodeDebounced, urgentOnly, createdAfter, createdBefore, selectedId],
   );
+
+  const handleScopeChange = useCallback((next: TicketScopeFilter) => {
+    setScope(next);
+    setStatus((current) => {
+      if (next === "resueltos" && current !== "todos" && current !== "resuelto") return "todos";
+      if (next === "activos" && current === "resuelto") return "todos";
+      return current;
+    });
+  }, []);
+
+  const handleStatusChange = useCallback((next: TicketStatus | "todos") => {
+    setStatus(next);
+    if (next === "resuelto") setScope("resueltos");
+    else if (next !== "todos") setScope("activos");
+  }, []);
+
+  const granularStatusOptions = useMemo((): Array<TicketStatus | "todos"> => {
+    if (scope === "resueltos") return [];
+    if (scope === "activos") {
+      return ["todos", "borrador", "abierto", "en_proceso", "esperando_repuesto"];
+    }
+    return ["todos", "borrador", "abierto", "en_proceso", "esperando_repuesto", "resuelto"];
+  }, [scope]);
 
   const enterMuroHref = useMemo(() => {
     const p = buildMapPageSearchParams({ includeMuro: true });
@@ -1114,7 +1354,8 @@ export function MapaView() {
   useEffect(() => {
     if (!data?.features.length || !selectedId) return;
     const el = listItemRefs.current.get(selectedId);
-    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const listEl = listScrollRef.current;
+    if (el && listEl) scrollListItemIntoView(listEl, el);
   }, [selectedId, data?.features]);
 
   useEffect(() => {
@@ -1149,6 +1390,14 @@ export function MapaView() {
     if (hydratedUrl) return;
     const st = searchParams.get("status") as TicketStatus | "todos" | null;
     if (st && st !== "todos") setStatus(st);
+    const sc = searchParams.get("scope") as TicketScopeFilter | null;
+    if (sc === "activos" || sc === "resueltos" || sc === "todos") {
+      setScope(sc);
+    } else if (st === "resuelto") {
+      setScope("resueltos");
+    } else if (!sc) {
+      setScope("activos");
+    }
     const pr = searchParams.get("priority") as TicketPriority | "todos" | null;
     if (pr && pr !== "todos") setPriority(pr);
     const op = searchParams.get("operator");
@@ -1176,11 +1425,13 @@ export function MapaView() {
       const raw = localStorage.getItem(MAP_STORAGE_KEY);
       if (raw) {
         const j = JSON.parse(raw) as Partial<{
+          scope: TicketScopeFilter;
           sortKey: SortKey;
           autoRefreshSec: number;
           showWarehouses: boolean;
           showPreventives: boolean;
         }>;
+        if (j.scope === "activos" || j.scope === "resueltos" || j.scope === "todos") setScope(j.scope);
         if (j.sortKey) setSortKey(j.sortKey);
         if (typeof j.autoRefreshSec === "number") setAutoRefreshSec(j.autoRefreshSec);
         if (typeof j.showWarehouses === "boolean") setShowWarehouses(j.showWarehouses);
@@ -1196,12 +1447,12 @@ export function MapaView() {
     try {
       localStorage.setItem(
         MAP_STORAGE_KEY,
-        JSON.stringify({ sortKey, autoRefreshSec, showWarehouses, showPreventives }),
+        JSON.stringify({ scope, sortKey, autoRefreshSec, showWarehouses, showPreventives }),
       );
     } catch {
       /* ignore */
     }
-  }, [sortKey, autoRefreshSec, showWarehouses, showPreventives, hydratedUrl]);
+  }, [scope, sortKey, autoRefreshSec, showWarehouses, showPreventives, hydratedUrl]);
 
   useEffect(() => {
     if (!hydratedUrl) return;
@@ -1225,9 +1476,18 @@ export function MapaView() {
     return f ? { lat: f.lat, lng: f.lng } : { lat: null, lng: null };
   }, [data, flyTargetId]);
 
+  const effectiveFeatures = useMemo(() => {
+    const base = data?.features ?? [];
+    if (!mapaMuro || !soloCriticos) return base;
+    const now = Date.now();
+    return base.filter(
+      (f) => f.priority === "alta" || new Date(f.slaDeadline).getTime() < now,
+    );
+  }, [data?.features, mapaMuro, soloCriticos]);
+
   const sortedFilteredList = useMemo(() => {
-    if (!data?.features.length) return [];
-    let list = [...data.features];
+    if (!effectiveFeatures.length) return [];
+    let list = [...effectiveFeatures];
     if (deferredListSearch) {
       list = list.filter((f) => {
         const q = deferredListSearch;
@@ -1251,25 +1511,31 @@ export function MapaView() {
       return new Date(a.slaDeadline).getTime() - new Date(b.slaDeadline).getTime();
     });
     return list;
-  }, [data, deferredListSearch, sortKey]);
+  }, [effectiveFeatures, deferredListSearch, sortKey]);
 
-  const filterSummary = useMemo(() => {
-    const parts: string[] = [];
-    parts.push(status === "todos" ? "Todos los estados" : STATUS_LABEL[status]);
-    parts.push(priority === "todos" ? "Todas las prioridades" : PRIORITY_LABEL[priority]);
-    parts.push(operator === "todas" ? "Todas las operadoras" : operator);
-    parts.push(busId === "todas" ? "Todos los buses" : busId);
-    if (partCodeDebounced) parts.push(`Pieza ${partCodeDebounced}`);
-    if (urgentOnly) parts.push("Solo urgentes");
-    return parts.join(" · ");
-  }, [status, priority, operator, busId, partCodeDebounced, urgentOnly]);
+  const filterChips = useMemo(() => {
+    const chips: string[] = [];
+    if (status !== "todos") chips.push(STATUS_LABEL[status]);
+    else chips.push(SCOPE_LABEL[scope]);
+    chips.push(priority === "todos" ? "Todas las prioridades" : PRIORITY_LABEL[priority]);
+    chips.push(operator === "todas" ? "Todas las operadoras" : operator);
+    chips.push(busId === "todas" ? "Todos los buses" : busId);
+    if (partCodeDebounced) chips.push(`Pieza ${partCodeDebounced}`);
+    if (urgentOnly) chips.push("Solo urgentes");
+    if (mapaMuro && soloCriticos) chips.push("Solo críticos");
+    if (createdAfter) chips.push(`Desde ${createdAfter}`);
+    if (createdBefore) chips.push(`Hasta ${createdBefore}`);
+    return chips;
+  }, [scope, status, priority, operator, busId, partCodeDebounced, urgentOnly, createdAfter, createdBefore, mapaMuro, soloCriticos]);
+
+  const filterSummary = useMemo(() => filterChips.join(" · "), [filterChips]);
 
   const liveSummary = useMemo(() => {
     if (!data) return "";
-    const n = data.features.length;
+    const n = effectiveFeatures.length;
     const listN = sortedFilteredList.length;
     return `${n} tickets en mapa con filtros actuales. Lista lateral: ${listN}. ${filterSummary}.`;
-  }, [data, sortedFilteredList.length, filterSummary]);
+  }, [data, effectiveFeatures.length, sortedFilteredList.length, filterSummary]);
 
   const lastUpdatedLabel = useMemo(() => {
     if (!data?.fetchedAt) return "—";
@@ -1288,27 +1554,28 @@ export function MapaView() {
   const ticketsHref = useMemo(() => {
     const p = new URLSearchParams();
     if (status !== "todos") p.set("status", status);
+    else if (scope === "resueltos") p.set("status", "resuelto");
     if (priority !== "todos") p.set("priority", priority);
     if (operator !== "todas") p.set("operator", operator);
     if (busId !== "todas") p.set("busId", busId);
     if (partCodeDebounced) p.set("partCode", partCodeDebounced);
     return buildTicketsHref(p);
-  }, [status, priority, operator, busId, partCodeDebounced]);
+  }, [scope, status, priority, operator, busId, partCodeDebounced]);
 
-  const nVisible = data?.features.length ?? 0;
+  const nVisible = effectiveFeatures.length;
 
   const urgentCount = useMemo(() => {
-    if (!data?.features.length) return 0;
     const now = Date.now();
-    return data.features.filter((f) => f.priority === "alta" || new Date(f.slaDeadline).getTime() < now).length;
-  }, [data]);
+    return effectiveFeatures.filter((f) => f.priority === "alta" || new Date(f.slaDeadline).getTime() < now).length;
+  }, [effectiveFeatures]);
 
   const ticketNotVisibleInMap = useMemo(() => {
     if (!ticketFromUrl || !data) return false;
-    return !data.features.some((f) => f.id === ticketFromUrl);
-  }, [ticketFromUrl, data]);
+    return !effectiveFeatures.some((f) => f.id === ticketFromUrl);
+  }, [ticketFromUrl, data, effectiveFeatures]);
 
   const clearFiltersKeepTicket = useCallback(() => {
+    setScope("activos");
     setStatus("todos");
     setPriority("todos");
     setOperator("todas");
@@ -1316,11 +1583,12 @@ export function MapaView() {
     setPartCodeInput("");
     setPartCodeDebounced("");
     setUrgentOnly(false);
+    setSoloCriticos(false);
     setCreatedAfter("");
     setCreatedBefore("");
   }, []);
 
-  const mapLayoutKey = `${presentationMode ? 1 : 0}-${mapaMuro ? 1 : 0}-${mobileTab}-${filtersMenuOpen ? 1 : 0}`;
+  const mapLayoutKey = `${presentationMode ? 1 : 0}-${mapaMuro ? 1 : 0}-${mobileTab}-${filtersMenuOpen ? 1 : 0}-${scope}-${status}-${effectiveFeatures.length}`;
 
   return (
     // Movil: hero ultra-compacto. Ocultamos badge CCMGC, descripcion y
@@ -1328,134 +1596,127 @@ export function MapaView() {
     // bandeja/mapa de abajo puedan respirar (en un iPhone 13 Pro el
     // header completo se comia ~280px del viewport util). El chevron de
     // migas ya dice donde esta el usuario.
-    <div className={cn("flex h-full min-h-0 w-full min-w-0 flex-1 flex-col", mapaMuro ? "gap-2" : "gap-2 sm:gap-3")}>
+    <div className={cn("flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden", mapaMuro ? "gap-2" : "gap-2 sm:gap-3")}>
       {!mapaMuro ? (
-      <header className="relative shrink-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/25 p-3 shadow-sm sm:p-4">
+      <header className="ccmgc-hero mapa-hero tickets-hero-glow shrink-0 rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/18 blur-3xl"
+          className="ccmgc-hero-parallax pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
         />
-        <div className="relative flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
-          <div className="flex w-full min-w-0 items-center gap-2.5 sm:flex-1 sm:items-start sm:gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25 sm:h-11 sm:w-11">
-              <MapPinned size={18} strokeWidth={1.7} className="sm:h-5 sm:w-5" aria-hidden />
+        <svg
+          aria-hidden
+          viewBox="0 0 97.29 102.80"
+          preserveAspectRatio="xMidYMid meet"
+          className="pointer-events-none hidden sm:block"
+          style={{
+            position: "absolute",
+            right: "1%",
+            top: "50%",
+            transform: "translateY(-50%)",
+            height: "175%",
+            width: "auto",
+            color: "#7dd3fc",
+            filter: "drop-shadow(0 0 22px rgba(56,189,248,0.55))",
+          }}
+        >
+          <path
+            fill="currentColor"
+            fillOpacity="0.10"
+            stroke="currentColor"
+            strokeOpacity="0.45"
+            strokeWidth="0.45"
+            strokeLinejoin="round"
+            d={GRAN_CANARIA_HERO_PATH}
+          />
+        </svg>
+        <div className="relative flex flex-wrap items-end justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
+              <MapPinned size={20} strokeWidth={1.7} aria-hidden />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="dashboard-pretitle hidden sm:inline-flex">
-                <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+            <div className="min-w-0">
+              <div className="ccmgc-eyebrow dashboard-pretitle hidden sm:inline-flex">
+                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
                 CCMGC · Vista operativa
               </div>
               <h1 className="dashboard-hero-title mt-0.5 flex items-center gap-2 text-[16px] font-semibold leading-tight tracking-tight sm:mt-1 sm:text-[22px]">
                 Mapa operativo
                 <FeedbackTargetButton id="mapa/vista-operativa" label="Mapa operativo de incidencias" />
               </h1>
-              <p className="mt-0.5 hidden max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)] sm:block">
-                Incidencias por municipio del bus (
-                <span className="whitespace-nowrap" title="Datos aproximados cuando no hay GPS">
-                  <abbr className="cursor-help underline decoration-dotted">aprox.</abbr>
-                </span>
-                ) o coordenadas GPS si el ticket las tiene. Pulsa un marcador o una fila para centrar.
-              </p>
-              {/* KPI pills premium. Mantenemos las 3 metricas + filterSummary.
-                  Solo se muestran las que tienen valor para no ensuciar el
-                  hero compacto del movil (iPhone 13 Pro). */}
-              {data ? (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:mt-2">
-                  {urgentCount > 0 ? (
-                    <span
-                      className="tickets-kpi-pill tickets-kpi-pill--pulse"
-                      style={{ ["--pill-tone" as string]: "var(--color-error)" }}
-                      title="Tickets fuera de SLA visibles en el mapa"
-                    >
-                      <Timer size={11} strokeWidth={1.9} />
-                      <span className="tickets-kpi-pill-value">{urgentCount}</span>
-                      <span className="tickets-kpi-pill-label">SLA</span>
-                    </span>
-                  ) : null}
-                  <span
-                    className="tickets-kpi-pill"
-                    style={{ ["--pill-tone" as string]: "var(--color-accent)" }}
-                    title="Tickets visibles en el mapa"
-                  >
-                    <MapPinned size={11} strokeWidth={1.9} />
-                    <span className="tickets-kpi-pill-value">{nVisible}</span>
-                    <span className="tickets-kpi-pill-label">Mapa</span>
-                  </span>
-                  <span
-                    className="tickets-kpi-pill"
-                    style={{ ["--pill-tone" as string]: "var(--color-success)" }}
-                    title="Tickets en la lista filtrada"
-                  >
-                    <Sparkles size={11} strokeWidth={1.9} />
-                    <span className="tickets-kpi-pill-value">{sortedFilteredList.length}</span>
-                    <span className="tickets-kpi-pill-label">
-                      Lista{listSearch.trim() ? "*" : ""}
-                    </span>
-                  </span>
-                  <span className="hidden text-[10.5px] text-[var(--color-text-3)] sm:inline">
-                    {"\u00B7"} {filterSummary}
-                  </span>
-                </div>
-              ) : null}
             </div>
           </div>
-          {/* Barra de controles secundarios: oculta en movil (los atajos
-              de teclado no aplican, "Enfoque/Panel" duplica los tabs
-              Bandeja/Mapa, y "Ir a bandeja" se accede desde el menu). */}
-          <div className="relative hidden shrink-0 flex-wrap items-center gap-1.5 sm:flex">
-            <button
-              type="button"
-              onClick={() => setPresentationMode((v) => !v)}
-              title={presentationMode ? "Mostrar panel lateral" : "Solo mapa (oculta panel)"}
-              aria-pressed={presentationMode}
-              className={cn(
-                "desvios-action-chip",
-                presentationMode && "desvios-action-chip--accent",
-              )}
-            >
-              <PanelLeftClose size={14} strokeWidth={1.7} aria-hidden />
-              <span>{presentationMode ? "Panel" : "Enfoque"}</span>
-            </button>
-            <div className="relative" data-map-shortcuts>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {data ? (
+              <MapHeroKpiStrip
+                urgentCount={urgentCount}
+                mapCount={nVisible}
+                listCount={sortedFilteredList.length}
+                listFiltered={!!listSearch.trim()}
+                className="hidden md:flex"
+              />
+            ) : null}
+            <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
               <button
                 type="button"
-                onClick={() => setShortcutsOpen((o) => !o)}
-                aria-expanded={shortcutsOpen}
-                title="Atajos de teclado"
+                onClick={() => setPresentationMode((v) => !v)}
+                title={presentationMode ? "Mostrar panel lateral" : "Solo mapa (oculta panel)"}
+                aria-pressed={presentationMode}
                 className={cn(
                   "desvios-action-chip",
-                  shortcutsOpen && "desvios-action-chip--accent",
+                  presentationMode && "desvios-action-chip--accent",
                 )}
               >
-                <HelpCircle size={14} strokeWidth={1.7} aria-hidden />
-                <span className="sr-only">Atajos</span>
+                <PanelLeftClose size={14} strokeWidth={1.7} aria-hidden />
+                <span>{presentationMode ? "Panel" : "Enfoque"}</span>
               </button>
-              {shortcutsOpen ? (
-                <div
-                  className="absolute right-0 top-[calc(100%+6px)] z-[80] w-[min(100vw-2rem,18rem)] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-[12px] text-[var(--color-text-2)] shadow-xl"
-                  role="dialog"
+              <div className="relative" data-map-shortcuts>
+                <button
+                  type="button"
+                  onClick={() => setShortcutsOpen((o) => !o)}
+                  aria-expanded={shortcutsOpen}
+                  title="Atajos de teclado"
+                  className={cn(
+                    "desvios-action-chip !w-9 !px-0",
+                    shortcutsOpen && "desvios-action-chip--accent",
+                  )}
                 >
-                  <p className="mb-2 font-medium text-[var(--color-text-1)]">Atajos</p>
-                  <ul className="list-inside list-disc space-y-1.5">
-                    <li>
-                      <kbd className="rounded bg-black/30 px-1 font-mono">/</kbd> enfocar búsqueda en lista
-                    </li>
-                    <li>
-                      <kbd className="rounded bg-black/30 px-1 font-mono">Esc</kbd> quitar selección del mapa
-                    </li>
-                  </ul>
-                </div>
-              ) : null}
+                  <HelpCircle size={14} strokeWidth={1.7} aria-hidden />
+                  <span className="sr-only">Atajos</span>
+                </button>
+                {shortcutsOpen ? (
+                  <div
+                    className="absolute right-0 top-[calc(100%+6px)] z-[80] w-[min(100vw-2rem,18rem)] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-[12px] text-[var(--color-text-2)] shadow-xl"
+                    role="dialog"
+                  >
+                    <p className="mb-2 font-medium text-[var(--color-text-1)]">Atajos</p>
+                    <ul className="list-inside list-disc space-y-1.5">
+                      <li>
+                        <kbd className="rounded bg-black/30 px-1 font-mono">/</kbd> enfocar búsqueda en lista
+                      </li>
+                      <li>
+                        <kbd className="rounded bg-black/30 px-1 font-mono">Esc</kbd> quitar selección del mapa
+                      </li>
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
             </div>
-            <Link
-              href={ticketsHref}
-              className="login-primary-cta-premium inline-flex h-9 items-center gap-1.5 px-3 text-[12px]"
-            >
-              <ExternalLink size={13} strokeWidth={1.7} aria-hidden />
-              <span>Ir a bandeja</span>
-            </Link>
+            <MapHeroBandejaCta href={ticketsHref} />
           </div>
         </div>
+        {data ? (
+          <MapHeroKpiStrip
+            urgentCount={urgentCount}
+            mapCount={nVisible}
+            listCount={sortedFilteredList.length}
+            listFiltered={!!listSearch.trim()}
+            className="relative pt-2 md:hidden"
+          />
+        ) : null}
+        <p className="sr-only">
+          Incidencias por municipio del bus o coordenadas GPS. Pulsa un marcador o una fila para centrar.{" "}
+          {filterSummary}
+        </p>
       </header>
       ) : null}
 
@@ -1498,36 +1759,39 @@ export function MapaView() {
         </div>
       ) : null}
 
-      {/* Tabs compactos en movil con segmented premium: el activo se
-          destaca con gradient azul (reports-period-pill--active) y los
-          inactivos hacen hover sobre surface. Alto 36px para no comerse
-          vertical en iPhone 13 Pro. */}
+      {/* Tabs compactos en movil: segmented pill activo. */}
       <div
         className={cn(
           "flex shrink-0 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-0.5 backdrop-blur lg:hidden",
           mapaMuro && "hidden",
         )}
+        role="tablist"
+        aria-label="Vista móvil del mapa"
       >
         <button
           type="button"
+          role="tab"
+          aria-selected={mobileTab === "panel"}
           onClick={() => setMobileTab("panel")}
           className={cn(
-            "min-h-9 flex-1 rounded-lg px-2 text-[13px] font-semibold transition-all duration-150",
+            "min-h-9 flex-1 justify-center rounded-lg px-2 text-[13px] font-semibold transition-all duration-150",
             mobileTab === "panel"
-              ? "reports-period-pill--active"
-              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
+              ? "segmented-pill--active"
+              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]",
           )}
         >
           Bandeja
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={mobileTab === "map"}
           onClick={() => setMobileTab("map")}
           className={cn(
-            "min-h-9 flex-1 rounded-lg px-2 text-[13px] font-semibold transition-all duration-150",
+            "min-h-9 flex-1 justify-center rounded-lg px-2 text-[13px] font-semibold transition-all duration-150",
             mobileTab === "map"
-              ? "reports-period-pill--active"
-              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
+              ? "segmented-pill--active"
+              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]",
           )}
         >
           Mapa
@@ -1542,28 +1806,23 @@ export function MapaView() {
       >
         <aside
           className={cn(
-            "flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+            "mapa-bandeja flex min-h-0 w-full min-w-0 flex-col overflow-hidden",
             mapaMuro
-              ? "gap-4 p-4 lg:max-h-[min(calc(100dvh-2rem),2160px)] lg:min-w-[480px] lg:w-[min(40vw,1680px)] lg:max-w-[min(40vw,1680px)] lg:shrink-0 lg:font-medium lg:text-[clamp(1.35rem,min(0.32vw+0.75rem),2.5rem)] lg:leading-relaxed lg:antialiased min-[2200px]:lg:text-[clamp(1.5rem,min(0.28vw+1rem),2.75rem)]"
-              : "flex-1 gap-2 p-2.5 sm:p-3 lg:max-h-[min(calc(100dvh-10.5rem),900px)] lg:w-[min(20rem,28vw)] lg:max-w-[min(20rem,28vw)] lg:shrink-0",
-            // En movil, cuando solo se muestra esta vista (la otra esta
-            // oculta por los tabs), dejamos que ocupe todo el alto
-            // disponible. Antes tenia max-h-[min(52vh,520px)] que la
-            // limitaba a la mitad de pantalla aun cuando el mapa estaba
-            // oculto, dejando hueco muerto debajo.
+              ? "gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm lg:max-h-[min(calc(100dvh-2rem),2160px)] lg:min-w-[480px] lg:w-[min(40vw,1680px)] lg:max-w-[min(40vw,1680px)] lg:shrink-0 lg:font-medium lg:text-[clamp(1.35rem,min(0.32vw+0.75rem),2.5rem)] lg:leading-relaxed lg:antialiased min-[2200px]:lg:text-[clamp(1.5rem,min(0.28vw+1rem),2.75rem)]"
+              : "flex-1 gap-0 rounded-xl border border-[var(--color-border)]/80 bg-[var(--color-surface)]/95 lg:max-h-[min(calc(100dvh-10.5rem),900px)] lg:w-[min(20rem,28vw)] lg:max-w-[min(20rem,28vw)] lg:shrink-0",
             "max-lg:min-h-0",
             presentationMode && "hidden",
             mobileTab === "map" && !mapaMuro && "max-lg:hidden",
           )}
         >
-          <div className="flex shrink-0 flex-wrap items-start justify-between gap-x-2 gap-y-2 border-b border-[var(--color-border)] pb-2.5">
+          <div className="mapa-bandeja__head flex shrink-0 flex-wrap items-start justify-between gap-x-2 gap-y-2 border-b border-[var(--color-border)]/70 px-2.5 pb-2.5 pt-2.5 sm:px-3">
             <div className="min-w-0 flex-1 pr-2">
               {/* Modo normal: pretitle premium con dot + titulo. Modo muro
                   conserva su tipografia gigante intacta (no aplica el
                   patron premium para no romper la legibilidad a 3-5m). */}
               {!mapaMuro ? (
-                <span className="dashboard-pretitle">
-                  <span className="dashboard-pretitle-dot" aria-hidden />
+                <span className="ccmgc-eyebrow dashboard-pretitle">
+                  <span className="ccmgc-eyebrow-dot dashboard-pretitle-dot" aria-hidden />
                   Bandeja
                 </span>
               ) : null}
@@ -1634,32 +1893,39 @@ export function MapaView() {
             </div>
           </div>
 
+          <div className="mapa-bandeja__scope shrink-0 border-b border-[var(--color-border)]/45 px-2.5 py-2 sm:px-3">
+            <MapScopeToggle
+              scope={scope}
+              onChange={handleScopeChange}
+              size={mapaMuro ? "muro" : "default"}
+            />
+          </div>
+
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/18 lg:min-h-[12rem]",
-              mapaMuro ? "p-3 lg:p-5" : "p-2 sm:p-3",
+              "mapa-bandeja__count shrink-0 border-b border-[var(--color-border)]/45 px-2.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--color-text-3)] sm:px-3",
+              mapaMuro && "px-0 text-base lg:text-xl min-[2200px]:lg:text-2xl",
             )}
           >
-            <p
-              className={cn(
-                "mb-2 shrink-0 text-label text-[var(--color-text-3)]",
-                mapaMuro &&
-                  "mb-3 text-lg font-bold text-[var(--color-text-2)] lg:mb-4 lg:text-2xl min-[2200px]:lg:text-3xl",
-              )}
-            >
-              Tickets en lista ({sortedFilteredList.length})
-            </p>
-            <div
-              className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]/40 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]"
-              onMouseLeave={() => setHighlightTicketId(null)}
-            >
+            Tickets en lista ({sortedFilteredList.length})
+          </div>
+
+          <div
+            ref={listScrollRef}
+            data-mapa-list-scroll
+            className={cn(
+              "mapa-bandeja__list min-h-0 flex-1 overflow-y-auto overscroll-contain",
+              mapaMuro ? "px-0" : "px-0",
+            )}
+            onMouseLeave={() => setHighlightTicketId(null)}
+          >
               {loading && !data ? (
                 <ul className="divide-y divide-[var(--color-border)] p-2" aria-busy="true" aria-label="Cargando lista">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <li key={i} className="animate-pulse py-3">
-                      <div className="mb-1 h-3 w-20 rounded bg-[var(--color-surface-3)]" />
-                      <div className="mb-1 h-4 w-full rounded bg-[var(--color-surface-3)]" />
-                      <div className="h-3 w-40 rounded bg-[var(--color-surface-3)]" />
+                    <li key={i} className="py-3">
+                      <Skeleton className="mb-1 h-3 w-20" />
+                      <Skeleton className="mb-1 h-4 w-full" />
+                      <Skeleton className="h-3 w-40" />
                     </li>
                   ))}
                 </ul>
@@ -1671,7 +1937,7 @@ export function MapaView() {
               ) : !sortedFilteredList.length ? (
                 <div className="p-4 text-sm text-[var(--color-text-2)]">Sin coincidencias en lista o filtros.</div>
               ) : (
-                <ul className="divide-y divide-[var(--color-border)]" role="listbox" aria-label="Tickets en el mapa">
+                <ul className="mapa-bandeja__items" role="listbox" aria-label="Tickets en el mapa">
                   {sortedFilteredList.map((t) => {
                     const slaOver = new Date(t.slaDeadline).getTime() < Date.now();
                     const isSelected = selectedId === t.id;
@@ -1787,35 +2053,44 @@ export function MapaView() {
                 </ul>
               )}
             </div>
-          </div>
-
-
         </aside>
-        {filtersMenuOpen ? (
-          <>
-            <div
-              className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-[1px]"
-              role="presentation"
-              aria-hidden
-              onClick={() => setFiltersMenuOpen(false)}
-            />
-            <div
-              id="mapa-opciones-panel"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="mapa-opciones-titulo"
-              className="fixed inset-y-0 left-0 z-[90] flex w-[min(24rem,94vw)] flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
-            >
-              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-border)] px-4 py-3">
-                <h2 id="mapa-opciones-titulo" className="text-subheading text-[var(--color-text-1)]">
+        <AnimatePresence>
+          {filtersMenuOpen ? (
+            <>
+              <motion.div
+                className="ccmgc-drawer-overlay mapa-options-overlay fixed inset-0 z-[80]"
+                role="presentation"
+                aria-hidden
+                onClick={() => setFiltersMenuOpen(false)}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={motionTransition(0.2)}
+              />
+              <motion.div
+                id="mapa-opciones-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="mapa-opciones-titulo"
+                className="ccmgc-drawer-panel ccmgc-drawer-panel--map-options fixed inset-y-0 right-0 left-auto z-[90] flex w-[min(22rem,92vw)] flex-col border-l border-[var(--color-accent)]/35 shadow-[-12px_0_40px_rgba(0,0,0,0.55)]"
+                variants={slideFromRight}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={motionTransition(0.28)}
+              >
+              <div className="mapa-options-panel__head flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-accent)]/25 px-4 py-3">
+                <h2 id="mapa-opciones-titulo" className="flex items-center gap-2 text-subheading text-[var(--color-text-1)]">
+                  <SlidersHorizontal size={16} className="text-[var(--color-accent)]" aria-hidden />
                   Opciones del mapa
                 </h2>
                 <Button type="button" variant="secondary" size="sm" onClick={() => setFiltersMenuOpen(false)}>
                   Cerrar
                 </Button>
               </div>
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden p-4">
-          <AsideSection title="Lista y orden (solo columna izquierda)">
+              <div className="mapa-options-panel__body min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden p-4">
+          {!mapaMuro ? (
+          <AsideSection variant="flat" title="Lista y orden (solo columna izquierda)">
             <div className="space-y-3">
               <p className="text-label text-[var(--color-text-3)]">Buscar en lista lateral</p>
               <Input
@@ -1843,17 +2118,24 @@ export function MapaView() {
               </div>
             </div>
           </AsideSection>
+          ) : null}
 
-          <AsideSection title="Mapa y fechas (API)">
+          <AsideSection variant="flat" title={mapaMuro ? "Filtros esenciales" : "Mapa y fechas (API)"}>
             <div className="space-y-3">
           <div>
-            <p className="mb-2 text-label text-[var(--color-text-3)]">Estado</p>
+            <p className="mb-2 text-label text-[var(--color-text-3)]">Ámbito</p>
+            <MapScopeToggle scope={scope} onChange={handleScopeChange} />
+          </div>
+
+          {granularStatusOptions.length ? (
+          <div>
+            <p className="mb-2 text-label text-[var(--color-text-3)]">Estado concreto</p>
             <div className="flex flex-wrap gap-1.5">
-              {(["todos", "abierto", "en_proceso", "esperando_repuesto", "resuelto"] as const).map((s) => (
+              {granularStatusOptions.map((s) => (
                 <button
                   key={s}
                   type="button"
-                  onClick={() => setStatus(s)}
+                  onClick={() => handleStatusChange(s)}
                   className={cn(
                     "inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
                     status === s
@@ -1862,11 +2144,12 @@ export function MapaView() {
                   )}
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" aria-hidden />
-                  {s === "todos" ? "Todos" : STATUS_LABEL[s]}
+                  {s === "todos" ? "Todos en ámbito" : STATUS_LABEL[s]}
                 </button>
               ))}
             </div>
           </div>
+          ) : null}
 
           <div>
             <p className="mb-2 text-label text-[var(--color-text-3)]">Prioridad</p>
@@ -1890,6 +2173,7 @@ export function MapaView() {
             </div>
           </div>
 
+          {!mapaMuro ? (
           <div className="grid gap-2 sm:grid-cols-2">
             <div>
               <p className="mb-1 text-label text-[var(--color-text-3)]">Operadora</p>
@@ -1912,7 +2196,9 @@ export function MapaView() {
               />
             </div>
           </div>
+          ) : null}
 
+          {!mapaMuro ? (
           <div>
             <p className="mb-1 text-label text-[var(--color-text-3)]">Código pieza (opcional)</p>
             <Input
@@ -1923,24 +2209,43 @@ export function MapaView() {
               aria-label="Filtrar por código de repuesto"
             />
           </div>
+          ) : null}
 
           <div>
             <p className="mb-2 text-label text-[var(--color-text-3)]">Urgencia</p>
-            <button
-              type="button"
-              onClick={() => setUrgentOnly((v) => !v)}
-              className={cn(
-                "inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-                urgentOnly
-                  ? "border-[var(--color-error)]/50 bg-[var(--color-error-light)] text-[var(--color-error)]"
-                  : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
-              )}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" aria-hidden />
-              Solo urgentes
-            </button>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setUrgentOnly((v) => !v)}
+                className={cn(
+                  "inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                  urgentOnly
+                    ? "border-[var(--color-error)]/50 bg-[var(--color-error-light)] text-[var(--color-error)]"
+                    : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
+                )}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" aria-hidden />
+                Solo urgentes
+              </button>
+              {mapaMuro ? (
+                <button
+                  type="button"
+                  onClick={() => setSoloCriticos((v) => !v)}
+                  className={cn(
+                    "inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                    soloCriticos
+                      ? "border-rose-400/50 bg-rose-500/15 text-rose-200"
+                      : "border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)]",
+                  )}
+                >
+                  <AlertTriangle size={12} aria-hidden />
+                  Solo críticos
+                </button>
+              ) : null}
+            </div>
           </div>
 
+          {!mapaMuro ? (
           <div className="grid gap-2 sm:grid-cols-2">
             <MapDateField
               label="Creados desde"
@@ -1955,9 +2260,11 @@ export function MapaView() {
               minDateStr={createdAfter || undefined}
             />
           </div>
+          ) : null}
 
-          <div className="rounded-lg border border-[var(--color-border)]/60 bg-[var(--color-surface-2)]/30 p-2">
-            <p className="mb-2 text-label text-[var(--color-text-3)]">Vistas guardadas</p>
+          {!mapaMuro ? (
+          <div className="space-y-2 pt-1">
+            <p className="text-label text-[var(--color-text-3)]">Vistas guardadas</p>
             <div className="flex flex-wrap gap-2">
               <MenuSelect
                 value=""
@@ -1970,6 +2277,7 @@ export function MapaView() {
                   if (!name) return;
                   const p = mapPresets.find((x) => x.name === name);
                   if (!p) return;
+                  setScope(p.scope ?? "activos");
                   setStatus(p.status);
                   setPriority(p.priority);
                   setOperator(p.operator as "todas" | string);
@@ -1990,6 +2298,7 @@ export function MapaView() {
                   if (!name?.trim()) return;
                   const entry: MapFilterPreset = {
                     name: name.trim().slice(0, 40),
+                    scope,
                     status,
                     priority,
                     operator,
@@ -2012,10 +2321,11 @@ export function MapaView() {
               </Button>
             </div>
           </div>
+          ) : null}
             </div>
           </AsideSection>
 
-          <AsideSection title="Capas y leyenda" bodyClassName="space-y-4">
+          <AsideSection variant="flat" title="Capas y leyenda" bodyClassName="space-y-4">
           <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3 sm:flex-row sm:flex-wrap sm:items-center lg:border-0 lg:pt-0">
             <label className="flex cursor-pointer items-center gap-2.5 text-sm text-[var(--color-text-2)]">
               <Checkbox checked={showWarehouses} onChange={(e) => setShowWarehouses(e.target.checked)} />
@@ -2046,22 +2356,27 @@ export function MapaView() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50">
+          <div className="rounded-lg border border-[var(--color-border)]/80 bg-[var(--color-surface)]/80 shadow-inner">
             <button
               type="button"
-              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-label text-[var(--color-text-3)]"
+              className="group flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-label text-[var(--color-text-3)]"
               onClick={() => setLegendOpen((v) => !v)}
               aria-expanded={legendOpen}
             >
               Leyenda
-              <span>
-                {legendOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </span>
+              <ChevronDown
+                size={16}
+                className={cn(
+                  "shrink-0 transition-transform duration-200",
+                  legendOpen && "rotate-180",
+                )}
+                aria-hidden
+              />
             </button>
             <ul
               className={cn(
-                "space-y-1.5 px-3 pb-3 text-xs text-[var(--color-text-2)]",
-                legendOpen ? "block" : "hidden",
+                "space-y-1.5 px-3 pb-3 text-xs text-[var(--color-text-1)]",
+                legendOpen || mapaMuro ? "block" : "hidden",
               )}
             >
               {(Object.keys(STATUS_LABEL) as TicketStatus[]).map((s) => (
@@ -2099,7 +2414,7 @@ export function MapaView() {
           </AsideSection>
 
 
-          <AsideSection title="Actualización" bodyClassName="space-y-3">
+          <AsideSection variant="flat" title="Actualización" bodyClassName="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-caption text-[var(--color-text-3)]">Auto-actualizar</span>
             <MenuSelect
@@ -2126,9 +2441,10 @@ export function MapaView() {
           </Button>
           </AsideSection>
               </div>
-            </div>
-          </>
-        ) : null}
+              </motion.div>
+            </>
+          ) : null}
+        </AnimatePresence>
 
 
 
@@ -2202,7 +2518,7 @@ export function MapaView() {
                 </Link>
               </div>
             </div>
-          ) : data && data.features.length === 0 ? (
+          ) : data && effectiveFeatures.length === 0 ? (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
               <MapPinned className="text-[var(--color-text-3)]" size={44} aria-hidden />
               <p className="text-base font-medium text-[var(--color-text-1)]">Sin tickets en el mapa</p>
@@ -2222,8 +2538,10 @@ export function MapaView() {
               zoom={11}
               className="z-0 h-full min-h-0 w-full flex-1 rounded-xl [&_.leaflet-control-attribution]:text-[10px] [&_.leaflet-control-attribution]:opacity-90"
               scrollWheelZoom
+              keyboard={false}
               maxBoundsViscosity={0.85}
             >
+              <MapPreventFocusScroll />
               <LayersControl position="bottomright">
                 <LayersControl.BaseLayer checked name="Oscuro (CARTO)">
                   <TileLayer
@@ -2259,13 +2577,13 @@ export function MapaView() {
               <MapLeafletScale />
               <MapFlyTo targetId={flyTargetId} lat={flyLatLng.lat} lng={flyLatLng.lng} />
               <MapToolbarControls
-                features={data.features}
+                features={effectiveFeatures}
                 mapShellRef={mapShellRef}
                 selectedId={selectedId}
                 wallMode={mapaMuro}
               />
               <MapClusteredMarkers
-                features={data.features}
+                features={effectiveFeatures}
                 selectedId={selectedId}
                 hoveredId={highlightTicketId}
                 onHoverTicket={setHighlightTicketId}

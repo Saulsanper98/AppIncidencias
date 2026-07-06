@@ -22,7 +22,18 @@ import {
 } from "@/components/tickets/tickets-module-types";
 import { useSseEvent } from "@/hooks/use-sse-event";
 import type { SessionUser, TicketPriority, TicketStatus, UserRole } from "@/lib/domain";
-import { toUiPriority } from "@/lib/ticketing";
+import {
+  collectOperatorPrefixes,
+  validateOptionalLineaLabel,
+} from "@/lib/catalog-id-format";
+import { resolveBusIdForForm } from "@/lib/ticket-bus-asset";
+import { ticketNeedsCompletion } from "@/lib/tickets/pending-completion";
+import {
+  buildTicketsCsv,
+  downloadTicketsCsv,
+  ticketsCsvFilename,
+  type TicketCsvExportRow,
+} from "@/lib/tickets/ticket-export-csv";
 
 export function useTickets() {
   const router = useRouter();
@@ -38,8 +49,10 @@ export function useTickets() {
   const busIdFromQuery = searchParams.get("busId");
   const statusFromQuery = searchParams.get("status");
   const priorityFromQuery = searchParams.get("priority");
+  const tipoFromQuery = searchParams.get("tipo");
   const partCodeFromQuery = searchParams.get("partCode")?.trim() ?? "";
   const mineFromQuery = searchParams.get("mine");
+  const completarFromQuery = searchParams.get("completar");
 
   const [users, setUsers] = useState<LocalUser[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
@@ -54,6 +67,7 @@ export function useTickets() {
   const [priorityFilter, setPriorityFilter] = useState<"todos" | TicketPriority>("todos");
   const [operatorFilter, setOperatorFilter] = useState<"todas" | string>("todas");
   const [busFilter, setBusFilter] = useState<"todas" | string>("todas");
+  const [tipoFilter, setTipoFilter] = useState<"todos" | string>("todos");
   // Chip "Mis tickets": inicializado desde la URL (`?mine=1`). Para técnicos
   // se activa por defecto al cargar (efecto más abajo).
   const [onlyMine, setOnlyMine] = useState<boolean>(mineFromQuery === "1");
@@ -84,6 +98,8 @@ export function useTickets() {
    * mostrarlo en el diálogo de confirmación.
    */
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [editTargetId, setEditTargetId] = useState<string | null>(null);
+  const [draftCompleteId, setDraftCompleteId] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /**
    * Modal "Ticket rápido" (sugerencia OP03). Se abre con la tecla `Q`,
@@ -99,7 +115,7 @@ export function useTickets() {
   const [statusChangeComment, setStatusChangeComment] = useState("");
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [statusChangeSubmitting, setStatusChangeSubmitting] = useState(false);
-  const statusFilterSelectRef = useRef<HTMLButtonElement>(null);
+  const filterSearchRef = useRef<HTMLInputElement>(null);
   const [bandejaCompacta, setBandejaCompacta] = useState(false);
   const [showTicketsUiHint, setShowTicketsUiHint] = useState(false);
 
@@ -108,7 +124,21 @@ export function useTickets() {
     [actionMenuTicketId, tickets],
   );
 
+  const editTargetTicket = useMemo(
+    () => (editTargetId ? tickets.find((t) => t.id === editTargetId) ?? null : null),
+    [editTargetId, tickets],
+  );
+
+  const draftCompleteTicket = useMemo(
+    () => (draftCompleteId ? tickets.find((t) => t.id === draftCompleteId) ?? null : null),
+    [draftCompleteId, tickets],
+  );
+
   const operators = useMemo(() => Array.from(new Set(catalog.map((bus) => bus.operator))), [catalog]);
+  const tipoFilterOptions = useMemo(
+    () => Array.from(new Set(tipologias.map((item) => item.tipo))).sort((a, b) => a.localeCompare(b, "es")),
+    [tipologias],
+  );
   const technicians = useMemo(
     () => users.filter((user) => user.role === "tecnico_campo" && user.id !== ""),
     [users],
@@ -124,6 +154,7 @@ export function useTickets() {
     if (!statusFromQuery) return;
     const allowed: Array<TicketStatus | "todos"> = [
       "todos",
+      "borrador",
       "abierto",
       "en_proceso",
       "esperando_repuesto",
@@ -141,6 +172,19 @@ export function useTickets() {
       setPriorityFilter(priorityFromQuery as "todos" | TicketPriority);
     }
   }, [priorityFromQuery]);
+
+  useEffect(() => {
+    if (!tipoFromQuery) return;
+    setTipoFilter(tipoFromQuery === "todos" ? "todos" : tipoFromQuery);
+  }, [tipoFromQuery]);
+
+  useEffect(() => {
+    if (!completarFromQuery || loading) return;
+    const ticket = tickets.find((t) => t.id === completarFromQuery || t.id.endsWith(completarFromQuery));
+    if (ticket && ticketNeedsCompletion(ticket)) {
+      setDraftCompleteId(ticket.id);
+    }
+  }, [completarFromQuery, loading, tickets]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -169,7 +213,7 @@ export function useTickets() {
       if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (inField) return;
         e.preventDefault();
-        statusFilterSelectRef.current?.focus();
+        filterSearchRef.current?.focus();
       }
 
       if (e.key === "n" || e.key === "N") {
@@ -300,28 +344,45 @@ export function useTickets() {
       const desiredPri = priorityFilter === "todos" ? "" : priorityFilter;
       const desiredOp = operatorFilter === "todas" ? "" : operatorFilter;
       const desiredBus = busFilter === "todas" ? "" : busFilter;
+      const desiredTipo = tipoFilter === "todos" ? "" : tipoFilter;
       const curStatus = searchParams.get("status") ?? "";
       const curPri = searchParams.get("priority") ?? "";
       const curOp = searchParams.get("operator") ?? "";
       const curBus = searchParams.get("busId") ?? "";
+      const curTipo = searchParams.get("tipo") ?? "";
       const curPart = searchParams.get("partCode")?.trim() ?? "";
-      if (curStatus === desiredStatus && curPri === desiredPri && curOp === desiredOp && curBus === desiredBus)
+      if (
+        curStatus === desiredStatus &&
+        curPri === desiredPri &&
+        curOp === desiredOp &&
+        curBus === desiredBus &&
+        curTipo === desiredTipo
+      )
         return;
       const q = new URLSearchParams();
       if (desiredStatus) q.set("status", desiredStatus);
       if (desiredPri) q.set("priority", desiredPri);
       if (desiredOp) q.set("operator", desiredOp);
       if (desiredBus) q.set("busId", desiredBus);
+      if (desiredTipo) q.set("tipo", desiredTipo);
       if (curPart) q.set("partCode", curPart);
       const qs = q.toString();
       router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
     }, 0);
     return () => window.clearTimeout(id);
-  }, [loading, pathname, inboxPath, statusFilter, priorityFilter, operatorFilter, busFilter, router, searchParams]);
+  }, [loading, pathname, inboxPath, statusFilter, priorityFilter, operatorFilter, busFilter, tipoFilter, router, searchParams]);
 
   const fetchCatalog = useCallback(async () => {
-    const response = await fetch("/api/catalog", { cache: "no-store" });
-    const text = await response.text();
+    const loadOnce = async () => {
+      const response = await fetch("/api/catalog", { cache: "no-store" });
+      const text = await response.text();
+      return { response, text };
+    };
+    let { response, text } = await loadOnce();
+    if (response.status === 429) {
+      await new Promise((r) => setTimeout(r, 1500));
+      ({ response, text } = await loadOnce());
+    }
     if (!response.ok) {
       throw new Error(text || "Error al cargar catalogo");
     }
@@ -361,6 +422,26 @@ export function useTickets() {
   const fetchSession = useCallback(async (): Promise<{ mineDefault: boolean }> => {
     const response = await fetch("/api/auth/session", { cache: "no-store" });
     const text = await response.text();
+    if (response.status === 429) {
+      // Rate limit transitorio (p. ej. tras reload rápido): no tumbar la bandeja.
+      console.warn("Sesión: rate limit, reintentando…");
+      await new Promise((r) => setTimeout(r, 1500));
+      const retry = await fetch("/api/auth/session", { cache: "no-store" });
+      const retryText = await retry.text();
+      if (!retry.ok) {
+        return { mineDefault: false };
+      }
+      const retryData = JSON.parse(retryText) as { authenticated: boolean; user?: SessionUser };
+      if (retryData.authenticated && retryData.user) {
+        setSessionUser(retryData.user);
+        setCurrentUserId(retryData.user.id);
+        setRole(retryData.user.role);
+        const mineDefault = retryData.user.role === "tecnico_campo" && mineFromQuery === null;
+        if (mineDefault) setOnlyMine(true);
+        return { mineDefault };
+      }
+      return { mineDefault: false };
+    }
     if (!response.ok) {
       throw new Error(text || "Error al cargar sesión");
     }
@@ -387,10 +468,14 @@ export function useTickets() {
       partCode = "",
       priority: "todos" | TicketPriority = "todos",
       mine = false,
+      tipo: "todos" | string = "todos",
     ) => {
       const query = new URLSearchParams({ status, operator, busId });
       if (priority !== "todos") {
         query.set("priority", priority);
+      }
+      if (tipo !== "todos") {
+        query.set("tipo", tipo);
       }
       if (partCode.trim()) {
         query.set("partCode", partCode.trim());
@@ -519,15 +604,15 @@ export function useTickets() {
 
   useEffect(() => {
     if (!loading) {
-      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine).catch((filterError) => {
+      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter).catch((filterError) => {
         console.error(filterError);
         setError("No se pudo refrescar la bandeja de tickets.");
       });
     }
-  }, [statusFilter, priorityFilter, operatorFilter, busFilter, partCodeFromQuery, onlyMine, loading, fetchTickets, role]);
+  }, [statusFilter, priorityFilter, operatorFilter, busFilter, tipoFilter, partCodeFromQuery, onlyMine, loading, fetchTickets, role]);
 
   const refreshTicketsAndSideData = useCallback(async () => {
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
     await fetchInventorySummary();
     await fetchAuditEvents();
     await fetchMaintenanceAlerts();
@@ -539,6 +624,7 @@ export function useTickets() {
     partCodeFromQuery,
     priorityFilter,
     onlyMine,
+    tipoFilter,
     fetchTickets,
     fetchInventorySummary,
     fetchAuditEvents,
@@ -556,7 +642,7 @@ export function useTickets() {
     if (loading) return; // todavía no cargó la primera vez
     if (liveRefreshTimerRef.current) clearTimeout(liveRefreshTimerRef.current);
     liveRefreshTimerRef.current = setTimeout(() => {
-      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine).catch(
+      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter).catch(
         (refreshError) => console.warn("live refresh:", refreshError),
       );
       fetchAuditEvents().catch(() => {});
@@ -570,6 +656,7 @@ export function useTickets() {
     partCodeFromQuery,
     priorityFilter,
     onlyMine,
+    tipoFilter,
     fetchAuditEvents,
   ]);
 
@@ -614,6 +701,21 @@ export function useTickets() {
         return;
       }
 
+      const knownPrefixes = collectOperatorPrefixes([
+        ...catalog.map((bus) => bus.id),
+        ...lineas,
+      ]);
+      const busResolved = resolveBusIdForForm(trimmedBusId, catalog.map((bus) => bus.id), knownPrefixes);
+      if (!busResolved.ok) {
+        setError(busResolved.message);
+        return;
+      }
+      const lineaCheck = validateOptionalLineaLabel(form.lineaLabel, lineas, knownPrefixes);
+      if (!lineaCheck.ok) {
+        setError(lineaCheck.message);
+        return;
+      }
+
       const latStr = form.mapLatitude.trim();
       const lngStr = form.mapLongitude.trim();
       if (latStr !== lngStr && (!latStr || !lngStr)) {
@@ -636,7 +738,7 @@ export function useTickets() {
       setNoticePlacement("card");
 
       const ticketJson = {
-        busId: selectedBus ? selectedBus.id : trimmedBusId,
+        busId: busResolved.normalized,
         assetId: selectedAsset ? selectedAsset.id : "",
         tipo: selectedTipologia.tipo,
         subtipo: selectedTipologia.subtipo,
@@ -651,7 +753,7 @@ export function useTickets() {
         serviceStopped: form.serviceStopped,
         photoNames: [] as string[],
         comment: form.comment,
-        ...(form.lineaLabel.trim() ? { lineaLabel: form.lineaLabel.trim() } : {}),
+        ...(lineaCheck.normalized ? { lineaLabel: lineaCheck.normalized } : {}),
         ...(form.servicioLabel.trim() ? { servicioLabel: form.servicioLabel.trim() } : {}),
         ...(form.conductorLabel.trim() ? { conductorLabel: form.conductorLabel.trim() } : {}),
         ...(assignToMe ? { assignToMe: true } : {}),
@@ -756,10 +858,6 @@ export function useTickets() {
         setNotice(
           `Repuesto ${resPayload.inventory.partCode} reservado en ${resPayload.inventory.warehouseName ?? "almacén"}.`,
         );
-      } else if (resPayload.inventory?.status === "sin_stock") {
-        setNoticeTone("warning");
-        setNoticePlacement("center");
-        setNotice("Sin stock disponible: ticket movido a 'Esperando repuesto'.");
       }
 
       try {
@@ -774,7 +872,7 @@ export function useTickets() {
       await Promise.all([refreshTicketsAndSideData(), fetchCatalog()]);
       setSaving(false);
     },
-    [sessionUser, role, currentUserId, refreshTicketsAndSideData, fetchCatalog],
+    [sessionUser, role, currentUserId, refreshTicketsAndSideData, fetchCatalog, catalog, lineas],
   );
 
   const openStatusChangeModal = useCallback(
@@ -787,6 +885,36 @@ export function useTickets() {
       setStatusChangeError(null);
       setStatusChangeComment("");
       setStatusChangeTarget({ ticketId, nextStatus });
+    },
+    [sessionUser],
+  );
+
+  const openTicketEdit = useCallback(
+    (ticketId: string) => {
+      if (!sessionUser) {
+        setError("Debes iniciar sesión para corregir tickets.");
+        return;
+      }
+      const ticket = tickets.find((t) => t.id === ticketId);
+      if (ticket && ticketNeedsCompletion(ticket)) {
+        setActionMenuTicketId(null);
+        setDraftCompleteId(ticketId);
+        return;
+      }
+      setActionMenuTicketId(null);
+      setEditTargetId(ticketId);
+    },
+    [sessionUser, tickets],
+  );
+
+  const openDraftComplete = useCallback(
+    (ticketId: string) => {
+      if (!sessionUser) {
+        setError("Debes iniciar sesión para completar borradores.");
+        return;
+      }
+      setActionMenuTicketId(null);
+      setDraftCompleteId(ticketId);
     },
     [sessionUser],
   );
@@ -819,7 +947,7 @@ export function useTickets() {
       setNoticeTone("success");
       setNoticePlacement("toast");
       setNotice("Estado del ticket actualizado correctamente.");
-      await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine);
+      await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
       await fetchAuditEvents();
       await fetchMaintenanceAlerts();
       await fetchPreventiveTasks();
@@ -837,6 +965,8 @@ export function useTickets() {
     busFilter,
     partCodeFromQuery,
     priorityFilter,
+    onlyMine,
+    tipoFilter,
     fetchTickets,
     fetchAuditEvents,
     fetchMaintenanceAlerts,
@@ -990,7 +1120,7 @@ export function useTickets() {
     setNoticeTone("success");
     setNoticePlacement("toast");
     setNotice("Ticket asignado correctamente.");
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
   }, [
     assignTarget,
     sessionUser,
@@ -1019,14 +1149,15 @@ export function useTickets() {
   const handleTicketDeleted = useCallback(async () => {
     setDeleteTarget(null);
     setActionMenuTicketId(null);
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine);
-  }, [fetchTickets, statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter]);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
+  }, [fetchTickets, statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, tipoFilter]);
 
   const handleClearFilters = useCallback(() => {
     setStatusFilter("todos");
     setPriorityFilter("todos");
     setOperatorFilter("todas");
     setBusFilter("todas");
+    setTipoFilter("todos");
     setOnlyMine(false);
     router.replace(inboxPath);
   }, [router, inboxPath]);
@@ -1044,6 +1175,7 @@ export function useTickets() {
       const nextPriority = params.get("priority");
       const nextOperator = params.get("operator");
       const nextBus = params.get("busId");
+      const nextTipo = params.get("tipo");
       const nextMine = params.get("mine");
 
       const statusAllowed: Array<TicketStatus | "todos"> = [
@@ -1067,6 +1199,7 @@ export function useTickets() {
       );
       setOperatorFilter(nextOperator && nextOperator.length > 0 ? nextOperator : "todas");
       setBusFilter(nextBus && nextBus.length > 0 ? nextBus : "todas");
+      setTipoFilter(nextTipo && nextTipo.length > 0 && nextTipo !== "todos" ? nextTipo : "todos");
       setOnlyMine(nextMine === "1");
 
       // Sincroniza la URL (sin scroll) para que reflejar/compartir la vista
@@ -1083,9 +1216,10 @@ export function useTickets() {
     if (priorityFilter !== "todos") q.set("priority", priorityFilter);
     if (operatorFilter !== "todas") q.set("operator", operatorFilter);
     if (busFilter !== "todas") q.set("busId", busFilter);
+    if (tipoFilter !== "todos") q.set("tipo", tipoFilter);
     const qs = q.toString();
     router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
-  }, [statusFilter, priorityFilter, operatorFilter, busFilter, router, inboxPath]);
+  }, [statusFilter, priorityFilter, operatorFilter, busFilter, tipoFilter, router, inboxPath]);
 
   const filteredTickets = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -1097,66 +1231,12 @@ export function useTickets() {
         t.operator.toLowerCase().includes(q) ||
         t.description.toLowerCase().includes(q) ||
         (t.subsubtipo?.toLowerCase().includes(q) ?? false) ||
+        (t.tipo?.toLowerCase().includes(q) ?? false) ||
+        (t.subtipo?.toLowerCase().includes(q) ?? false) ||
         (t.assignedToUserName?.toLowerCase().includes(q) ?? false) ||
         t.id.toLowerCase().includes(q),
     );
   }, [tickets, searchQuery]);
-
-  const handleExportTicketsCsv = useCallback(() => {
-    const delimiter = ";";
-    const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
-    const header = [
-      "id",
-      "título",
-      "bus",
-      "operadora",
-      "estado",
-      "prioridad",
-      "sla_deadline_iso",
-      "activo",
-      "asignado_a",
-    ];
-    const lines = filteredTickets.map((t) =>
-      [
-        t.id,
-        t.title,
-        t.busId,
-        t.operator,
-        statusMap[t.status],
-        toUiPriority(t.priority),
-        t.slaDeadline,
-        t.subsubtipo ?? t.assetType,
-        t.assignedToUserName ?? "",
-      ]
-        .map((cell) => escape(String(cell)))
-        .join(delimiter),
-    );
-    const csv = [header.join(delimiter), ...lines].join("\n");
-    const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    const fileStamp = new Date().toISOString().replace(/[:]/g, "-").slice(0, 19);
-    const downloadName = `tickets_ccmgc_${fileStamp}.csv`;
-    anchor.download = downloadName;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setNoticeTone("success");
-    setNoticePlacement("toast");
-    setNotice(
-      `Exportados ${filteredTickets.length} ticket(s). Archivo: ${downloadName} (zona horaria del navegador en el nombre).`,
-    );
-  }, [filteredTickets]);
-
-  const ticketCountByPriority = useMemo(() => {
-    return tickets.reduce(
-      (acc, ticket) => {
-        acc[ticket.priority] += 1;
-        return acc;
-      },
-      { alta: 0, media: 0, baja: 0 } as Record<TicketPriority, number>,
-    );
-  }, [tickets]);
 
   const inboxScreenReaderSummary = useMemo(() => {
     const estado = statusFilter === "todos" ? "Todos los estados" : statusMap[statusFilter];
@@ -1170,9 +1250,64 @@ export function useTickets() {
             : "prioridad baja";
     const operadora = operatorFilter === "todas" ? "Todas las operadoras" : operatorFilter;
     const busTxt = busFilter === "todas" ? "Todos los buses" : busFilter;
+    const tipoTxt = tipoFilter === "todos" ? "Todos los tipos" : tipoFilter;
     const pieza = partCodeFromQuery ? `, repuesto ${partCodeFromQuery}` : "";
-    return `Bandeja: ${tickets.length} ticket(s) visibles. Filtros activos: estado ${estado}, ${priTxt}, operadora ${operadora}, bus ${busTxt}${pieza}.`;
-  }, [tickets.length, statusFilter, priorityFilter, operatorFilter, busFilter, partCodeFromQuery]);
+    return `Bandeja: ${tickets.length} ticket(s) visibles. Filtros activos: estado ${estado}, ${priTxt}, operadora ${operadora}, bus ${busTxt}, tipo ${tipoTxt}${pieza}.`;
+  }, [tickets.length, statusFilter, priorityFilter, operatorFilter, busFilter, tipoFilter, partCodeFromQuery]);
+
+  const handleExportTicketsCsv = useCallback(() => {
+    const rows: TicketCsvExportRow[] = filteredTickets.map((t) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      busId: t.busId,
+      operator: t.operator,
+      municipio: t.municipio,
+      assetType: t.assetType,
+      status: t.status,
+      priority: t.priority,
+      tipo: t.tipo,
+      subtipo: t.subtipo,
+      subsubtipo: t.subsubtipo,
+      dominio: t.dominio,
+      nivelImpacto: t.nivelImpacto,
+      origenTecnico: t.origenTecnico,
+      lineaLabel: t.lineaLabel,
+      servicioLabel: t.servicioLabel,
+      conductorLabel: t.conductorLabel,
+      assignedToUserName: t.assignedToUserName,
+      slaDeadline: t.slaDeadline,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+      incidentOccurredAt: t.incidentOccurredAt,
+      needsCompletion: t.needsCompletion,
+      mapPlaceMunicipio: t.mapPlaceMunicipio,
+      latitude: t.latitude,
+      longitude: t.longitude,
+    }));
+
+    const exportedAt = new Date();
+    const filtersSummary = searchQuery.trim()
+      ? `Búsqueda «${searchQuery.trim()}» · ${inboxScreenReaderSummary.replace(/^Bandeja: \d+ ticket\(s\) visibles\. Filtros activos: /, "")}`
+      : inboxScreenReaderSummary.replace(/^Bandeja: \d+ ticket\(s\) visibles\. Filtros activos: /, "");
+
+    const csv = buildTicketsCsv(rows, { exportedAt, filtersSummary });
+    const downloadName = ticketsCsvFilename(exportedAt);
+    downloadTicketsCsv(csv, downloadName);
+    setNoticeTone("success");
+    setNoticePlacement("toast");
+    setNotice(`Exportados ${filteredTickets.length} ticket(s). Archivo: ${downloadName}`);
+  }, [filteredTickets, inboxScreenReaderSummary, searchQuery, setNotice, setNoticePlacement, setNoticeTone]);
+
+  const ticketCountByPriority = useMemo(() => {
+    return tickets.reduce(
+      (acc, ticket) => {
+        acc[ticket.priority] += 1;
+        return acc;
+      },
+      { alta: 0, media: 0, baja: 0 } as Record<TicketPriority, number>,
+    );
+  }, [tickets]);
 
   const filtersInUrl = useMemo(() => {
     const s = searchParams.toString();
@@ -1195,6 +1330,9 @@ export function useTickets() {
     setOperatorFilter,
     busFilter,
     setBusFilter,
+    tipoFilter,
+    setTipoFilter,
+    tipoFilterOptions,
     onlyMine,
     setOnlyMine,
     tickets,
@@ -1228,6 +1366,14 @@ export function useTickets() {
     deleteTarget,
     setDeleteTarget,
     handleTicketDeleted,
+    editTargetId,
+    setEditTargetId,
+    editTargetTicket,
+    openTicketEdit,
+    draftCompleteId,
+    setDraftCompleteId,
+    draftCompleteTicket,
+    openDraftComplete,
     shortcutsOpen,
     setShortcutsOpen,
     quickTicketOpen,
@@ -1244,7 +1390,7 @@ export function useTickets() {
     setStatusChangeError,
     statusChangeSubmitting,
     setStatusChangeSubmitting,
-    statusFilterSelectRef,
+    filterSearchRef,
     bandejaCompacta,
     setBandejaCompacta,
     showTicketsUiHint,

@@ -13,14 +13,19 @@ import {
   Upload,
   UserCircle2,
   X,
+  Rows2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MyMetricsCard } from "@/components/account/MyMetricsCard";
 import { Button } from "@/components/ui/button";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { resolveAccountImageUrl } from "@/lib/account-media";
+import { CENTRAL_VIEWER_LABEL } from "@/lib/central-viewer";
 import type { UserRole } from "@/lib/domain";
+import { isReduceMotionForced, setReduceMotionForced } from "@/lib/motion-pref";
+import { isUiChimeEnabled, setUiChimeEnabled } from "@/lib/ui-chime";
 import { cn } from "@/lib/utils";
 
 type InitialUser = {
@@ -93,6 +98,9 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
   });
   const [urlEditor, setUrlEditor] = useState<ImageKind | null>(null);
   const [urlInput, setUrlInput] = useState("");
+  const [uiChimeEnabled, setUiChimeEnabledState] = useState(false);
+  const [reduceMotionEnabled, setReduceMotionEnabledState] = useState(false);
+  const [compactDensityEnabled, setCompactDensityEnabled] = useState(false);
 
   const avatarFileInput = useRef<HTMLInputElement | null>(null);
   const bannerFileInput = useRef<HTMLInputElement | null>(null);
@@ -103,6 +111,13 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
     const timer = window.setTimeout(() => setFeedback(null), 4000);
     return () => window.clearTimeout(timer);
   }, [feedback]);
+
+  useEffect(() => {
+    setUiChimeEnabledState(isUiChimeEnabled());
+    setReduceMotionEnabledState(isReduceMotionForced());
+    const compact = window.localStorage.getItem("ccmgc_density") === "compact";
+    setCompactDensityEnabled(compact);
+  }, []);
 
   const initials = useMemo(() => initialsFromName(user.name || "?"), [user.name]);
   const positionLabel = (form.position || "").trim();
@@ -299,8 +314,8 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
           </div>
 
           <div className="min-w-0 flex-1 text-center sm:pt-3 sm:text-left">
-            <div className="dashboard-pretitle justify-center sm:justify-start">
-              <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+            <div className="ccmgc-eyebrow dashboard-pretitle justify-center sm:justify-start">
+              <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
               CCMGC · Mi espacio
             </div>
             <h1 className="dashboard-hero-title mt-1 text-[24px] font-semibold leading-tight tracking-tight sm:text-[28px]">
@@ -317,7 +332,7 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
                 }
               >
                 <span className="account-identity-chip-dot" aria-hidden />
-                {user.isReadOnly ? "Solo lectura" : ROLE_LABEL[user.role]}
+                {user.isReadOnly ? CENTRAL_VIEWER_LABEL : ROLE_LABEL[user.role]}
               </span>
               {positionLabel ? (
                 <span
@@ -381,7 +396,7 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <form
           onSubmit={submitProfile}
-          className="account-section"
+          className="account-section ccmgc-stagger-in ccmgc-stagger-in-1"
           aria-label="Información personal"
         >
           <header className="account-section-head">
@@ -472,7 +487,7 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
             >
               Descartar
             </Button>
-            <Button type="submit" disabled={!isDirty || saving} className="login-primary-cta-premium">
+            <Button type="submit" disabled={!isDirty || saving}>
               {saving ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="size-4 animate-spin" aria-hidden /> Guardando…
@@ -485,7 +500,7 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
         </form>
 
         <aside
-          className="account-section flex flex-col gap-4"
+          className="account-section ccmgc-stagger-in ccmgc-stagger-in-3 flex flex-col gap-4"
           aria-label="Seguridad y sesión"
         >
           <header className="account-section-head">
@@ -529,6 +544,93 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
             </span>
           </Button>
 
+          <div className="space-y-3">
+            <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 px-3 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Notificaciones
+              </p>
+              <p className="mt-1 text-xs text-[var(--color-text-2)]">
+                Los avisos críticos se muestran como banner y contador en la campana.
+              </p>
+            </section>
+
+            <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 px-3 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Densidad
+              </p>
+              <label className="mt-2 flex cursor-pointer items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--color-text-1)]">Modo compacto</p>
+                  <p className="mt-0.5 text-xs text-[var(--color-text-3)]">
+                    Reduce espacios en tablas y tarjetas para ver más contenido.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !compactDensityEnabled;
+                    setCompactDensityEnabled(next);
+                    window.localStorage.setItem("ccmgc_density", next ? "compact" : "comfortable");
+                    document.documentElement.dataset.density = next ? "compact" : "comfortable";
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium",
+                    compactDensityEnabled
+                      ? "border-[var(--color-accent)]/45 bg-[var(--color-accent-light)] text-[var(--color-accent)]"
+                      : "border-[var(--color-border)] text-[var(--color-text-2)]",
+                  )}
+                >
+                  <Rows2 size={12} aria-hidden />
+                  {compactDensityEnabled ? "Compacta" : "Cómoda"}
+                </button>
+              </label>
+              <label className="mt-2 flex cursor-pointer items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--color-text-1)]">Reducir animaciones</p>
+                  <p className="mt-0.5 text-xs text-[var(--color-text-3)]">
+                    Desactiva transiciones y efectos visuales en toda la app.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={reduceMotionEnabled}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setReduceMotionForced(next);
+                    setReduceMotionEnabledState(next);
+                  }}
+                  className="h-4 w-4 shrink-0 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
+                  aria-label="Reducir animaciones"
+                />
+              </label>
+            </section>
+
+            <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 px-3 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Sonidos
+              </p>
+              <label className="mt-2 flex cursor-pointer items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--color-text-1)]">Sonidos de interfaz</p>
+                  <p className="mt-0.5 text-xs text-[var(--color-text-3)]">
+                    Reproduce un tono breve en acciones exitosas (respeta reducir movimiento).
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={uiChimeEnabled}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setUiChimeEnabled(next);
+                    setUiChimeEnabledState(next);
+                  }}
+                  className="h-4 w-4 shrink-0 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
+                  aria-label="Activar sonidos de interfaz"
+                />
+              </label>
+            </section>
+          </div>
+
           <div className="mt-auto border-t border-[var(--color-border)] pt-4">
             <Button type="button" variant="ghost" onClick={handleLogout} className="w-full">
               <span className="inline-flex items-center justify-center gap-2">
@@ -541,7 +643,7 @@ export function AccountProfile({ initialUser }: { initialUser: InitialUser }) {
 
       {/* ============ PREVIEW EN LA LISTA ============ */}
       <section
-        className="account-section"
+        className="account-section ccmgc-stagger-in ccmgc-stagger-in-4"
         aria-label="Vista previa en la lista de usuarios"
       >
         <header className="account-section-head">
@@ -722,7 +824,7 @@ function AvatarArea({
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="relative">
-        <div className="account-avatar-ring">
+        <div className={cn("account-avatar-ring", uploading && "account-avatar-ring--progress")}>
           <div className="rounded-full bg-[var(--color-surface)] p-1">
             {url ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -822,7 +924,7 @@ function PreviewCard({
                   : "text-[var(--color-text-3)]",
               )}
             >
-              {user.isReadOnly ? "Solo lectura" : ROLE_LABEL[user.role]}
+              {user.isReadOnly ? CENTRAL_VIEWER_LABEL : ROLE_LABEL[user.role]}
             </p>
           </div>
         </div>
@@ -880,42 +982,13 @@ function UrlEditorDialog({
   loading: boolean;
 }) {
   return (
-    <div
-      role="dialog"
-      aria-modal
-      aria-labelledby="url-editor-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <h3 id="url-editor-title" className="text-base font-semibold text-[var(--color-text-1)]">
-            Usar URL externa para {kind === "avatar" ? "el avatar" : "el banner"}
-          </h3>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md p-1 text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
-            aria-label="Cerrar"
-          >
-            <X size={16} aria-hidden />
-          </button>
-        </div>
-        <p className="mb-3 text-xs text-[var(--color-text-3)]">
-          Pega el enlace público de una imagen o GIF (https://…). Déjalo vacío para usar sólo lo que subas.
-        </p>
-        <input
-          type="url"
-          autoFocus
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="https://..."
-          className={inputClass}
-        />
-        <div className="mt-4 flex items-center justify-end gap-2">
+    <ModalShell
+      open
+      onClose={onCancel}
+      size="lg"
+      title={`Usar URL externa para ${kind === "avatar" ? "el avatar" : "el banner"}`}
+      footer={
+        <>
           <Button type="button" variant="ghost" onClick={onCancel} disabled={loading}>
             Cancelar
           </Button>
@@ -928,8 +1001,20 @@ function UrlEditorDialog({
               "Aplicar"
             )}
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <p className="text-xs text-[var(--color-text-3)]">
+        Pega el enlace público de una imagen o GIF (https://…). Déjalo vacío para usar sólo lo que subas.
+      </p>
+      <input
+        type="url"
+        autoFocus
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="https://..."
+        className={cn(inputClass, "mt-3")}
+      />
+    </ModalShell>
   );
 }

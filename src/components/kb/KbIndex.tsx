@@ -17,8 +17,14 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { EmptyState } from "@/components/ui/empty-state";
+import { SectionTabs } from "@/components/ui/section-tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { KbGridSkeleton } from "@/components/ui/view-skeletons";
 import type { KbArticleSummary, KbCategory } from "@/lib/domain";
 
 type Props = {
@@ -70,6 +76,12 @@ function highlight(text: string, q: string): React.ReactNode {
   );
 }
 
+function HighlightedText({ text, q }: { text: string; q: string }) {
+  return (
+    <span className={q.trim() ? "search-mark-flash" : undefined}>{highlight(text, q)}</span>
+  );
+}
+
 export function KbIndex({ canEdit }: Props) {
   const [articles, setArticles] = useState<KbArticleSummary[]>([]);
   const [categories, setCategories] = useState<KbCategory[]>([]);
@@ -79,7 +91,18 @@ export function KbIndex({ canEdit }: Props) {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>("mosaico");
   const [sort, setSort] = useState<SortMode>("recientes");
+  const searchParams = useSearchParams();
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const tag = searchParams.get("tag");
+    const catSlug = searchParams.get("categoria");
+    if (tag) setActiveTag(tag);
+    if (catSlug && categories.length > 0) {
+      const cat = categories.find((c) => c.slug === catSlug);
+      if (cat) setActiveCategory(cat.id);
+    }
+  }, [searchParams, categories]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -188,6 +211,7 @@ export function KbIndex({ canEdit }: Props) {
 
   return (
     <div className="space-y-4">
+      <SectionTabs preset="conocimiento" />
       <HeroSearch
         ref={searchRef}
         q={q}
@@ -224,32 +248,58 @@ export function KbIndex({ canEdit }: Props) {
       ) : null}
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="ccmgc-card h-36 animate-pulse p-4" />
-          ))}
-        </div>
+        <KbGridSkeleton />
       ) : filtered.length === 0 ? (
-        <EmptyState q={q} canEdit={canEdit} onClear={clearFilters} hasFilters={hasFilters} />
-      ) : view === "categorias" ? (
-        <div className="space-y-5">
-          {grouped.map((bucket) => (
-            <CategorySection
-              key={bucket.category?.id ?? "_uncategorized"}
-              category={bucket.category}
-              articles={bucket.items}
-              q={q}
-            />
-          ))}
-        </div>
+        <EmptyState
+          icon={BookOpenCheck}
+          title={
+            q
+              ? `Sin resultados para "${q}"`
+              : hasFilters
+                ? "Sin resultados con los filtros aplicados"
+                : "Aún no hay artículos publicados"
+          }
+          hint={
+            hasFilters
+              ? "Prueba a quitar algún filtro o cambiar la búsqueda."
+              : canEdit
+                ? "Empieza creando uno desde Gestionar artículos."
+                : "Vuelve más tarde o sugiere un tema desde Feedback."
+          }
+          actionLabel={hasFilters ? "Limpiar filtros" : undefined}
+          onAction={hasFilters ? clearFilters : undefined}
+        />
       ) : (
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((article) => (
-            <li key={article.id}>
-              <ArticleCard article={article} q={q} />
-            </li>
-          ))}
-        </ul>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={view}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+          >
+            {view === "categorias" ? (
+              <div className="space-y-5">
+                {grouped.map((bucket) => (
+                  <CategorySection
+                    key={bucket.category?.id ?? "_uncategorized"}
+                    category={bucket.category}
+                    articles={bucket.items}
+                    q={q}
+                  />
+                ))}
+              </div>
+            ) : (
+              <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {filtered.map((article) => (
+                  <li key={article.id}>
+                    <ArticleCard article={article} q={q} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </motion.div>
+        </AnimatePresence>
       )}
     </div>
   );
@@ -592,11 +642,29 @@ function TagCloud({
 
 function ArticleCard({ article, q }: { article: KbArticleSummary; q: string }) {
   const updated = formatRelative(article.publishedAt ?? article.updatedAt);
+  const hasCover = Boolean(article.coverUrl);
   return (
     <Link
       href={`/kb/${article.slug}`}
-      className="ccmgc-card group relative flex h-full flex-col gap-2 p-4 transition-all hover:-translate-y-0.5 hover:border-[var(--color-accent)]/30 hover:shadow-md"
+      className="ccmgc-card group relative flex h-full flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:border-[var(--color-accent)]/35 hover:shadow-lg"
     >
+      {hasCover ? (
+        <div className="relative aspect-[16/9] w-full overflow-hidden bg-[var(--color-surface-2)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={article.coverUrl!}
+            alt=""
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+          />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[var(--color-surface-1)] via-transparent to-transparent opacity-90" />
+        </div>
+      ) : (
+        <div className="flex aspect-[16/9] w-full items-center justify-center bg-gradient-to-br from-[var(--color-accent-light)]/30 to-[var(--color-surface-2)]">
+          <BookOpenCheck size={32} strokeWidth={1.4} className="text-[var(--color-accent)]/40" aria-hidden />
+        </div>
+      )}
+      <div className="flex flex-1 flex-col gap-2 p-4">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-4 top-0 h-0.5 origin-center scale-x-0 rounded-full bg-gradient-to-r from-transparent via-[var(--color-accent)] to-transparent opacity-0 transition-all duration-300 group-hover:scale-x-100 group-hover:opacity-80"
@@ -628,11 +696,11 @@ function ArticleCard({ article, q }: { article: KbArticleSummary; q: string }) {
       </div>
 
       <h3 className="text-[15px] font-semibold leading-snug text-[var(--color-text-1)] transition-colors group-hover:text-[var(--color-accent)]">
-        {highlight(article.title, q)}
+        <HighlightedText text={article.title} q={q} />
       </h3>
       {article.summary ? (
         <p className="line-clamp-3 text-[12.5px] leading-relaxed text-[var(--color-text-3)]">
-          {highlight(article.summary, q)}
+          <HighlightedText text={article.summary} q={q} />
         </p>
       ) : null}
 
@@ -658,6 +726,7 @@ function ArticleCard({ article, q }: { article: KbArticleSummary; q: string }) {
             </span>
           ) : null}
         </span>
+      </div>
       </div>
     </Link>
   );
@@ -698,55 +767,5 @@ function CategorySection({
         ))}
       </ul>
     </section>
-  );
-}
-
-// ---------- EMPTY STATE ----------
-
-function EmptyState({
-  q,
-  canEdit,
-  hasFilters,
-  onClear,
-}: {
-  q: string;
-  canEdit: boolean;
-  hasFilters: boolean;
-  onClear: () => void;
-}) {
-  return (
-    <div className="ccmgc-card flex flex-col items-center gap-2 p-10 text-center">
-      <div className="rounded-full bg-[var(--color-surface-2)] p-3 text-[var(--color-text-3)]">
-        <BookOpenCheck size={26} strokeWidth={1.3} aria-hidden />
-      </div>
-      <p className="text-[14px] font-semibold text-[var(--color-text-1)]">
-        {q ? (
-          <>
-            Sin resultados para <span className="text-[var(--color-accent)]">&ldquo;{q}&rdquo;</span>
-          </>
-        ) : hasFilters ? (
-          "Sin resultados con los filtros aplicados"
-        ) : (
-          "Aún no hay artículos publicados"
-        )}
-      </p>
-      <p className="max-w-md text-[12px] text-[var(--color-text-3)]">
-        {hasFilters
-          ? "Prueba a quitar algún filtro o cambiar la búsqueda."
-          : canEdit
-            ? "Empieza creando uno desde Gestionar artículos."
-            : "Vuelve más tarde o sugiere un tema desde Feedback."}
-      </p>
-      {hasFilters ? (
-        <button
-          type="button"
-          onClick={onClear}
-          className="mt-1 inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1 text-[11.5px] font-medium text-[var(--color-text-2)] hover:text-[var(--color-text-1)]"
-        >
-          <X size={11} strokeWidth={1.6} aria-hidden />
-          Limpiar filtros
-        </button>
-      ) : null}
-    </div>
   );
 }

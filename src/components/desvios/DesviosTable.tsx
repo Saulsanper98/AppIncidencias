@@ -2,10 +2,8 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
-  Bus,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -24,13 +22,23 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import { DesvioImportPdfDialog } from "@/components/desvios/DesvioImportPdfDialog";
 import { EstadoBadge } from "@/components/desvios/EstadoBadge";
 import { OrigenBadge } from "@/components/desvios/OrigenBadge";
-import { Input, Select } from "@/components/ui/input";
+import { EmptyState } from "@/components/ui/empty-state";
+import { DatePickerField } from "@/components/ui/date-picker-field";
+import { Input } from "@/components/ui/input";
+import {
+  FilterDivider,
+  FilterLabeledGroup,
+  FilterPills,
+} from "@/components/ui/ticket-filter-bar";
+import { kpiToneValueClass, type KpiTone } from "@/components/ui/kpi-pill";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/toast-host";
+import { isFreshItem, useNewItemIds } from "@/hooks/use-animated-list";
 import { canaryParts } from "@/lib/datetime/canary";
 import type {
   DesvioEstado,
@@ -92,7 +100,9 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
   const [importOpen, setImportOpen] = useState(false);
   const [cleanupAsking, setCleanupAsking] = useState(false);
   const [cleanupRunning, setCleanupRunning] = useState(false);
+  const [toolbarStuck, setToolbarStuck] = useState(false);
   const refreshRef = useRef<() => void>(() => {});
+  const toolbarSentinelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -140,6 +150,17 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const el = toolbarSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setToolbarStuck(!entry.isIntersecting),
+      { threshold: 0, rootMargin: "-1px 0px 0px 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Suscripcion al SSE: refrescamos la lista cuando llega un evento de desvio.
   // La carga es barata (paginada y filtrada en servidor) asi que recargamos
@@ -250,6 +271,8 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
     filters.desde.length > 0 ||
     filters.hasta.length > 0;
 
+  const freshIds = useNewItemIds(items);
+
   return (
     <div className="space-y-4">
       <Header
@@ -268,14 +291,17 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
         onConfirmCleanup={() => void handleCleanupArchived()}
       />
 
-      <FilterBar
-        filters={filters}
-        onChange={(patch) =>
-          setFilters((prev) => ({ ...prev, ...patch, page: 1 }))
-        }
-        onReset={resetFilters}
-        active={filtersActive}
-      />
+      <div ref={toolbarSentinelRef} className="h-px w-full shrink-0" aria-hidden />
+      <div className={cn("desvios-toolbar-sticky", toolbarStuck && "is-stuck")}>
+        <FilterBar
+          filters={filters}
+          onChange={(patch) =>
+            setFilters((prev) => ({ ...prev, ...patch, page: 1 }))
+          }
+          onReset={resetFilters}
+          active={filtersActive}
+        />
+      </div>
 
       <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
         {/* Vista TABLA solo en md+ (8 columnas no caben en movil sin
@@ -298,10 +324,12 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]/70">
                 <AnimatePresence initial={false}>
-                  {items.map((d) => (
+                  {items.map((d, index) => (
                     <Row
                       key={d.id}
+                      index={index}
                       desvio={d}
+                      isFresh={isFreshItem(freshIds, d.id)}
                       canManage={canManage}
                       acting={Boolean(acting[d.id])}
                       onConfirm={() => void handleConfirm(d.id)}
@@ -312,7 +340,10 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
                 {!loading && items.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-12 text-center">
-                      <EmptyState filtersActive={filtersActive} onReset={resetFilters} />
+                      <DesviosEmptyState
+                        filtersActive={filtersActive}
+                        onReset={resetFilters}
+                      />
                     </td>
                   </tr>
                 ) : null}
@@ -334,10 +365,12 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
         {/* Vista CARDS para movil (mismo conjunto de datos, layout vertical). */}
         <div className="space-y-2 p-2 md:hidden">
           <AnimatePresence initial={false}>
-            {items.map((d) => (
+            {items.map((d, index) => (
               <MobileCard
                 key={d.id}
+                index={index}
                 desvio={d}
+                isFresh={isFreshItem(freshIds, d.id)}
                 canManage={canManage}
                 acting={Boolean(acting[d.id])}
                 onConfirm={() => void handleConfirm(d.id)}
@@ -347,7 +380,7 @@ export function DesviosTable({ canCreate, canManage, canDelete }: Props) {
           </AnimatePresence>
           {!loading && items.length === 0 ? (
             <div className="px-2 py-10 text-center">
-              <EmptyState filtersActive={filtersActive} onReset={resetFilters} />
+              <DesviosEmptyState filtersActive={filtersActive} onReset={resetFilters} />
             </div>
           ) : null}
           {loading && items.length === 0 ? (
@@ -394,6 +427,57 @@ function Th({ children }: { children: React.ReactNode }) {
   );
 }
 
+function DesviosKpiStrip({
+  counts,
+  indefinidos,
+}: {
+  counts: Counts;
+  indefinidos: number;
+}) {
+  const items: { value: number; label: string; tone: KpiTone; pulse?: boolean }[] = [
+    { value: counts.PENDIENTE, label: "Pendientes", tone: "warning" },
+    { value: counts.ACTIVO, label: "Activos", tone: "error" },
+    { value: counts.RESUELTO, label: "Resueltos", tone: "success" },
+    ...(indefinidos > 0
+      ? [{ value: indefinidos, label: "Indefinidos", tone: "violet" as const, pulse: true }]
+      : []),
+  ];
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:justify-end sm:gap-x-3"
+      aria-label="Resumen por estado"
+    >
+      {items.map((item, index) => (
+        <Fragment key={item.label}>
+          {index > 0 ? (
+            <span className="hidden h-3 w-px shrink-0 bg-[var(--color-border)]/50 sm:inline" aria-hidden />
+          ) : null}
+          <span
+            className={cn(
+              "inline-flex items-baseline gap-1 whitespace-nowrap",
+              item.pulse && "animate-pulse",
+            )}
+            title={`${item.value} ${item.label}`}
+          >
+            <span
+              className={cn(
+                "text-[13px] font-bold tabular-nums leading-none sm:text-sm",
+                item.value === 0 ? "text-[var(--color-text-3)]" : kpiToneValueClass(item.tone),
+              )}
+            >
+              {item.value}
+            </span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
+              {item.label}
+            </span>
+          </span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
 function Header({
   counts,
   indefinidos,
@@ -426,14 +510,14 @@ function Header({
   const archivedCount = counts.RESUELTO + counts.CANCELADO;
   return (
     <header className="desvios-hero flex flex-col gap-4 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
             <RouteIcon size={20} strokeWidth={1.7} aria-hidden />
           </div>
           <div className="min-w-0">
-            <div className="dashboard-pretitle">
-              <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+            <div className="ccmgc-eyebrow dashboard-pretitle">
+              <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
               CCMGC · Operación
             </div>
             <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
@@ -446,33 +530,11 @@ function Header({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <KpiPill
-            label="Pendientes"
-            value={counts.PENDIENTE}
-            tone="amber"
-            icon={AlertTriangle}
-          />
-          <KpiPill label="Activos" value={counts.ACTIVO} tone="rose" icon={Bus} />
-          <KpiPill
-            label="Resueltos"
-            value={counts.RESUELTO}
-            tone="emerald"
-            icon={CheckCircle2}
-          />
-          {indefinidos > 0 ? (
-            <KpiPill
-              label="Indefinidos"
-              value={indefinidos}
-              tone="violet"
-              icon={InfinityIcon}
-              pulse
-            />
-          ) : null}
-        </div>
+        <DesviosKpiStrip counts={counts} indefinidos={indefinidos} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border)]/60 pt-3">
+      <div className="desvios-action-row flex flex-wrap items-center gap-2 border-t border-[var(--color-border)]/60 pt-3">
+        <div className="desvios-action-row__secondary flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={onRefresh}
@@ -553,53 +615,27 @@ function Header({
             Importar PDF
           </button>
         ) : null}
+        </div>
 
         {canCreate ? (
           <Link
             href="/desvios/nuevo"
-            className="login-primary-cta-premium ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-xs font-semibold text-white"
+            className="ccmgc-module-cta ccmgc-module-cta--mobile-block group sm:ml-auto"
           >
-            <Plus size={14} strokeWidth={2.2} />
-            Nuevo desvío
+            <span className="ccmgc-module-cta__icon" aria-hidden>
+              <Plus size={16} strokeWidth={2} />
+            </span>
+            <span className="ccmgc-module-cta__body">
+              <span className="ccmgc-module-cta__label">Nuevo desvío</span>
+              <span className="ccmgc-module-cta__hint">Crear manualmente</span>
+            </span>
+            <span className="ccmgc-module-cta__arrow" aria-hidden>
+              <ArrowRight size={14} strokeWidth={2.2} />
+            </span>
           </Link>
         ) : null}
       </div>
     </header>
-  );
-}
-
-function KpiPill({
-  label,
-  value,
-  tone,
-  icon: Icon,
-  pulse,
-}: {
-  label: string;
-  value: number;
-  tone: "amber" | "rose" | "emerald" | "violet";
-  icon: typeof AlertTriangle;
-  /** Anima el punto indicador (usado para los desvios indefinidos vivos). */
-  pulse?: boolean;
-}) {
-  // Mapeo a CSS vars del sistema (alineado con tickets-kpi-pill que ya usan
-  // dashboard, tickets y reportes para consistencia visual).
-  const toneVar: Record<typeof tone, string> = {
-    amber: "var(--color-warning)",
-    rose: "var(--color-error)",
-    emerald: "var(--color-success)",
-    violet: "#a855f7",
-  };
-  const Wrap = pulse ? motion.span : "span";
-  return (
-    <Wrap
-      className={cn("tickets-kpi-pill", pulse && "tickets-kpi-pill--pulse")}
-      style={{ ["--pill-tone" as string]: toneVar[tone] }}
-    >
-      <Icon size={12} strokeWidth={1.9} />
-      <span className="tickets-kpi-pill-value">{value}</span>
-      <span className="tickets-kpi-pill-label">{label}</span>
-    </Wrap>
   );
 }
 
@@ -615,112 +651,197 @@ function FilterBar({
   active: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--color-border)] bg-gradient-to-b from-[var(--color-surface)] to-[var(--color-surface-2)] p-3 shadow-sm">
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
-        <div className="md:col-span-3">
-          <label className="text-label mb-1 block text-[var(--color-text-3)]">Buscar</label>
-          <div className="relative">
-            <Search
-              size={13}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]"
-              aria-hidden
-            />
-            <Input
-              value={filters.search}
-              onChange={(e) => onChange({ search: e.target.value })}
-              placeholder="Via, tramo, motivo, referencia…"
-              className="pl-8"
-            />
-          </div>
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="text-label mb-1 block text-[var(--color-text-3)]">Estado</label>
-          <Select
-            value={filters.estado}
-            onValueChange={(v) => onChange({ estado: v as Filters["estado"] })}
-            aria-label="Filtrar por estado"
-          >
-            <option value="TODOS">Todos los estados</option>
-            <option value="PENDIENTE">Pendiente</option>
-            <option value="ACTIVO">Activo</option>
-            <option value="RESUELTO">Resuelto</option>
-            <option value="CANCELADO">Cancelado</option>
-          </Select>
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="text-label mb-1 block text-[var(--color-text-3)]">Sentido</label>
-          <Select
-            value={filters.sentido}
-            onValueChange={(v) => onChange({ sentido: v as Filters["sentido"] })}
-            aria-label="Filtrar por sentido"
-          >
-            <option value="TODOS">Cualquiera</option>
-            <option value="IDA">Ida</option>
-            <option value="VUELTA">Vuelta</option>
-            <option value="AMBOS">Ambos</option>
-          </Select>
-        </div>
-
-        <div className="md:col-span-1">
-          <label className="text-label mb-1 block text-[var(--color-text-3)]">Linea</label>
-          <Input
-            value={filters.linea}
-            onChange={(e) => onChange({ linea: e.target.value.trim() })}
-            placeholder="Ej. 19"
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 w-full basis-full sm:min-w-[12rem] sm:flex-1">
+          <Search
+            size={14}
+            className="pointer-events-none absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-[var(--color-text-3)]"
+            aria-hidden
           />
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="text-label mb-1 block text-[var(--color-text-3)]">Desde</label>
           <Input
-            type="date"
-            value={filters.desde}
-            onChange={(e) => onChange({ desde: e.target.value })}
+            type="search"
+            value={filters.search}
+            onChange={(e) => onChange({ search: e.target.value })}
+            placeholder="Via, tramo, motivo, referencia…"
+            className="h-9 w-full rounded-lg border-[var(--color-border)] bg-[var(--color-surface)] py-1 pl-9 pr-8 text-[12.5px] shadow-sm"
+            aria-label="Buscar desvíos"
           />
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="text-label mb-1 block text-[var(--color-text-3)]">Hasta</label>
-          <Input
-            type="date"
-            value={filters.hasta}
-            onChange={(e) => onChange({ hasta: e.target.value })}
-          />
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--color-text-3)]">
-          <span>Origen:</span>
-          {(["TODOS", "EMAIL", "MANUAL"] as const).map((o) => (
+          {filters.search ? (
             <button
-              key={o}
               type="button"
-              onClick={() => onChange({ origen: o })}
-              className={cn(
-                "rounded-full border px-2.5 py-0.5 font-medium uppercase tracking-[0.05em] transition-colors",
-                filters.origen === o
-                  ? "border-[var(--color-accent)]/45 bg-[var(--color-accent-light)] text-[var(--color-accent)]"
-                  : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)]",
-              )}
+              onClick={() => onChange({ search: "" })}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
             >
-              {o === "TODOS" ? "Todos" : o === "EMAIL" ? "Auto" : "Manual"}
+              <X size={12} aria-hidden />
             </button>
-          ))}
+          ) : null}
         </div>
         {active ? (
-          <button
-            type="button"
-            onClick={onReset}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]"
-          >
+          <button type="button" onClick={onReset} className="desvios-action-chip !h-7">
             <X size={12} aria-hidden />
             Limpiar filtros
           </button>
         ) : null}
       </div>
+
+      <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-2">
+        <FilterLabeledGroup label="Estado">
+          <FilterPills
+            value={filters.estado}
+            onChange={(v) => onChange({ estado: v as Filters["estado"] })}
+            options={[
+              { v: "TODOS", label: "Todos" },
+              { v: "PENDIENTE", label: "Pendiente" },
+              { v: "ACTIVO", label: "Activo" },
+              { v: "RESUELTO", label: "Resuelto" },
+              { v: "CANCELADO", label: "Cancelado" },
+            ]}
+          />
+        </FilterLabeledGroup>
+
+        <FilterDivider className="hidden lg:block" />
+
+        <FilterLabeledGroup label="Sentido">
+          <FilterPills
+            value={filters.sentido}
+            onChange={(v) => onChange({ sentido: v as Filters["sentido"] })}
+            options={[
+              { v: "TODOS", label: "Cualquiera" },
+              { v: "IDA", label: "Ida" },
+              { v: "VUELTA", label: "Vuelta" },
+              { v: "AMBOS", label: "Ambos" },
+            ]}
+          />
+        </FilterLabeledGroup>
+
+        <FilterDivider className="hidden lg:block" />
+
+        <FilterLabeledGroup label="Origen">
+          <FilterPills
+            value={filters.origen}
+            onChange={(v) => onChange({ origen: v as Filters["origen"] })}
+            options={[
+              { v: "TODOS", label: "Todos" },
+              { v: "EMAIL", label: "Auto" },
+              { v: "MANUAL", label: "Manual" },
+            ]}
+          />
+        </FilterLabeledGroup>
+      </div>
+
+      <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-2">
+        <FilterLabeledGroup label="Línea">
+          <LineaFilterField
+            value={filters.linea}
+            onChange={(linea) => onChange({ linea })}
+          />
+        </FilterLabeledGroup>
+
+        <FilterDivider className="hidden lg:block" />
+
+        <FilterLabeledGroup label="Período">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <DatePickerField
+              compact
+              value={filters.desde}
+              onChange={(v) => onChange({ desde: v })}
+              placeholder="Desde"
+              ariaLabel="Fecha desde"
+              className="w-full min-w-0 sm:w-[9.5rem]"
+            />
+            <ArrowRight
+              size={12}
+              className="hidden shrink-0 text-[var(--color-text-3)] sm:block"
+              aria-hidden
+            />
+            <DatePickerField
+              compact
+              value={filters.hasta}
+              onChange={(v) => onChange({ hasta: v })}
+              placeholder="Hasta"
+              ariaLabel="Fecha hasta"
+              className="w-full min-w-0 sm:w-[9.5rem]"
+            />
+            {(filters.desde || filters.hasta) ? (
+              <button
+                type="button"
+                onClick={() => onChange({ desde: "", hasta: "" })}
+                className="desvios-action-chip !h-7 shrink-0"
+                title="Quitar filtro de fechas"
+              >
+                <X size={11} aria-hidden />
+                Fechas
+              </button>
+            ) : null}
+          </div>
+        </FilterLabeledGroup>
+      </div>
+    </div>
+  );
+}
+
+/** Campo de filtro por línea con el mismo lenguaje visual que la búsqueda y las pills. */
+function LineaFilterField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (linea: string) => void;
+}) {
+  const active = value.trim().length > 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div
+        className={cn(
+          "relative flex h-9 min-w-[9rem] max-w-[11rem] flex-1 items-center rounded-lg border bg-[var(--color-surface)] shadow-sm transition-colors sm:min-w-[10rem]",
+          active
+            ? "border-[var(--color-accent)]/45 ring-1 ring-[var(--color-accent)]/15"
+            : "border-[var(--color-border)] focus-within:border-[var(--color-accent)]/40 focus-within:ring-1 focus-within:ring-[var(--color-accent)]/15",
+        )}
+      >
+        <RouteIcon
+          size={13}
+          strokeWidth={2}
+          className={cn(
+            "pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2",
+            active ? "text-[var(--color-accent)]" : "text-[var(--color-text-3)]",
+          )}
+          aria-hidden
+        />
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Ej. 205, 250…"
+          aria-label="Filtrar por línea"
+          className={cn(
+            "h-full w-full border-0 bg-transparent py-0 pl-8 pr-7 text-[12px] shadow-none focus-visible:ring-0",
+            active && "font-semibold text-[var(--color-accent)] placeholder:text-[var(--color-accent)]/50",
+          )}
+        />
+        {active ? (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            aria-label="Quitar filtro de línea"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
+          >
+            <X size={12} aria-hidden />
+          </button>
+        ) : null}
+      </div>
+      {active ? (
+        <span className="inline-flex h-6 items-center gap-1 rounded-full border border-[var(--color-accent)]/35 bg-[var(--color-accent-light)]/50 px-2 text-[10.5px] font-semibold text-[var(--color-accent)]">
+          <RouteIcon size={10} aria-hidden />
+          {value.trim()}
+        </span>
+      ) : (
+        <span className="hidden text-[10.5px] text-[var(--color-text-3)] sm:inline">
+          Filtra desvíos que afecten a esa línea
+        </span>
+      )}
     </div>
   );
 }
@@ -729,14 +850,22 @@ function FilterBar({
  * Tarjeta compacta para listar desvios en MOVIL. Replica visualmente la
  * fila de la tabla pero apilando la informacion en bloques verticales.
  */
+function staggerClass(index: number): string {
+  return `ccmgc-stagger-in ccmgc-stagger-in-${(index % 6) + 1}`;
+}
+
 function MobileCard({
   desvio,
+  index,
+  isFresh,
   canManage,
   acting,
   onConfirm,
   onReactivate,
 }: {
   desvio: DesvioResumen;
+  index: number;
+  isFresh?: boolean;
   canManage: boolean;
   acting: boolean;
   onConfirm: () => void;
@@ -754,7 +883,10 @@ function MobileCard({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
       className={cn(
+        staggerClass(index),
         "relative overflow-hidden rounded-xl border bg-[var(--color-surface)] p-3 shadow-sm",
+        isFresh && "ccmgc-row-enter",
+        isPendiente && "desvios-row--pendiente ccmgc-pulse-border",
         isIndefVivo
           ? "border-[rgba(124,58,237,0.30)] bg-[rgba(124,58,237,0.04)]"
           : isPendiente
@@ -768,8 +900,7 @@ function MobileCard({
           className="absolute inset-y-0 left-0 w-1 bg-[#7c3aed]"
         />
       ) : null}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
+      <div className="min-w-0">
           <p className="truncate font-mono text-[11px] text-[var(--color-text-3)]">
             {desvio.referencia}
           </p>
@@ -782,12 +913,11 @@ function MobileCard({
           <p className="mt-0.5 truncate text-[11.5px] text-[var(--color-text-3)]">
             {desvio.tramo}
           </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <EstadoBadge estado={desvio.estado} size="sm" />
+            <OrigenBadge origen={desvio.origen} size="sm" />
+          </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <EstadoBadge estado={desvio.estado} size="sm" />
-          <OrigenBadge origen={desvio.origen} size="sm" />
-        </div>
-      </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11.5px] text-[var(--color-text-2)]">
         <FechasCell
@@ -853,18 +983,23 @@ function MobileCard({
 
 function Row({
   desvio,
+  index,
+  isFresh,
   canManage,
   acting,
   onConfirm,
   onReactivate,
 }: {
   desvio: DesvioResumen;
+  index: number;
+  isFresh?: boolean;
   canManage: boolean;
   acting: boolean;
   onConfirm: () => void;
   onReactivate: () => void;
 }) {
   const isPendiente = desvio.estado === "PENDIENTE";
+  const isActivo = desvio.estado === "ACTIVO";
   const isResuelto = desvio.estado === "RESUELTO";
   const isIndefVivo =
     desvio.sin_fecha_fin &&
@@ -880,7 +1015,11 @@ function Row({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
       className={cn(
+        staggerClass(index),
         "transition-colors hover:bg-[var(--color-surface-2)]/55",
+        isFresh && "ccmgc-row-enter",
+        isActivo && "desvios-row--activo",
+        isPendiente && "desvios-row--pendiente ccmgc-pulse-border",
         // Tinte violeta sutil para los indefinidos vivos (manda sobre el
         // tinte amarillo de "pendiente" porque ese estado tambien aparece
         // marcado como indefinido en muchos casos).
@@ -1134,7 +1273,7 @@ function Pagination({
   );
 }
 
-function EmptyState({
+function DesviosEmptyState({
   filtersActive,
   onReset,
 }: {
@@ -1142,30 +1281,20 @@ function EmptyState({
   onReset: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[var(--color-text-3)]">
-        <Mail size={20} strokeWidth={1.5} aria-hidden />
-      </div>
-      <div className="space-y-0.5">
-        <p className="text-sm font-medium text-[var(--color-text-1)]">
-          {filtersActive ? "Sin resultados con esos filtros." : "Aun no hay desvios registrados."}
-        </p>
-        <p className="text-[12px] text-[var(--color-text-3)]">
-          {filtersActive
-            ? "Prueba a limpiar los filtros para ver el historico completo."
-            : "Cuando llegue una Circular Informativa al buzon, aparecera aqui."}
-        </p>
-      </div>
-      {filtersActive ? (
-        <button
-          type="button"
-          onClick={onReset}
-          className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-2)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)]"
-        >
-          Limpiar filtros
-        </button>
-      ) : null}
-    </div>
+    <EmptyState
+      icon={filtersActive ? Search : Mail}
+      title={
+        filtersActive ? "Sin resultados con esos filtros" : "Aún no hay desvíos registrados"
+      }
+      hint={
+        filtersActive
+          ? "Prueba a limpiar los filtros para ver el histórico completo."
+          : "Cuando llegue una Circular Informativa al buzón, aparecerá aquí."
+      }
+      actionLabel={filtersActive ? "Limpiar filtros" : undefined}
+      onAction={filtersActive ? onReset : undefined}
+      compact
+    />
   );
 }
 

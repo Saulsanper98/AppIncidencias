@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 
+import { resolveRequestActor } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { canReadCatalog } from "@/lib/rbac";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ busId: string }> },
 ) {
   try {
+    const actor = await resolveRequestActor(request);
+    if (!actor.userId || !canReadCatalog(actor.role)) {
+      return NextResponse.json({ message: "Autenticación requerida" }, { status: 401 });
+    }
+
     const { busId } = await context.params;
     if (!busId) {
       return NextResponse.json({ message: "Bus requerido" }, { status: 400 });

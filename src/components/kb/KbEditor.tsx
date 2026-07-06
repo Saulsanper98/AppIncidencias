@@ -41,6 +41,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MarkdownView } from "@/components/kb/MarkdownView";
+import { KbMediaToolbar } from "@/components/kb/KbMediaToolbar";
 import { Select } from "@/components/ui/input";
 import type { KbArticleStatus, KbCategory } from "@/lib/domain";
 
@@ -97,7 +98,7 @@ export function KbEditor({
   onCancel,
   onSave,
 }: Props) {
-  const [previewMode, setPreviewMode] = useState(false);
+  const [previewMode, setPreviewMode] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [tagInput, setTagInput] = useState("");
   const [tagSuggestionsOpen, setTagSuggestionsOpen] = useState(false);
@@ -284,6 +285,28 @@ export function KbEditor({
     return pool.slice(0, 8);
   }, [tagInput, knownTags, tags]);
 
+  const insertMarkdown = useCallback(
+    (snippet: string) => {
+      const ta = textareaRef.current;
+      if (!ta) {
+        onChange({ ...draft, contentMd: draft.contentMd + snippet });
+        return;
+      }
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const value = ta.value;
+      const next = value.slice(0, start) + snippet + value.slice(end);
+      onChange({ ...draft, contentMd: next });
+      const cursor = start + snippet.length;
+      requestAnimationFrame(() => {
+        ta.focus();
+        ta.selectionStart = cursor;
+        ta.selectionEnd = cursor;
+      });
+    },
+    [draft, onChange],
+  );
+
   const statusInfo = STATUS_OPTIONS.find((s) => s.value === draft.status) ?? STATUS_OPTIONS[0];
 
   return (
@@ -408,17 +431,21 @@ export function KbEditor({
           {/* Card: contenido + toolbar */}
           <section className="ccmgc-card overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface-2)]/60 px-2 py-1.5">
-              <MarkdownToolbar
-                onH2={() => insertLinePrefix("## ")}
-                onH3={() => insertLinePrefix("### ")}
-                onBold={() => surroundSelection("**", "**", "negrita")}
-                onItalic={() => surroundSelection("*", "*", "cursiva")}
-                onLink={insertLink}
-                onUl={() => insertLinePrefix("- ")}
-                onOl={insertOrderedList}
-                onQuote={() => insertLinePrefix("> ")}
-                onCode={() => surroundSelection("`", "`", "codigo")}
-              />
+              <div className="flex flex-wrap items-center gap-1">
+                <MarkdownToolbar
+                  onH2={() => insertLinePrefix("## ")}
+                  onH3={() => insertLinePrefix("### ")}
+                  onBold={() => surroundSelection("**", "**", "negrita")}
+                  onItalic={() => surroundSelection("*", "*", "cursiva")}
+                  onLink={insertLink}
+                  onUl={() => insertLinePrefix("- ")}
+                  onOl={insertOrderedList}
+                  onQuote={() => insertLinePrefix("> ")}
+                  onCode={() => surroundSelection("`", "`", "codigo")}
+                />
+                <Divider />
+                <KbMediaToolbar articleId={draft.id} onInsert={insertMarkdown} disabled={saving} />
+              </div>
               <a
                 href="https://www.markdownguide.org/basic-syntax/"
                 target="_blank"

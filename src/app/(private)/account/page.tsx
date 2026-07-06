@@ -1,22 +1,19 @@
-import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-
 import { AccountProfile } from "@/components/account-profile";
 import { SectionTabs } from "@/components/ui/section-tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
+import { requireActiveUser } from "@/lib/server-session";
+
+export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
-  const userId = verifySessionToken(token);
-  if (!userId) {
-    redirect("/login?auth=required");
-  }
+  const session = await requireActiveUser("/account");
 
   const user = await prisma.user.findUnique({
-    where: { id: userId },
+    where: { id: session.id },
     select: {
       id: true,
       name: true,
@@ -31,24 +28,25 @@ export default async function AccountPage() {
       lastLoginAt: true,
       passwordUpdatedAt: true,
       mustChangePassword: true,
+      isReadOnly: true,
     },
   });
   if (!user || !user.isActive) {
     redirect("/login?auth=required");
   }
-  // Cargamos `isReadOnly` por raw query: el cliente Prisma puede ir un build
-  // detrás del schema en arranques recién migrados (Windows + DLL bloqueada).
-  const readOnlyRows = await prisma.$queryRawUnsafe<
-    { isReadOnly: number | boolean | null }[]
-  >(`SELECT isReadOnly FROM "User" WHERE id = ? LIMIT 1`, user.id);
-  const isReadOnly =
-    readOnlyRows[0]?.isReadOnly === true || readOnlyRows[0]?.isReadOnly === 1;
 
-  return (
-    <div className="flex flex-col gap-6">
+  return (    <div className="flex flex-col gap-6">
       <SectionTabs preset="account" />
+      <div className="-mt-2">
+        <Link
+          href="/feedback"
+          className="text-xs font-medium text-[var(--color-accent)] transition-colors hover:text-[var(--color-accent-hover)] hover:underline"
+        >
+          Ver mis envíos de feedback
+        </Link>
+      </div>
       <Suspense
-        fallback={<div className="h-[36rem] animate-pulse rounded-3xl bg-[var(--color-surface-2)]" aria-busy />}
+        fallback={<Skeleton className="h-[36rem] rounded-3xl" aria-busy />}
       >
         <AccountProfile
           initialUser={{
@@ -64,9 +62,8 @@ export default async function AccountPage() {
             lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
             passwordUpdatedAt: user.passwordUpdatedAt ? user.passwordUpdatedAt.toISOString() : null,
             mustChangePassword: user.mustChangePassword,
-            isReadOnly,
-          }}
-        />
+            isReadOnly: user.isReadOnly,
+          }}        />
       </Suspense>
     </div>
   );

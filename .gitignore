@@ -31,12 +31,17 @@
 /logs/
 /.tess-cache/
 
+# Paquetes de migración Windows→Linux y backups locales (no versionar)
+/migration-bundle/
+/backups/
+
 # production
 /build
 
 # misc
 .DS_Store
 *.pem
+/certs/
 
 # debug
 npm-debug.log*

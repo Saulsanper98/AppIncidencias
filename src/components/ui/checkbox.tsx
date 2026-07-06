@@ -47,7 +47,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
       >
         <Check
           strokeWidth={3}
-          className="ccmgc-checkbox-check absolute h-3 w-3 text-white transition-opacity"
+          className="ccmgc-checkbox-check absolute h-3 w-3 text-white"
           aria-hidden
         />
         <Minus

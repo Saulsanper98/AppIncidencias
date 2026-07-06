@@ -9,6 +9,110 @@
   overscroll-behavior: contain;
 }
 
+/* Panel elevado: contraste frente al fondo de la app */
+.map-date-field-popover-elevated {
+  color-scheme: dark;
+  border: 1px solid color-mix(in oklab, var(--color-accent, #2563eb) 32%, var(--color-border, #2a3f66));
+  background: linear-gradient(
+    165deg,
+    color-mix(in oklab, var(--color-surface-3, #1c2e50) 94%, white 4%) 0%,
+    color-mix(in oklab, var(--color-surface, #0f1a2e) 92%, var(--color-bg, #0a1220) 8%) 42%,
+    color-mix(in oklab, var(--color-surface-2, #152238) 88%, #000 12%) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 10%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--color-accent, #2563eb) 14%, transparent),
+    0 22px 50px -16px rgba(0, 0, 0, 0.78),
+    0 0 36px -8px color-mix(in oklab, var(--color-accent, #2563eb) 22%, transparent);
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+}
+
+.map-date-field-popover-elevated::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-accent, #2563eb) 70%, white 8%) 20%,
+    color-mix(in oklab, var(--color-accent, #2563eb) 85%, white 4%) 50%,
+    color-mix(in oklab, var(--color-accent, #2563eb) 70%, white 8%) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.map-date-field-popover-elevated {
+  position: relative;
+  overflow: hidden;
+}
+
+.map-date-field-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border, #2a3f66) 85%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface-2, #152238) 78%, transparent) 0%,
+    transparent 100%
+  );
+}
+
+.map-date-field-popover__header-text {
+  min-width: 0;
+}
+
+.map-date-field-popover__title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-3, #94a3b8);
+}
+
+.map-date-field-popover__preview {
+  margin-top: 0.15rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text-1, #f1f5f9);
+}
+
+.map-date-field-popover__body {
+  padding: 0.65rem 0.75rem 0.55rem;
+  background: color-mix(in srgb, var(--color-surface, #0f1a2e) 55%, transparent);
+}
+
+.map-date-field-popover__footer {
+  border-top: 1px solid color-mix(in srgb, var(--color-border, #2a3f66) 88%, transparent);
+  padding: 0.6rem 0.75rem;
+  background: color-mix(in srgb, var(--color-surface-2, #152238) 72%, transparent);
+}
+
+.map-date-field-popover__action {
+  border-radius: 0.45rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-3, #94a3b8);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.map-date-field-popover__action:hover {
+  background: var(--color-surface-3, #1c2e50);
+  color: var(--color-text-1, #f1f5f9);
+}
+
 .map-date-field-popover .rdp-root,
 .map-date-field-rdp {
   --rdp-accent-color: #2563eb;
@@ -142,10 +246,15 @@
   border-color: transparent !important;
 }
 
-.map-date-field-day-today:not(.map-date-field-day-selected),
-.map-date-field-popover .rdp-today:not(.rdp-selected) .rdp-day_button {
-  outline: 1px solid var(--color-accent, #2563eb);
-  outline-offset: -1px;
+.map-date-field-popover__body .rdp-root {
+  padding: 0.15rem 0.1rem 0;
+}
+
+.map-date-field-popover-elevated .map-date-field-day-today:not(.map-date-field-day-selected),
+.map-date-field-popover-elevated .rdp-today:not(.rdp-selected) .rdp-day_button {
+  outline: 2px solid color-mix(in oklab, var(--color-accent, #2563eb) 75%, white 10%);
+  outline-offset: -2px;
+  background: color-mix(in oklab, var(--color-accent, #2563eb) 12%, transparent);
 }
 
 .map-date-field-rdp button.rdp-day_button:hover:not([disabled]):not(.map-date-field-day-selected) {
@@ -218,4 +327,395 @@
 .map-date-field-popover .rdp-root[data-nav-layout="around"] .rdp-month_grid {
   grid-column: 1 / -1;
   grid-row: 2;
+}
+
+/* ─── DateTimePickerField: calendario + columnas de hora ─────────────────── */
+
+.datetime-picker-popover {
+  min-width: 26rem;
+  padding: 0;
+  color-scheme: dark;
+  overflow: hidden;
+}
+
+.datetime-picker-popover--time-only {
+  min-width: 13.5rem;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.map-date-field-popover-elevated.datetime-picker-popover--time-only {
+  overflow: visible;
+}
+
+.datetime-picker-popover--time-only .datetime-picker-popover__header {
+  flex-shrink: 0;
+}
+
+.datetime-picker-popover--time-only .datetime-picker-popover__time {
+  flex: none;
+  min-height: 0;
+  padding: 0.55rem 0.75rem 0.45rem;
+  background: color-mix(in srgb, var(--color-surface, #0f1a2e) 50%, transparent);
+}
+
+.datetime-picker-popover--time-only .datetime-picker-popover__time-columns {
+  min-height: 0;
+}
+
+.datetime-picker-popover--time-only .datetime-picker-popover__footer {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 0.55rem;
+  padding-bottom: 0.7rem;
+}
+
+.datetime-picker-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border, #2a3f66) 85%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface-2, #152238) 72%, transparent) 0%,
+    transparent 100%
+  );
+}
+
+.datetime-picker-popover__header-text {
+  min-width: 0;
+}
+
+.datetime-picker-popover__title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-3, #94a3b8);
+}
+
+.datetime-picker-popover__preview {
+  margin-top: 0.15rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text-1, #f1f5f9);
+}
+
+.datetime-picker-popover__time-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-accent, #2563eb) 42%, var(--color-border, #2a3f66));
+  background: color-mix(in srgb, var(--color-accent, #2563eb) 14%, var(--color-surface-2, #152238));
+  color: var(--color-accent, #60a5fa);
+}
+
+.datetime-picker-popover__time-chip-value {
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.datetime-picker-popover__body {
+  display: flex;
+  min-height: 18rem;
+  max-height: min(21rem, calc(100vh - 8rem));
+}
+
+.datetime-picker-popover__calendar {
+  flex: 1 1 62%;
+  min-width: 0;
+  padding: 0.65rem 0.75rem 0.55rem;
+  overflow: auto;
+}
+
+.datetime-picker-popover__divider {
+  width: 1px;
+  align-self: stretch;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--color-border, #2a3f66) 12%,
+    var(--color-border, #2a3f66) 88%,
+    transparent
+  );
+}
+
+.datetime-picker-popover__time {
+  flex: 0 0 9.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.55rem 0.55rem 0.5rem 0.45rem;
+  background: color-mix(in srgb, var(--color-surface-2, #152238) 42%, transparent);
+}
+
+.datetime-picker-popover__time-heading {
+  text-align: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-3, #94a3b8);
+}
+
+.datetime-picker-popover__time-columns {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  gap: 0.2rem;
+  min-height: 0;
+}
+
+.datetime-picker-popover__colon {
+  display: flex;
+  align-items: center;
+  padding-top: 1.85rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text-2, #cbd5e1);
+  user-select: none;
+}
+
+.datetime-picker-time-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+}
+
+.datetime-picker-time-col__label {
+  text-align: center;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-3, #94a3b8);
+}
+
+.datetime-picker-time-col__nudge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+  border-radius: 0.4rem;
+  color: var(--color-text-3, #94a3b8);
+  border: 1px solid transparent;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.datetime-picker-time-col__nudge:hover {
+  color: var(--color-text-1, #f1f5f9);
+  background: var(--color-surface-3, #1c2e50);
+  border-color: var(--color-border, #2a3f66);
+}
+
+.datetime-picker-time-col__scroll-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  height: 9rem;
+  min-height: 9rem;
+  max-height: 9rem;
+  border-radius: 0.55rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--color-accent, #2563eb) 22%, var(--color-border, #2a3f66));
+  background: color-mix(in srgb, var(--color-surface, #0f1a2e) 88%, #000 12%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 0 0 1px color-mix(in oklab, var(--color-accent, #2563eb) 8%, transparent);
+}
+
+.datetime-picker-time-col__scroll {
+  height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-accent, #2563eb) 45%, transparent) transparent;
+  padding: 0.15rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.datetime-picker-time-col__scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.datetime-picker-time-col__scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-accent, #2563eb) 50%, var(--color-surface-3, #1c2e50));
+}
+
+.datetime-picker-time-col__scroll-wrap::before,
+.datetime-picker-time-col__scroll-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2rem;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.datetime-picker-time-col__scroll-wrap::before {
+  top: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface, #0f1a2e) 96%, transparent) 0%,
+    transparent 100%
+  );
+}
+
+.datetime-picker-time-col__scroll-wrap::after {
+  bottom: 0;
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--color-surface, #0f1a2e) 96%, transparent) 0%,
+    transparent 100%
+  );
+}
+
+.datetime-picker-time-col__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.7rem;
+  scroll-snap-align: center;
+  border-radius: 0.4rem;
+  border: 1px solid transparent;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-3, #94a3b8);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.datetime-picker-time-col__item:hover {
+  background: color-mix(in srgb, var(--color-surface-3, #1c2e50) 80%, transparent);
+  color: var(--color-text-1, #f1f5f9);
+}
+
+.datetime-picker-time-col__item--active {
+  background: var(--color-accent, #2563eb) !important;
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-color: transparent;
+  box-shadow:
+    0 0 0 1px rgba(37, 99, 235, 0.35),
+    0 4px 14px -6px rgba(37, 99, 235, 0.65);
+  transform: scale(1.02);
+}
+
+.datetime-picker-popover__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  border-top: 1px solid var(--color-border, #2a3f66);
+  padding: 0.6rem 0.75rem;
+  background: color-mix(in srgb, var(--color-surface-2, #152238) 65%, transparent);
+}
+
+.datetime-picker-popover__footer-secondary {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.datetime-picker-popover__action {
+  border-radius: 0.45rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-3, #94a3b8);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.datetime-picker-popover__action:hover {
+  background: var(--color-surface-3, #1c2e50);
+  color: var(--color-text-1, #f1f5f9);
+}
+
+.datetime-picker-popover__action--primary {
+  min-width: 4.75rem;
+  background: linear-gradient(
+    145deg,
+    color-mix(in oklab, var(--color-accent, #2563eb) 90%, white 6%) 0%,
+    color-mix(in oklab, var(--color-accent, #2563eb) 98%, #0f172a 8%) 100%
+  );
+  color: #fff;
+  font-weight: 600;
+  border: 1px solid color-mix(in oklab, var(--color-accent, #2563eb) 70%, white 12%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 8px 20px -10px color-mix(in oklab, var(--color-accent, #2563eb) 80%, transparent);
+}
+
+.datetime-picker-popover__action--primary:hover {
+  background: linear-gradient(
+    145deg,
+    color-mix(in oklab, var(--color-accent, #2563eb) 94%, white 4%) 0%,
+    color-mix(in oklab, var(--color-accent, #2563eb) 100%, #0f172a 6%) 100%
+  );
+  color: #fff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 10px 24px -8px color-mix(in oklab, var(--color-accent, #2563eb) 88%, transparent);
+}
+
+@media (max-width: 480px) {
+  .datetime-picker-popover {
+    min-width: min(100vw - 1rem, 22rem);
+  }
+
+  .datetime-picker-popover__body {
+    flex-direction: column;
+    max-height: min(26rem, calc(100vh - 6rem));
+  }
+
+  .datetime-picker-popover__divider {
+    width: auto;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--color-border, #2a3f66) 12%,
+      var(--color-border, #2a3f66) 88%,
+      transparent
+    );
+  }
+
+  .datetime-picker-popover__time {
+    flex: 0 0 auto;
+    min-height: 10.5rem;
+    padding-inline: 0.75rem;
+  }
+
+  .datetime-picker-popover__colon {
+    padding-top: 1.85rem;
+  }
 }

@@ -27,7 +27,7 @@ export function LoginCardMotion({ children }: { children: ReactNode }) {
       initial={reduce ? false : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
-        duration: reduce ? 0 : 0.32,
+        duration: reduce ? 0 : 0.48,
         ease: [0.22, 1, 0.36, 1],
       }}
     >

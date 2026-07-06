@@ -27,13 +27,9 @@ import {
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { canManageCatalog } from "@/lib/rbac";
 
-export const runtime = "nodejs";
+import { ANOMALOUS_DEFAULTS } from "@/lib/anomalous-config";
 
-export const ANOMALOUS_DEFAULTS = {
-  windowDays: 12,
-  zscore: 1.5,
-  typeWeights: {} as Record<string, number>,
-};
+export const runtime = "nodejs";
 
 async function readSnapshot() {
   const [windowDays, zscore, typeWeights] = await Promise.all([

@@ -1,0 +1,32 @@
+[Unit]
+Description=CCMGC Ticketing (App de Incidencias)
+Documentation=file://@APP_ROOT@/docs/DEPLOY-DEBIAN.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@APP_USER@
+Group=@APP_GROUP@
+WorkingDirectory=@APP_ROOT@
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=@PORT@
+Environment=TZ=Atlantic/Canary
+EnvironmentFile=-@APP_ROOT@/.env
+ExecStart=/usr/bin/node @APP_ROOT@/server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+StandardOutput=append:@APP_ROOT@/logs/service-out.log
+StandardError=append:@APP_ROOT@/logs/service-err.log
+LimitNOFILE=65536
+
+# Hardening ligero (compatible con lectura de .env y SQLite en el proyecto)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=@APP_ROOT@ /tmp /var/tmp
+
+[Install]
+WantedBy=multi-user.target

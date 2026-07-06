@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { isApiAuthError, requireActor } from "@/lib/api-auth";
 import { ensureCatalogSeeded } from "@/lib/catalog";
 import { getInventorySummary } from "@/lib/inventory";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const actor = await requireActor(request);
+    if (isApiAuthError(actor)) return actor;
+
     await ensureCatalogSeeded();
     const summary = await getInventorySummary();
     return NextResponse.json({ summary });

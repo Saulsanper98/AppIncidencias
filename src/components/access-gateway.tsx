@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Info, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { AlertCircle, Loader2, Lock, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -15,6 +15,8 @@ import {
 } from "@/app/login/login-i18n";
 import { LoginUserListbox } from "@/components/login-user-listbox";
 import { Button } from "@/components/ui/button";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { Skeleton } from "@/components/ui/skeleton";
 import { isDevUserSelectorEnabled } from "@/lib/dev-auth";
 import type { SessionUser, UserRole } from "@/lib/domain";
 import { fetchJsonWithTimeout } from "@/lib/login-fetch-error";
@@ -94,6 +96,31 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const navigateAfterLogin = useCallback(
+    (dest: string, delayMs = 180) => {
+      const go = () => router.push(dest);
+      const reducedMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reducedMotion) {
+        window.setTimeout(go, delayMs);
+        return;
+      }
+      window.setTimeout(() => {
+        document.body.style.transition = "opacity 0.1s ease";
+        document.body.style.opacity = "0.72";
+        window.setTimeout(() => {
+          go();
+          window.requestAnimationFrame(() => {
+            document.body.style.opacity = "";
+            document.body.style.transition = "";
+          });
+        }, 90);
+      }, delayMs);
+    },
+    [router],
+  );
+
   const t = useMemo(() => loginCopy(locale), [locale]);
 
   const setLocalePersist = useCallback((next: LoginLocale) => {
@@ -127,6 +154,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [announce, setAnnounce] = useState("");
   const [flashWelcome, setFlashWelcome] = useState<string | null>(null);
+  const [errorShake, setErrorShake] = useState(false);
 
   // Estado del campo de contraseña. El email ya no se introduce: el usuario
   // elige su nombre/avatar del selector y solo escribe la contraseña.
@@ -139,10 +167,15 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
   const retryRef = useRef<HTMLButtonElement>(null);
   const langEsRef = useRef<HTMLButtonElement>(null);
   const emptyListRetryRef = useRef<HTMLButtonElement>(null);
-  const logoutDialogRef = useRef<HTMLDivElement>(null);
   const logoutCancelRef = useRef<HTMLButtonElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
   const formId = useId();
+
+  useEffect(() => {
+    if (!error) return;
+    setErrorShake(true);
+    const timer = window.setTimeout(() => setErrorShake(false), 420);
+    return () => window.clearTimeout(timer);
+  }, [error]);
 
   const loadBootstrap = useCallback(async () => {
     setError(null);
@@ -305,15 +338,13 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
       const dest = nextPath
         ? `/account/cambiar-password?next=${encodeURIComponent(nextPath)}`
         : "/account/cambiar-password";
-      window.setTimeout(() => router.push(dest), 120);
+      navigateAfterLogin(dest, 120);
       return;
     }
 
     setFlashWelcome(t.welcomeBack(name));
     const dest = nextPath ?? "/dashboard";
-    window.setTimeout(() => {
-      router.push(dest);
-    }, 180);
+    navigateAfterLogin(dest, 180);
   };
 
   const performLogout = async () => {
@@ -353,42 +384,6 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
     ? `${t.rolePrefix}: ${userRoleLabel(sessionUser.role, locale)}`
     : t.selectUserProtected;
 
-  useEffect(() => {
-    if (!logoutOpen) return;
-    previousFocusRef.current = document.activeElement as HTMLElement | null;
-    window.setTimeout(() => logoutCancelRef.current?.focus(), 0);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setLogoutOpen(false);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const root = logoutDialogRef.current;
-      if (!root) return;
-      const candidates = Array.from(
-        root.querySelectorAll<HTMLElement>(
-          "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
-        ),
-      ).filter((el) => !el.hasAttribute("disabled"));
-      if (candidates.length === 0) return;
-      const first = candidates[0];
-      const last = candidates[candidates.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      previousFocusRef.current?.focus();
-    };
-  }, [logoutOpen]);
-
   return (
     <>
       <div className="sr-only" aria-live="polite">
@@ -397,52 +392,50 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
 
       <section
         id="login-main"
-        className={cn(
-          "login-section rounded-xl outline-none",
-        )}
+        className={cn("login-section rounded-xl outline-none")}
         aria-busy={!ready}
         aria-labelledby={`${formId}-heading`}
       >
-        <div className="flex justify-center">
-          <div className="login-segmented-shell">
-            <span className="login-secondary-text text-caption">{locale === "en" ? "Language" : "Idioma"}</span>
-            <div className="login-segmented flex">
-              <button
-                ref={langEsRef}
-                type="button"
-                className={cn(
-                  "login-focusable login-segmented-item px-3 py-1 text-xs font-semibold transition-colors",
-                  locale === "es"
-                    ? "bg-[color-mix(in_oklab,var(--color-surface-2)_88%,white)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_rgba(148,163,184,0.22)]"
-                    : "text-[color-mix(in_oklab,var(--color-text-3)_70%,white)] hover:text-[var(--color-text-1)]",
-                )}
-                onClick={() => setLocalePersist("es")}
-                aria-pressed={locale === "es"}
-              >
-                {t.langEs}
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "login-focusable login-segmented-item px-3 py-1 text-xs font-semibold transition-colors",
-                  locale === "en"
-                    ? "bg-[color-mix(in_oklab,var(--color-surface-2)_88%,white)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_rgba(148,163,184,0.22)]"
-                    : "text-[color-mix(in_oklab,var(--color-text-3)_70%,white)] hover:text-[var(--color-text-1)]",
-                )}
-                onClick={() => setLocalePersist("en")}
-                aria-pressed={locale === "en"}
-              >
-                {t.langEn}
-              </button>
-            </div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 id={`${formId}-heading`} className="text-subheading text-[var(--color-text-1)]">
+            {sessionUser ? t.activeSession(sessionUser.name) : t.signIn}
+          </h2>
+          <div className="login-segmented flex shrink-0">
+            <button
+              ref={langEsRef}
+              type="button"
+              className={cn(
+                "login-focusable login-segmented-item px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                locale === "es"
+                  ? "bg-[var(--color-surface-2)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_var(--color-border)]"
+                  : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+              )}
+              onClick={() => setLocalePersist("es")}
+              aria-pressed={locale === "es"}
+            >
+              {t.langEs}
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "login-focusable login-segmented-item px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                locale === "en"
+                  ? "bg-[var(--color-surface-2)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_var(--color-border)]"
+                  : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+              )}
+              onClick={() => setLocalePersist("en")}
+              aria-pressed={locale === "en"}
+            >
+              {t.langEn}
+            </button>
             <button
               type="button"
               aria-pressed={highContrast}
               className={cn(
-                "login-focusable login-segmented-item px-2 text-[11px] font-semibold transition-colors",
+                "login-focusable login-segmented-item px-2 text-[10px] font-semibold transition-colors",
                 highContrast
-                  ? "bg-[color-mix(in_oklab,var(--color-accent)_28%,var(--color-surface-2))] text-[var(--color-text-1)]"
-                  : "bg-[var(--color-surface-2)]/30 text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
+                  ? "bg-[color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface-2))] text-[var(--color-text-1)]"
+                  : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
               )}
               title={t.contrast}
               onClick={() => {
@@ -463,53 +456,40 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
         {authRequired && (
           <div
             role="status"
-            className="flex items-start gap-3 rounded-xl border border-[color-mix(in_oklab,var(--color-warning)_55%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-warning-light)_55%,transparent)] p-4 text-[15px] leading-snug text-[var(--color-text-1)]"
+            className="mb-3 flex items-start gap-2 rounded-lg border border-[color-mix(in_oklab,var(--color-warning)_55%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-warning-light)_55%,transparent)] px-3 py-2 text-[13px] leading-snug text-[var(--color-text-1)]"
           >
-            <Lock size={18} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden />
+            <Lock size={15} className="mt-0.5 shrink-0 text-[var(--color-warning)]" aria-hidden />
             <span>{t.authRequired}</span>
           </div>
         )}
 
-        <div className="space-y-[var(--login-space-meta)]">
-          <div className="login-meta-block items-center text-center">
-            <span className="login-pretitle">
-              <span className="login-pretitle-dot" aria-hidden />
-              {t.operationalAccess}
-            </span>
-            <h2 id={`${formId}-heading`} className="text-subheading text-balance text-[var(--color-text-1)]">
-              {sessionUser ? t.activeSession(sessionUser.name) : t.signInToManage}
-            </h2>
-            {sessionUser ? (
-              <div className="inline-flex w-fit max-w-full items-center justify-center gap-2 rounded-full border border-[color-mix(in_oklab,var(--color-success)_35%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-success-light)_44%,transparent)] px-3 py-1.5 text-[13px] font-medium text-[color-mix(in_oklab,var(--color-success)_66%,white)]">
-                <ShieldCheck size={14} aria-hidden />
-                <span>{roleLine}</span>
-              </div>
-            ) : (
-              <p className="text-body text-pretty leading-relaxed text-[var(--color-text-2)]">{roleLine}</p>
-            )}
-            {flashWelcome ? (
-              <p className="text-body text-pretty font-medium text-[var(--color-success)]" role="status">
-                {flashWelcome}
-              </p>
-            ) : null}
-          </div>
+        <div className="space-y-3">
+          {sessionUser ? (
+            <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-[color-mix(in_oklab,var(--color-success)_35%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-success-light)_44%,transparent)] px-3 py-1 text-[12px] font-medium text-[color-mix(in_oklab,var(--color-success)_66%,white)]">
+              <ShieldCheck size={13} aria-hidden />
+              <span>{roleLine}</span>
+            </div>
+          ) : (
+            <p className="text-[12.5px] text-[var(--color-text-3)]">{t.selectUserProtected}</p>
+          )}
+          {flashWelcome ? (
+            <p className="text-[13px] font-medium text-[var(--color-success)]" role="status">
+              {flashWelcome}
+            </p>
+          ) : null}
 
           {sessionUser ? null : (
-            <div className="flex w-full flex-col items-center text-center">
-              <div className="w-full max-w-md space-y-4 text-left">
+            <div className="space-y-3">
                 {/* === Selector de usuario === */}
                 <div>
                   <label
                     htmlFor="login-user-select"
-                    className="mb-1.5 block text-label tracking-wide text-[var(--color-text-3)]"
+                    className="mb-1 block text-label tracking-wide text-[var(--color-text-3)]"
                   >
                     {t.labelUser}
                   </label>
                   {!ready && users.length === 0 ? (
-                    <div
-                      className="h-12 w-full rounded-lg bg-[var(--color-surface-2)] motion-safe:animate-pulse"
-                      aria-hidden
-                    />
+                    <Skeleton className="h-12 w-full rounded-lg" />
                   ) : users.length === 0 && !error ? (
                     <div
                       role="status"
@@ -547,13 +527,13 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                   <div>
                     <label
                       htmlFor="login-password"
-                      className="mb-1.5 block text-label tracking-wide text-[var(--color-text-3)]"
+                      className="mb-1 block text-label tracking-wide text-[var(--color-text-3)]"
                     >
                       {t.fieldPasswordLabel}
                     </label>
                     <div className="relative">
                       <Lock
-                        size={15}
+                        size={14}
                         aria-hidden
                         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]"
                         strokeWidth={1.8}
@@ -566,37 +546,32 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                         placeholder={t.fieldPasswordPlaceholder}
                         value={passwordInput}
                         onChange={(e) => setPasswordInput(e.target.value)}
-                        className="login-focusable login-input-premium w-full rounded-lg pl-10 pr-20 py-2.5 text-body text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none"
+                        className="login-focusable login-input-premium w-full rounded-lg py-2 pl-9 pr-16 text-[13px] text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((v) => !v)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-caption font-medium text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)]"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)]"
                         aria-label={showPassword ? t.hidePassword : t.showPassword}
                       >
                         {showPassword ? t.hidePassword : t.showPassword}
                       </button>
                     </div>
-                    <div id="login-user-hint" className="login-hint-block">
-                      <Info size={13} aria-hidden strokeWidth={1.8} className="login-hint-block-icon" />
-                      <div className="flex-1 space-y-1">
-                        <p>{t.selectorHint}</p>
-                        <p className="text-[10.5px] opacity-80">{t.forgotPassword}</p>
-                      </div>
-                    </div>
+                    <p id="login-user-hint" className="mt-1.5 text-[11px] leading-snug text-[var(--color-text-3)]">
+                      {t.selectorHint}{" "}
+                      <span className="opacity-85">{t.forgotPassword}</span>
+                    </p>
                   </div>
                 ) : null}
               </div>
-            </div>
           )}
 
           {sessionUser ? (
-            <div className="login-actions pt-1">
+            <div className="login-actions">
               <Button
                 ref={primaryRef}
                 type="button"
-                size="lg"
-                className="login-primary-cta login-primary-cta-premium login-focusable login-motion-transform w-full motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0"
+                className="login-primary-cta login-primary-cta-premium login-focusable w-full"
                 onClick={() => router.push(destAfterLogin)}
                 onMouseEnter={prefetchDashboard}
                 onFocus={prefetchDashboard}
@@ -606,8 +581,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
               <Button
                 type="button"
                 variant="ghost"
-                size="lg"
-                className="login-focusable w-full rounded-xl border border-[var(--color-border)] bg-transparent text-[var(--color-text-2)] transition-colors hover:border-[color-mix(in_oklab,var(--color-accent)_38%,var(--color-border-hover))] hover:bg-[color-mix(in_oklab,var(--color-accent-light)_36%,var(--color-surface-2))] hover:text-[var(--color-text-1)]"
+                className="login-focusable w-full !min-h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
                 onClick={() => setLogoutOpen(true)}
               >
                 {t.changeUser}
@@ -615,7 +589,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
             </div>
           ) : (
             <form
-              className="login-actions pt-1"
+              className="login-actions"
               onSubmit={(e) => {
                 e.preventDefault();
                 void handleLogin();
@@ -625,8 +599,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                 <Button
                   ref={primaryRef}
                   type="submit"
-                  size="lg"
-                  className="login-primary-cta login-primary-cta-premium login-focusable login-motion-transform w-full motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0"
+                  className="login-primary-cta login-primary-cta-premium login-focusable w-full"
                   disabled={
                     !ready ||
                     loggingIn ||
@@ -649,7 +622,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                 <p className="text-center">
                   <Link
                     href={guestTicketsUrl}
-                    className="text-sm text-[var(--color-accent)] underline-offset-4 transition-colors hover:text-[var(--color-accent-hover)] hover:underline"
+                    className="inline-flex items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/45 px-3 py-1.5 text-sm font-medium text-[var(--color-text-2)] transition-colors hover:border-[color-mix(in_oklab,var(--color-accent)_38%,var(--color-border-hover))] hover:bg-[color-mix(in_oklab,var(--color-accent-light)_36%,var(--color-surface-2))] hover:text-[var(--color-text-1)]"
                   >
                     {t.guestTickets}
                   </Link>
@@ -669,7 +642,10 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
           <div className="flex flex-col gap-3 pt-1">
             <div
               role="alert"
-              className="flex items-start gap-3 rounded-xl border border-[color-mix(in_oklab,var(--color-error)_50%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-error-light)_45%,transparent)] p-4 text-[15px] leading-snug text-[var(--color-text-1)]"
+              className={cn(
+                "flex items-start gap-3 rounded-xl border border-[color-mix(in_oklab,var(--color-error)_50%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-error-light)_45%,transparent)] p-4 text-[15px] leading-snug text-[var(--color-text-1)] transition-[border-color,box-shadow] duration-200",
+                errorShake && "ccmgc-shake shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-error)_35%,transparent)]",
+              )}
             >
               <AlertCircle size={18} className="mt-0.5 shrink-0 text-[var(--color-error)]" aria-hidden />
               <span>{error}</span>
@@ -681,42 +657,31 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
         ) : null}
       </section>
 
-      {logoutOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setLogoutOpen(false);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="logout-confirm-title"
-            ref={logoutDialogRef}
-            className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-xl sm:p-6"
-          >
-            <h3 id="logout-confirm-title" className="text-heading">
-              {t.logoutConfirmTitle}
-            </h3>
-            <p className="mt-3 text-body text-[var(--color-text-2)]">{t.logoutConfirmBody}</p>
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button
-                ref={logoutCancelRef}
-                type="button"
-                variant="ghost"
-                className="login-focusable"
-                onClick={() => setLogoutOpen(false)}
-              >
-                {t.cancel}
-              </Button>
-              <Button type="button" variant="danger" className="login-focusable" onClick={() => void performLogout()}>
-                {t.confirmLogout}
-              </Button>
-            </div>
+      <ModalShell
+        open={logoutOpen}
+        onClose={() => setLogoutOpen(false)}
+        size="md"
+        initialFocusRef={logoutCancelRef}
+        title={t.logoutConfirmTitle}
+        footer={
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              ref={logoutCancelRef}
+              type="button"
+              variant="ghost"
+              className="login-focusable"
+              onClick={() => setLogoutOpen(false)}
+            >
+              {t.cancel}
+            </Button>
+            <Button type="button" variant="danger" className="login-focusable" onClick={() => void performLogout()}>
+              {t.confirmLogout}
+            </Button>
           </div>
-        </div>
-      ) : null}
+        }
+      >
+        <p className="text-body text-[var(--color-text-2)]">{t.logoutConfirmBody}</p>
+      </ModalShell>
     </>
   );
 }

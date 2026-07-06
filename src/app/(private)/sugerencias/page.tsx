@@ -99,7 +99,7 @@ export default async function SugerenciasPage() {
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-[var(--color-text-3)]">
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                    <span className="ccmgc-pulse-dot inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     Votación abierta
                   </span>
                   <span>·</span>

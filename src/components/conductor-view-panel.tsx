@@ -1,8 +1,11 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, ChevronRight, Clock, Loader2, TriangleAlert } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, Clock, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+
+import { ConductorViewSkeleton } from "@/components/ui/view-skeletons";
+import { EmptyState } from "@/components/ui/empty-state";
 
 import type { Ticket } from "@/lib/domain";
 import { cn } from "@/lib/utils";
@@ -34,22 +37,18 @@ export function ConductorViewPanel() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
-        <Loader2 size={24} className="animate-spin text-[var(--color-text-3)]" />
-      </div>
-    );
+    return <ConductorViewSkeleton />;
   }
 
   if (!tickets.length) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-16 text-center">
-        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-success-light)]">
-          <CheckCircle2 size={24} className="text-[var(--color-success)]" />
-        </div>
-        <p className="font-medium text-[var(--color-text-2)]">Sin incidencias activas</p>
-        <p className="mt-1 text-sm text-[var(--color-text-3)]">Todo en orden por ahora</p>
-      </div>
+      <EmptyState
+        compact
+        icon={CheckCircle2}
+        title="Sin incidencias activas"
+        hint="Todo en orden por ahora"
+        className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]"
+      />
     );
   }
 
@@ -70,7 +69,7 @@ export function ConductorViewPanel() {
         <div className="flex gap-4 text-sm">
           {open.length > 0 && (
             <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--color-error)]" />
+              <span className="ccmgc-pulse-dot h-2 w-2 rounded-full bg-[var(--color-error)]" />
               <span className="font-bold text-[var(--color-text-1)]">{open.length}</span>
               <span className="text-[var(--color-text-3)]">abiertas</span>
             </div>
@@ -85,14 +84,17 @@ export function ConductorViewPanel() {
 
       {/* Ticket grid */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {tickets.slice(0, 20).map((ticket) => {
+        {tickets.slice(0, 20).map((ticket, idx) => {
           const sm = STATUS_META[ticket.status] ?? STATUS_META.abierto;
           const Icon = sm.icon;
           return (
             <Link
               key={ticket.id}
               href={`/tickets/${ticket.id}`}
-              className="group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3.5 transition-all duration-150 hover:border-[var(--color-border-hover)] hover:shadow-md hover:shadow-black/15"
+              className={cn(
+                "group flex items-start gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3.5 transition-all duration-150 hover:border-[var(--color-border-hover)] hover:shadow-md hover:shadow-black/15",
+                `ccmgc-stagger-in ccmgc-stagger-in-${(idx % 6) + 1}`,
+              )}
               style={{ borderLeftWidth: "3px", borderLeftColor: sm.border }}
             >
               <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", sm.bg)}>

@@ -142,7 +142,7 @@ export function FeedbackFAB() {
         aria-label="Enviar feedback"
         title="Enviar feedback (Ctrl+Shift+F)"
         className={cn(
-          "pointer-events-auto group flex h-12 items-center justify-center gap-2 rounded-full bg-[var(--color-accent)] px-4 text-sm font-semibold text-white shadow-[0_18px_42px_-12px_rgba(37,99,235,0.55)] transition-all duration-200",
+          "feedback-fab-expand pointer-events-auto group flex h-12 items-center justify-center gap-2 rounded-full bg-[var(--color-accent)] px-4 text-sm font-semibold text-white shadow-[0_18px_42px_-12px_rgba(37,99,235,0.55)] transition-all duration-200",
           "hover:bg-[var(--color-accent-hover)] hover:shadow-[0_22px_50px_-12px_rgba(37,99,235,0.7)] hover:scale-[1.04]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]",
         )}

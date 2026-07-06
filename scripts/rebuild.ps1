@@ -154,6 +154,18 @@ if ($code -ne 0) {
   exit $code
 }
 
+# --- 3.5 sync tipologia (catálogo activo en BD) ---
+$tsxCmd = Join-Path $RepoPath "node_modules\.bin\tsx.cmd"
+if (Test-Path $tsxCmd) {
+  $code = Invoke-External -Exe $tsxCmd -Arguments @("scripts/sync-tipologia.ts") -Label "sync tipologia"
+  if ($code -ne 0) {
+    Log "[X] sync-tipologia falló con código $code. Aborto sin arrancar el servicio." "Red"
+    exit $code
+  }
+} else {
+  Log "[!] tsx no encontrado; omito sync-tipologia." "Yellow"
+}
+
 # --- 4. next build ---
 if ($SkipBuild) {
   Log "[i] SkipBuild=1 → me salto next build" "Yellow"
@@ -194,12 +206,39 @@ if (Test-Path $nssmExe) {
     } else {
       Log "[!] Falta node.exe o server.js. Dejo Application sin tocar." "Yellow"
     }
-    & $nssmExe set $ServiceName AppEnvironmentExtra `
-        "NODE_ENV=production" `
-        "HOST=0.0.0.0" `
-        "PORT=3000" `
-        "TZ=Atlantic/Canary" | Out-Null
-    Log "[i] AppEnvironmentExtra reaplicado (incluye TZ=Atlantic/Canary)." "Cyan"
+    $envExtra = @(
+      "NODE_ENV=production"
+      "HOST=0.0.0.0"
+      "PORT=3000"
+      "TZ=Atlantic/Canary"
+    )
+    $dotEnvPath = Join-Path $RepoPath ".env"
+    if (Test-Path $dotEnvPath) {
+      $envMap = @{}
+      Get-Content $dotEnvPath | ForEach-Object {
+        if ($_ -match '^\s*([^#=]+)=(.*)$') {
+          $k = $Matches[1].Trim()
+          $v = $Matches[2].Trim().Trim('"')
+          $envMap[$k] = $v
+        }
+      }
+      foreach ($envKey in @(
+        "HTTPS_PORT", "TLS_PFX_PATH", "TLS_PFX_PASSPHRASE", "TLS_KEY_PATH", "TLS_CERT_PATH",
+        "RATE_LIMIT_DISABLE", "RATE_LIMIT_TRUST_LAN", "RATE_LIMIT_GENERAL_RPM", "RATE_LIMIT_GENERAL_BURST",
+        "RATE_LIMIT_LOGIN_RPM", "RATE_LIMIT_LOGIN_BURST", "RATE_LIMIT_BAN_THRESHOLD", "RATE_LIMIT_BAN_MINUTES",
+        "RATE_LIMIT_WHITELIST"
+      )) {
+        if ($envMap.ContainsKey($envKey) -and $envMap[$envKey]) {
+          $val = $envMap[$envKey]
+          if ($envKey -eq "TLS_PFX_PATH" -and -not [System.IO.Path]::IsPathRooted($val)) {
+            $val = Join-Path $RepoPath ($val -replace '/', '\')
+          }
+          $envExtra += "$envKey=$val"
+        }
+      }
+    }
+    & $nssmExe set $ServiceName AppEnvironmentExtra @envExtra | Out-Null
+    Log "[i] AppEnvironmentExtra reaplicado (TZ + TLS si está en .env)." "Cyan"
   } catch {
     Log "[!] No se pudo actualizar la config del servicio via nssm: $($_.Exception.Message)" "Yellow"
   }

@@ -76,7 +76,7 @@ function OptionAvatar({ avatarUrl, label, size = 28 }: { avatarUrl?: string | nu
 }
 
 const triggerBase =
-  "login-focusable login-listbox-trigger-premium flex w-full min-h-[52px] items-center justify-between gap-2 rounded-xl border border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[var(--color-surface-2)] px-3 py-2.5 text-left text-[13px] leading-5 text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,background-color,box-shadow] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--color-accent)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]";
+  "login-focusable login-listbox-trigger-premium flex w-full min-h-[44px] items-center justify-between gap-2 rounded-lg border border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[var(--color-surface-2)] px-3 py-2 text-left text-[13px] leading-5 text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,background-color,box-shadow] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--color-accent)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]";
 
 const listSurface =
   "login-user-listbox-panel login-listbox-panel-premium absolute left-0 right-0 top-full z-50 mt-1.5 flex max-h-[min(340px,55vh)] flex-col overflow-hidden rounded-xl border border-[color-mix(in_oklab,var(--color-border)_85%,transparent)] bg-[color-mix(in_oklab,var(--color-surface-2)_96%,var(--color-surface))] p-1.5 shadow-[0_18px_48px_-14px_rgba(0,0,0,0.55)]";

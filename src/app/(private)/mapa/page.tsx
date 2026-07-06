@@ -1,32 +1,9 @@
-"use client";
+import MapaPageClient from "./mapa-page-client";
+import { requireActiveUser } from "@/lib/server-session";
 
-import dynamic from "next/dynamic";
-import { Suspense } from "react";
+export const dynamic = "force-dynamic";
 
-const MapaView = dynamic(
-  () => import("@/components/mapa/mapa-view").then((m) => ({ default: m.MapaView })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]">
-        <p className="text-sm text-[var(--color-text-2)]">Cargando mapa…</p>
-      </div>
-    ),
-  },
-);
-
-export default function MapaPage() {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <Suspense
-        fallback={
-          <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]">
-            <p className="text-sm text-[var(--color-text-2)]">Preparando vista…</p>
-          </div>
-        }
-      >
-        <MapaView />
-      </Suspense>
-    </div>
-  );
+export default async function MapaPage() {
+  await requireActiveUser("/mapa");
+  return <MapaPageClient />;
 }

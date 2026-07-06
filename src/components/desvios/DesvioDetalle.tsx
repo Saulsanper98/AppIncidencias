@@ -115,6 +115,23 @@ export function DesvioDetalle({ initial, canManage, canDelete }: Props) {
     };
   }, [desvio.id]);
 
+  // Breadcrumb del layout (p7): código de línea en la miga de pan superior.
+  useEffect(() => {
+    const lineCode =
+      desvio.lineas_afectadas.length > 0
+        ? desvio.lineas_afectadas.join(", ")
+        : desvio.via?.trim() || "Detalle";
+    try {
+      sessionStorage.setItem(
+        "ccmgc_desvio_crumb",
+        JSON.stringify({ id: desvio.id, title: lineCode }),
+      );
+      window.dispatchEvent(new Event("ccmgc-desvio-breadcrumb"));
+    } catch {
+      /* ignore */
+    }
+  }, [desvio.id, desvio.lineas_afectadas, desvio.via]);
+
   const transition = async (
     action: Exclude<Action, null | "eliminar">,
     successMsg: string,
@@ -359,7 +376,11 @@ function Header({
               />
             </div>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="ccmgc-eyebrow dashboard-pretitle">
+                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+                CCMGC · Operación
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
                 <h1 className="truncate text-xl font-semibold tracking-tight text-[var(--color-text-1)]">
                   {desvio.via || "Sin via"}
                 </h1>
@@ -388,6 +409,7 @@ function Header({
               <p className="mt-1 font-mono text-[11px] text-[var(--color-text-3)]">
                 {desvio.referencia}
               </p>
+              <EstadoStepper estado={desvio.estado} className="mt-3" />
             </div>
           </div>
 
@@ -505,6 +527,92 @@ function Header({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Pasos horizontales del ciclo de vida del desvío. */
+function EstadoStepper({
+  estado,
+  className,
+}: {
+  estado: DesvioEstado;
+  className?: string;
+}) {
+  const terminalLabel = estado === "CANCELADO" ? "Cancelado" : "Resuelto";
+  const steps = [
+    { key: "PENDIENTE", label: "Pendiente" },
+    { key: "ACTIVO", label: "Activo" },
+    { key: "TERMINAL", label: terminalLabel },
+  ] as const;
+  const activeIdx =
+    estado === "PENDIENTE" ? 0 : estado === "ACTIVO" ? 1 : 2;
+  const terminalDone = estado === "RESUELTO" || estado === "CANCELADO";
+
+  return (
+    <ol
+      className={cn("flex flex-wrap items-center gap-1 sm:gap-0", className)}
+      aria-label="Estado del desvío"
+    >
+      {steps.map((step, idx) => {
+        const done = idx < activeIdx || (idx === 2 && terminalDone);
+        const current = idx === activeIdx;
+        const isCancelTerminal = idx === 2 && estado === "CANCELADO";
+        return (
+          <li key={step.key} className="flex items-center">
+            {idx > 0 ? (
+              <span
+                aria-hidden
+                className={cn(
+                  "mx-1 hidden h-px w-4 sm:block sm:w-6",
+                  done || current
+                    ? isCancelTerminal && idx === 2
+                      ? "bg-[var(--color-text-3)]"
+                      : "bg-[var(--color-accent)]"
+                    : "bg-[var(--color-border)]",
+                )}
+              />
+            ) : null}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] transition-colors",
+                current &&
+                  (isCancelTerminal
+                    ? "border-[var(--color-text-3)] bg-[var(--color-surface-3)] text-[var(--color-text-2)]"
+                    : "border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)]"),
+                done &&
+                  !current &&
+                  (isCancelTerminal && estado === "CANCELADO"
+                    ? "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)]"
+                    : "border-[rgba(5,150,105,0.35)] bg-[rgba(5,150,105,0.10)] text-[#059669]"),
+                !done &&
+                  !current &&
+                  "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)]",
+              )}
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "flex h-4 w-4 items-center justify-center rounded-full text-[9px]",
+                  current &&
+                    (isCancelTerminal
+                      ? "bg-[var(--color-text-3)] text-white"
+                      : "bg-[var(--color-accent)] text-white"),
+                  done &&
+                    !current &&
+                    (isCancelTerminal && estado === "CANCELADO"
+                      ? "bg-[var(--color-surface-3)] text-[var(--color-text-3)]"
+                      : "bg-[#059669] text-white"),
+                  !done && !current && "bg-[var(--color-surface-3)] text-[var(--color-text-3)]",
+                )}
+              >
+                {done && !current ? "✓" : idx + 1}
+              </span>
+              {step.label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

@@ -6,6 +6,7 @@ import {
   Boxes,
   Building2,
   CheckCircle2,
+  ExternalLink,
   FileSpreadsheet,
   Hash,
   Loader2,
@@ -21,10 +22,15 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BusEditModal } from "@/components/catalog/BusEditModal";
 import { LineaEditModal } from "@/components/catalog/LineaEditModal";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 /** Pestañas internas del panel del catálogo (orden visual). */
@@ -107,6 +113,7 @@ type CatalogResponse = {
 type Notice = { kind: "info" | "success" | "error"; text: string } | null;
 
 export function CatalogAdminPanel() {
+  const router = useRouter();
   const [buses, setBuses] = useState<CatalogBus[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice>(null);
@@ -780,17 +787,23 @@ export function CatalogAdminPanel() {
   };
 
   if (loading) {
-    return <div className="h-32 animate-pulse rounded-2xl bg-[var(--color-surface-2)]" />;
+    return (
+      <div className="catalog-admin space-y-4">
+        <Skeleton className="catalog-admin-hero h-36 rounded-2xl" />
+        <Skeleton className="h-12 rounded-2xl" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-56 rounded-2xl" />
+          <Skeleton className="h-56 rounded-2xl" />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="catalog-admin space-y-5">
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-emerald-500/[0.08] p-4 shadow-sm sm:p-5">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-500/15 blur-3xl"
-        />
+      <header className="catalog-admin-hero">
+        <div aria-hidden className="catalog-admin-hero__glow" />
         {/* Movil: titulo + KPIs apilados; tablet+: horizontal. */}
         <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
           <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
@@ -798,11 +811,9 @@ export function CatalogAdminPanel() {
               <Boxes size={18} strokeWidth={1.7} aria-hidden />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--color-text-3)]">
-                <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 font-semibold text-[var(--color-text-3)]">
-                  CCMGC
-                </span>
-                Catálogo de flota
+              <div className="ccmgc-eyebrow dashboard-pretitle">
+                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+                CCMGC · Administración
               </div>
               <h1 className="mt-0.5 text-[22px] font-semibold tracking-tight text-[var(--color-text-1)]">
                 Gestión de catálogo
@@ -841,13 +852,14 @@ export function CatalogAdminPanel() {
       {notice ? (
         <div
           role="status"
-          className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-[12.5px] shadow-sm ${
+          className={cn(
+            "catalog-admin-notice",
             notice.kind === "success"
               ? "border-[var(--color-success)]/40 bg-[var(--color-success-light)] text-[var(--color-success)]"
               : notice.kind === "error"
                 ? "border-[var(--color-error)]/40 bg-[var(--color-error-light)] text-[var(--color-error)]"
-                : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)]"
-          }`}
+                : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)]",
+          )}
         >
           {notice.kind === "success" ? (
             <CheckCircle2 size={14} className="mt-0.5 shrink-0" aria-hidden />
@@ -872,7 +884,7 @@ export function CatalogAdminPanel() {
       <nav
         role="tablist"
         aria-label="Secciones del catálogo"
-        className="-mt-1 flex flex-wrap items-center gap-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1 shadow-sm"
+        className="catalog-admin-tabs"
       >
         <CatalogTabButton
           icon={Boxes}
@@ -907,46 +919,47 @@ export function CatalogAdminPanel() {
       {tab === "buses" ? (
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Nuevo bus */}
-        <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 lg:col-span-2">
-          <span aria-hidden className="absolute inset-y-3 left-0 w-0.5 rounded-r bg-emerald-400/70" />
-          <header className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/12 text-emerald-300">
-              <Plus size={15} strokeWidth={1.8} aria-hidden />
-            </div>
-            <div>
-              <h2 className="text-subheading">Nuevo bus</h2>
-              <p className="text-[11.5px] text-[var(--color-text-3)]">Alta manual rápida.</p>
+        <section className="catalog-admin-section catalog-admin-section--emerald lg:col-span-2">
+          <header className="catalog-admin-section__head">
+            <div className="flex items-center gap-2">
+              <div className="catalog-admin-section__icon">
+                <Plus size={15} strokeWidth={1.8} aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-subheading">Nuevo bus</h2>
+                <p className="text-[11.5px] text-[var(--color-text-3)]">Alta manual rápida.</p>
+              </div>
             </div>
           </header>
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="ID bus" hint="Ej. GC-120">
-              <input
-                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 font-mono text-[13px] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
+              <Input
+                className="catalog-admin-input catalog-admin-input--mono"
                 placeholder="GC-120"
                 value={form.id}
                 onChange={(e) => setForm((p) => ({ ...p, id: e.target.value }))}
               />
             </Field>
             <Field label="Operadora" hint="Empresa">
-              <input
-                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[13px] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
+              <Input
+                className="catalog-admin-input"
                 placeholder="Global Salcai"
                 value={form.operator}
                 onChange={(e) => setForm((p) => ({ ...p, operator: e.target.value }))}
               />
             </Field>
             <Field label="Municipio" hint="Opcional">
-              <input
-                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[13px] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
+              <Input
+                className="catalog-admin-input"
                 placeholder="Las Palmas"
                 value={form.municipio}
                 onChange={(e) => setForm((p) => ({ ...p, municipio: e.target.value }))}
               />
             </Field>
             <Field label="Líneas" hint="Separadas por coma">
-              <input
-                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1.5 text-[13px] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
+              <Input
+                className="catalog-admin-input"
                 placeholder="1, 12, 26"
                 value={form.lineas}
                 onChange={(e) => setForm((p) => ({ ...p, lineas: e.target.value }))}
@@ -954,24 +967,25 @@ export function CatalogAdminPanel() {
             </Field>
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="md"
+            className="mt-4"
             onClick={() => void createBus()}
             disabled={!formValid}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-[13px] font-medium text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus size={14} strokeWidth={2} aria-hidden /> Crear bus
-          </button>
+          </Button>
         </section>
 
         {/* Importacion masiva */}
-        <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 lg:col-span-3">
-          <span aria-hidden className="absolute inset-y-3 left-0 w-0.5 rounded-r bg-sky-400/70" />
-          <header className="flex flex-wrap items-start justify-between gap-3">
+        <section className="catalog-admin-section catalog-admin-section--sky lg:col-span-3">
+          <header className="catalog-admin-section__head">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/12 text-sky-300">
-                <FileSpreadsheet size={15} strokeWidth={1.8} aria-hidden />
-              </div>
+            <div className="catalog-admin-section__icon">
+              <FileSpreadsheet size={15} strokeWidth={1.8} aria-hidden />
+            </div>
               <div>
                 <h2 className="text-subheading">Importar desde Excel / CSV</h2>
                 <p className="max-w-md text-[11.5px] text-[var(--color-text-3)]">
@@ -980,13 +994,9 @@ export function CatalogAdminPanel() {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={downloadTemplate}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-1.5 text-[11.5px] font-medium text-[var(--color-text-2)] hover:border-sky-400/40 hover:text-[var(--color-text-1)]"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={downloadTemplate}>
               Descargar plantilla
-            </button>
+            </Button>
           </header>
 
           <div className="mt-4">
@@ -1033,8 +1043,8 @@ export function CatalogAdminPanel() {
               </div>
 
               {importPreview.preview.length > 0 ? (
-                <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
-                  <table className="w-full min-w-[480px] text-[12px]">
+                <div className="catalog-admin-table-wrap">
+                  <table className="catalog-admin-table ccmgc-table min-w-[480px]">
                     <thead className="bg-[var(--color-surface-2)] text-[10px] uppercase tracking-wide text-[var(--color-text-3)]">
                       <tr>
                         <th className="px-2 py-1.5 text-left">Fila</th>
@@ -1151,8 +1161,8 @@ export function CatalogAdminPanel() {
 
       {/* ── BUSES ACTUALES ──────────────────────────────────────────────── */}
       {tab === "buses" ? (
-      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-        <header className="flex flex-wrap items-center justify-between gap-3">
+      <section className="catalog-admin-section">
+        <header className="catalog-admin-section__head">
           <div>
             <h2 className="text-subheading">Buses actuales</h2>
             <p className="text-[11.5px] text-[var(--color-text-3)]">
@@ -1166,19 +1176,14 @@ export function CatalogAdminPanel() {
               ) : null}
             </p>
           </div>
-          <div className="relative w-full max-w-xs">
-            <Search
-              size={13}
-              strokeWidth={1.5}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]"
-              aria-hidden
-            />
-            <input
+          <div className="catalog-admin-search">
+            <Search size={13} strokeWidth={1.5} aria-hidden />
+            <Input
               type="search"
+              className="catalog-admin-input"
               value={busQuery}
               onChange={(e) => setBusQuery(e.target.value)}
               placeholder="Buscar bus, operadora, municipio…"
-              className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] py-1.5 pl-7 pr-2.5 text-[13px] outline-none focus:border-[var(--color-accent)]/50 focus:ring-2 focus:ring-[var(--color-accent)]/15"
               aria-label="Filtrar buses"
             />
           </div>
@@ -1194,10 +1199,8 @@ export function CatalogAdminPanel() {
               type="button"
               onClick={() => setOperatorFilter(null)}
               className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                operatorFilter === null
-                  ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
-                  : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+                "catalog-admin-chip",
+                operatorFilter === null && "catalog-admin-chip--active",
               )}
             >
               Todas
@@ -1228,10 +1231,10 @@ export function CatalogAdminPanel() {
           </div>
         ) : null}
 
-        <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--color-border)]">
-          <table className="ccmgc-table w-full min-w-[680px] text-[13px]">
-            <thead className="sticky top-0 z-[1] bg-[var(--color-surface-2)]/95 backdrop-blur">
-              <tr className="text-left text-[10px] uppercase tracking-wide text-[var(--color-text-3)]">
+        <div className="catalog-admin-table-wrap">
+          <table className="catalog-admin-table ccmgc-table min-w-[680px]">
+            <thead>
+              <tr>
                 <th className="px-3 py-2">Bus</th>
                 <th className="px-3 py-2">Operadora</th>
                 <th className="px-3 py-2">Municipio</th>
@@ -1257,8 +1260,17 @@ export function CatalogAdminPanel() {
                   return (
                     <tr
                       key={bus.id}
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => router.push(`/flota/${encodeURIComponent(bus.id)}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(`/flota/${encodeURIComponent(bus.id)}`);
+                        }
+                      }}
                       className={cn(
-                        "border-t border-[var(--color-border)]/80 transition-colors hover:bg-[var(--color-accent-light)]/25",
+                        "cursor-pointer border-t border-[var(--color-border)]/80 transition-colors hover:bg-[var(--color-accent-light)]/25",
                         idx % 2 ? "bg-[var(--color-surface-2)]/40" : "",
                       )}
                     >
@@ -1275,7 +1287,14 @@ export function CatalogAdminPanel() {
                             {operatorInitials(bus.operator)}
                           </span>
                           <span className="font-mono text-[12.5px] font-medium text-[var(--color-text-1)]">
-                            {bus.id}
+                            <Link
+                              href={`/flota/${encodeURIComponent(bus.id)}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-[var(--color-accent)] hover:underline"
+                              title="Ver detalle del bus"
+                            >
+                              {bus.id}
+                            </Link>
                           </span>
                         </div>
                       </td>
@@ -1283,7 +1302,10 @@ export function CatalogAdminPanel() {
                         {bus.operator ? (
                           <button
                             type="button"
-                            onClick={() => setOperatorFilter(bus.operator)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOperatorFilter(bus.operator);
+                            }}
                             className="rounded text-[var(--color-text-2)] hover:text-[var(--color-text-1)] hover:underline"
                             title="Filtrar por esta operadora"
                           >
@@ -1307,7 +1329,10 @@ export function CatalogAdminPanel() {
                               <button
                                 key={l}
                                 type="button"
-                                onClick={() => setEditingLinea(l)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingLinea(l);
+                                }}
                                 className="num-tabular rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-text-2)] transition-colors hover:border-violet-400/40 hover:bg-violet-500/10 hover:text-violet-200"
                                 title={`Editar línea ${l}`}
                               >
@@ -1357,9 +1382,21 @@ export function CatalogAdminPanel() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            href={`/flota/${encodeURIComponent(bus.id)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11.5px] text-[var(--color-text-3)] transition-colors hover:border-violet-400/50 hover:bg-violet-500/10 hover:text-violet-300"
+                            title="Ver detalle del bus"
+                            aria-label={`Ver detalle del bus ${bus.id}`}
+                          >
+                            <ExternalLink size={11} strokeWidth={1.9} aria-hidden />
+                          </Link>
                           <button
                             type="button"
-                            onClick={() => setEditingBus(bus)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingBus(bus);
+                            }}
                             className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11.5px] text-[var(--color-text-3)] transition-colors hover:border-sky-400/50 hover:bg-sky-500/10 hover:text-sky-300"
                             aria-label={`Editar bus ${bus.id}`}
                             title="Editar bus"
@@ -1368,7 +1405,10 @@ export function CatalogAdminPanel() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void deleteBus(bus.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void deleteBus(bus.id);
+                            }}
                             className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-[11.5px] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-error)]/40 hover:bg-[var(--color-error-light)] hover:text-[var(--color-error)]"
                             aria-label={`Eliminar bus ${bus.id}`}
                             title="Eliminar"
@@ -1389,7 +1429,16 @@ export function CatalogAdminPanel() {
 
       {/* ── SLA POR PRIORIDAD (global) ──────────────────────────────────── */}
       {tab === "sla" ? (
-      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+      <>
+      <div className="rounded-lg border border-violet-400/30 bg-violet-500/8 px-3 py-2">
+        <p className="text-[10.5px] font-semibold uppercase tracking-wider text-violet-200">
+          Configuración SLA separada del catálogo de buses
+        </p>
+        <p className="mt-0.5 text-[11.5px] text-[var(--color-text-2)]">
+          Aquí ajustas tiempos y reglas globales. La gestión de buses queda en la pestaña "Buses".
+        </p>
+      </div>
+      <section className="catalog-admin-section catalog-admin-section--violet">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/12 text-orange-300">
@@ -1480,11 +1529,12 @@ export function CatalogAdminPanel() {
           </button>
         </div>
       </section>
+      </>
       ) : null}
 
       {/* ── BUSES ANÓMALOS ──────────────────────────────────────────────── */}
       {tab === "anomalous" ? (
-      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+      <section className="catalog-admin-section catalog-admin-section--violet">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/12 text-rose-300">
@@ -1652,7 +1702,7 @@ export function CatalogAdminPanel() {
 
       {/* ── SLA POR ACTIVO ──────────────────────────────────────────────── */}
       {tab === "buses" && flatAssets.length > 0 ? (
-        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+        <section className="catalog-admin-section catalog-admin-section--violet">
           <header className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/12 text-amber-300">
@@ -1683,10 +1733,10 @@ export function CatalogAdminPanel() {
             </div>
           </header>
 
-          <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--color-border)]">
-            <table className="w-full min-w-[640px] text-[13px]">
-              <thead className="sticky top-0 z-[1] bg-[var(--color-surface-2)]/95 backdrop-blur">
-                <tr className="text-left text-[10px] uppercase tracking-wide text-[var(--color-text-3)]">
+          <div className="catalog-admin-table-wrap">
+            <table className="catalog-admin-table ccmgc-table min-w-[640px]">
+              <thead>
+                <tr>
                   <th className="px-3 py-2">Bus</th>
                   <th className="px-3 py-2">Activo</th>
                   <th className="px-3 py-2">Tipo</th>
@@ -1742,7 +1792,7 @@ export function CatalogAdminPanel() {
 
       {/* ── CATÁLOGO DE LÍNEAS ──────────────────────────────────────────── */}
       {tab === "lineas" ? (
-      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+      <section className="catalog-admin-section catalog-admin-section--violet">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/12 text-violet-300">
@@ -2232,10 +2282,8 @@ function BusImportDropzone({
         }
       }}
       className={cn(
-        "group relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-7 text-center transition-all",
-        isOver
-          ? "border-sky-400/70 bg-sky-500/[0.08] shadow-[inset_0_0_0_2px_rgba(56,189,248,0.15)]"
-          : "border-[var(--color-border)] bg-[var(--color-surface-2)]/40 hover:border-sky-400/40 hover:bg-[var(--color-surface-2)]/70",
+        "catalog-admin-dropzone group relative flex cursor-pointer flex-col items-center justify-center gap-2 px-6 py-7 text-center",
+        isOver && "catalog-admin-dropzone--over",
         disabled && "cursor-not-allowed opacity-60",
       )}
     >
@@ -2362,14 +2410,7 @@ function CatalogTabButton({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={cn(
-        "group inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12.5px] font-medium transition-all",
-        active
-          ? tone === "rose"
-            ? "bg-rose-500/12 text-rose-300 shadow-sm ring-1 ring-rose-400/30"
-            : "bg-[var(--color-accent-light)] text-[var(--color-accent)] shadow-sm ring-1 ring-[var(--color-accent)]/30"
-          : "text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
-      )}
+      className={cn("catalog-admin-tab", tone === "rose" && active && "catalog-admin-tab--rose")}
     >
       <Icon size={13} strokeWidth={1.8} aria-hidden />
       {label}
@@ -2408,12 +2449,21 @@ function Kpi({
 }) {
   const toneCls =
     tone === "warning"
-      ? "ring-[var(--color-warning)]/30 bg-[var(--color-warning-light)] text-[var(--color-warning)]"
+      ? "text-[var(--color-warning)]"
       : tone === "success"
-        ? "ring-emerald-500/25 bg-emerald-500/10 text-emerald-300"
-        : "ring-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)]";
+        ? "text-emerald-300"
+        : "text-[var(--color-text-2)]";
+  const ringCls =
+    tone === "warning"
+      ? "color-mix(in oklab, var(--color-warning) 30%, var(--color-border))"
+      : tone === "success"
+        ? "color-mix(in oklab, #34d399 28%, var(--color-border))"
+        : "var(--color-border)";
   return (
-    <div className={`flex min-w-[8.5rem] flex-col rounded-lg px-2.5 py-1.5 ring-1 ${toneCls}`}>
+    <div
+      className={cn("catalog-admin-kpi", toneCls)}
+      style={{ ["--catalog-kpi-ring" as string]: ringCls }}
+    >
       <div className="flex items-center gap-1 text-[9.5px] uppercase tracking-wider opacity-80">
         {icon}
         {label}
@@ -2440,8 +2490,8 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
-      <span className="flex items-center justify-between text-[10.5px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
+    <label className="catalog-admin-field block">
+      <span>
         {label}
         {hint ? <span className="text-[10px] normal-case tracking-normal opacity-70">{hint}</span> : null}
       </span>

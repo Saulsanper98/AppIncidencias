@@ -47,8 +47,9 @@ export type RequestActor = {
  *   - `/api/auth/session` — login con POST, logout con DELETE.
  *   - `/api/auth/change-password` — el usuario debe poder cambiar su clave.
  *   - `/api/account/*` — perfil propio: avatar, banner, nombre, bio, etc.
+ *   - `/api/notifications/clear` — marca como leídas las notificaciones propias.
  *
- * El resto (tickets, feedback, admin, anuncios…) sigue bloqueado.
+ * El resto (tickets salvo comentarios/adjuntos/cierre/corrección de datos, feedback, admin, anuncios…) sigue bloqueado.
  */
 const READONLY_ALLOWED_MUTATING_PATHS = [
   "/api/auth/session",
@@ -57,8 +58,18 @@ const READONLY_ALLOWED_MUTATING_PATHS = [
   // (cuánto tiempo miran la pantalla, qué filtros aplican, etc.). El endpoint
   // no muta datos operativos del sistema, solo inserta filas en UxEvent.
   "/api/ux/events",
+  "/api/notifications/clear",
 ];
 const READONLY_ALLOWED_MUTATING_PREFIXES = ["/api/account/"];
+
+/** Mutaciones de ticket permitidas a la central ETRA (cuentas isReadOnly). */
+function isReadonlyCentralTicketMutation(path: string, method: string): boolean {
+  if (method === "POST" && /^\/api\/tickets\/[^/]+\/comments$/.test(path)) return true;
+  if (method === "POST" && /^\/api\/tickets\/[^/]+\/attachments$/.test(path)) return true;
+  if (method === "PATCH" && /^\/api\/tickets\/[^/]+\/status$/.test(path)) return true;
+  if (method === "PATCH" && /^\/api\/tickets\/[^/]+$/.test(path)) return true;
+  return false;
+}
 
 function isMutatingRequest(request: Request): boolean {
   const method = request.method.toUpperCase();
@@ -68,6 +79,7 @@ function isMutatingRequest(request: Request): boolean {
     const path = url.pathname;
     if (READONLY_ALLOWED_MUTATING_PATHS.includes(path)) return false;
     if (READONLY_ALLOWED_MUTATING_PREFIXES.some((p) => path.startsWith(p))) return false;
+    if (isReadonlyCentralTicketMutation(path, method)) return false;
   } catch {
     // URL malformada: la tratamos como mutación por seguridad.
   }
@@ -96,23 +108,18 @@ export async function resolveRequestActor(request: Request): Promise<RequestActo
 
   const userId = cookieUserId || headerUserId;
   if (userId) {
-    // Usamos $queryRaw para no depender de que `prisma generate` ya haya
-    // expuesto el campo `isReadOnly` (recién migrado puede tardar un
-    // arranque tras un deploy en Windows con la DLL bloqueada).
-    type UserRow = {
-      id: string;
-      name: string;
-      role: string;
-      isActive: number | boolean;
-      isReadOnly: number | boolean | null;
-    };
-    const rows = await prisma.$queryRawUnsafe<UserRow[]>(
-      `SELECT id, name, role, isActive, isReadOnly FROM "User" WHERE id = ? LIMIT 1`,
-      userId,
-    );
-    const user = rows[0];
-    if (user && (user.isActive === true || user.isActive === 1)) {
-      const isReadOnly = user.isReadOnly === true || user.isReadOnly === 1;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        isActive: true,
+        isReadOnly: true,
+      },
+    });
+    if (user?.isActive) {
+      const isReadOnly = user.isReadOnly === true;
 
       // BLOQUEO CENTRAL: si la cuenta es de solo lectura y el método es
       // mutante, devolvemos como si no hubiera sesión. Los endpoints existentes
@@ -148,18 +155,4 @@ export async function resolveRequestActor(request: Request): Promise<RequestActo
   };
 }
 
-export async function writeAuditEvent(input: {
-  userId?: string | null;
-  ticketId?: string | null;
-  action: string;
-  detail?: string;
-}) {
-  await prisma.auditEvent.create({
-    data: {
-      userId: input.userId ?? null,
-      ticketId: input.ticketId ?? null,
-      action: input.action,
-      detail: input.detail,
-    },
-  });
-}
+export { writeAuditEvent } from "@/lib/audit";

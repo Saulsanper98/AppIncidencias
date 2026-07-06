@@ -20,6 +20,7 @@
 export type SseEventName =
   | "desvio_nuevo"
   | "desvio_actualizado"
+  | "desvio_recordatorio"
   | "announcement_new"
   | "announcement_updated"
   | "announcement_deleted"
@@ -31,7 +32,9 @@ export type SseEventName =
   | "ticket_status_changed"
   | "ticket_assigned"
   | "ticket_commented"
-  | "ticket_deleted";
+  | "ticket_deleted"
+  | "ticket_deletion_requested"
+  | "ticket_deletion_rejected";
 
 export type SseListener = (event: { type: SseEventName; payload: unknown }) => void;
 
@@ -64,8 +67,8 @@ class SseBus {
 
 const globalForBus = globalThis as unknown as { __ccmgcSseBus?: SseBus };
 
+// Siempre en globalThis: en producción Next empaqueta cada route handler en
+// un chunk distinto y, sin singleton global, POST /api/announcements publica
+// en un bus distinto al que escucha GET /api/notifications/stream.
 export const sseBus: SseBus = globalForBus.__ccmgcSseBus ?? new SseBus();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForBus.__ccmgcSseBus = sseBus;
-}
+globalForBus.__ccmgcSseBus = sseBus;

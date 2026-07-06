@@ -13,6 +13,7 @@ import { z } from "zod";
 
 import { resolveRequestActor } from "@/lib/auth-context";
 import { generateUniqueSlug, slugify } from "@/lib/kb-slug";
+import { extractFirstImageUrl } from "@/lib/kb-media";
 import { prisma } from "@/lib/prisma";
 import { canManageKnowledge } from "@/lib/rbac";
 
@@ -40,6 +41,7 @@ type SerializedArticle = {
   authorName: string | null;
   publishedAt: string | null;
   updatedAt: string;
+  coverUrl: string | null;
 };
 
 export async function GET(request: Request) {
@@ -91,6 +93,7 @@ export async function GET(request: Request) {
       authorName: row.author?.name ?? null,
       publishedAt: row.publishedAt?.toISOString() ?? null,
       updatedAt: row.updatedAt.toISOString(),
+      coverUrl: extractFirstImageUrl(row.contentMd),
     }));
 
     if (q) {

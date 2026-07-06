@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveRequestActor } from "@/lib/auth-context";
+import { generateUniqueSlug, slugify } from "@/lib/kb-slug";
 import { prisma } from "@/lib/prisma";
 import { canManageKnowledge } from "@/lib/rbac";
 
@@ -27,9 +28,26 @@ export async function PATCH(
     if (!parsed.success) {
       return NextResponse.json({ message: "Datos inválidos" }, { status: 400 });
     }
+
+    const existing = await prisma.kbCategory.findUnique({ where: { id: categoryId } });
+    if (!existing) {
+      return NextResponse.json({ message: "Categoría no encontrada" }, { status: 404 });
+    }
+
+    const data: Record<string, unknown> = { ...parsed.data };
+    if (parsed.data.name && parsed.data.name !== existing.name) {
+      data.slug = await generateUniqueSlug(
+        slugify(parsed.data.name),
+        async (s) => {
+          const hit = await prisma.kbCategory.findFirst({ where: { slug: s } });
+          return Boolean(hit && hit.id !== categoryId);
+        },
+      );
+    }
+
     const updated = await prisma.kbCategory.update({
       where: { id: categoryId },
-      data: parsed.data,
+      data,
     });
     return NextResponse.json({ category: updated });
   } catch (error) {

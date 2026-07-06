@@ -17,6 +17,9 @@
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { hapticSuccess } from "@/lib/motion";
+import { playUiChime } from "@/lib/ui-chime";
+
 type ToastTone = "success" | "error" | "warning" | "info";
 
 type ToastItem = {
@@ -88,6 +91,11 @@ export function ToastHost() {
 
   useEffect(() => {
     const handler = (item: ToastItem) => {
+      if (item.tone === "success") {
+        hapticSuccess();
+      } else if (item.tone === "error") {
+        playUiChime("error");
+      }
       setItems((prev) => [...prev.slice(-4), item]);
       window.setTimeout(() => {
         setItems((prev) => prev.filter((x) => x.id !== item.id));
@@ -117,7 +125,7 @@ export function ToastHost() {
           <div
             key={item.id}
             role={item.tone === "error" ? "alert" : "status"}
-            className={`pointer-events-auto relative flex w-[min(360px,calc(100vw-2rem))] items-start gap-3 overflow-hidden rounded-xl border ${c.border} bg-[var(--color-surface)] px-3.5 py-3 shadow-2xl backdrop-blur-md ccmgc-toast-in`}
+            className={`pointer-events-auto relative flex w-[min(360px,calc(100vw-2rem))] items-start gap-3 overflow-hidden rounded-xl border ${c.border} bg-[var(--color-surface)] px-3.5 py-3 shadow-2xl backdrop-blur-md ccmgc-toast-in${item.tone === "success" ? " ccmgc-confetti-burst" : ""}`}
           >
             <span className={`absolute left-0 top-0 h-full w-[3px] ${c.bar}`} aria-hidden />
             <Icon size={16} strokeWidth={1.75} className={`mt-0.5 shrink-0 ${c.iconColor}`} aria-hidden />

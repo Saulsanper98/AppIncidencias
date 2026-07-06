@@ -1,5 +1,6 @@
 import type { AssetType, Ticket, TicketStatus, UserRole } from "@/lib/domain";
 import type { NivelImpacto, TipologiaItem } from "@/lib/tipologia";
+import { TICKET_STATUS_LABELS } from "@/lib/ticket-labels";
 
 export type TicketAttachmentView = {
   id: string;
@@ -170,12 +171,16 @@ export const defaultForm = (busId = ""): FormState => ({
   conductorLabel: "",
 });
 
-export const statusMap: Record<TicketStatus, string> = {
-  abierto: "Abierto",
-  en_proceso: "En Proceso",
-  esperando_repuesto: "Esperando Repuesto",
-  resuelto: "Resuelto",
-};
+export const statusMap: Record<TicketStatus, string> = TICKET_STATUS_LABELS;
+
+/** Etiqueta de acción al cambiar de un estado a otro (menús y modal). */
+export function statusTransitionLabel(from: TicketStatus, to: TicketStatus): string {
+  if (from === "borrador" && to === "abierto") return "Completar y abrir";
+  if (from === "borrador" && to === "resuelto") return "Completar y cerrar";
+  if (from === "resuelto" && to === "en_proceso") return "Reabrir ticket";
+  if (to === "esperando_repuesto") return "Esperar repuesto";
+  return statusMap[to];
+}
 
 export const preventiveTaskTone = {
   pendiente: "bg-amber-400/20 text-amber-100",

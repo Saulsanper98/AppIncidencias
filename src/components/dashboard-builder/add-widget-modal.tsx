@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
 
+import { ModalShell } from "@/components/ui/modal-shell";
 import { Select, Textarea } from "@/components/ui/input";
 import type { MetricFormat } from "@/lib/dashboard/chart-theme";
 import type { ChartType } from "@/lib/dashboard/chart-types";
@@ -103,10 +103,6 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
   useEffect(() => {
     if (dataSource === "operation_links" || dataSource.startsWith("embed_")) setChartType("bar");
   }, [dataSource]);
-
-  if (!open) {
-    return null;
-  }
 
   const applyVisualPreset = (preset: VisualPreset) => {
     let next: PersistedVisualSettings;
@@ -225,19 +221,35 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
     });
   };
 
+  if (!open) {
+    return null;
+  }
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[var(--color-surface-2)] rounded-2xl border border-[var(--color-border)] p-4 w-full max-w-md max-h-[85vh] overflow-hidden shadow-2xl sm:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-subheading">Añadir widget</h2>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      size="md"
+      className="max-h-[85vh] overflow-hidden"
+      shake={Boolean(error)}
+      title="Añadir widget"
+      footer={
+        <>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-md flex items-center justify-center text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-surface-3)] transition-all"
+            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)] transition-all"
           >
-            <X size={14} />
+            Cancelar
           </button>
-        </div>
-
+          <button
+            onClick={handleAdd}
+            className="rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-all"
+          >
+            Añadir widget
+          </button>
+        </>
+      }
+    >
         <div
           className="space-y-3 overflow-y-auto pr-1 max-h-[calc(85vh-140px)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0"
         >
@@ -522,22 +534,6 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
 
           {error ? <p className="text-xs text-[var(--color-error)]">{error}</p> : null}
         </div>
-
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)] transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleAdd}
-            className="rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-all"
-          >
-            Añadir widget
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

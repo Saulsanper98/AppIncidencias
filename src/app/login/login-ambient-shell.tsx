@@ -25,7 +25,7 @@ export function LoginAmbientShell({ children }: { children: ReactNode }) {
         aria-hidden
       />
       <div className="login-ambient-vignette" aria-hidden />
-      <div className="relative flex min-h-screen items-center justify-center px-4 py-10 sm:py-12">{children}</div>
+      <div className="relative flex min-h-[100dvh] items-center justify-center px-4 py-3 sm:py-4">{children}</div>
     </div>
   );
 }

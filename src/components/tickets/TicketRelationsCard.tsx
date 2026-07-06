@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import type { TicketStatus } from "@/lib/domain";
+import { TICKET_STATUS_LABELS } from "@/lib/ticket-labels";
 import {
   ticketStatusBadgeClassName,
   ticketStatusBadgeVariant,
@@ -34,16 +35,9 @@ type Relation = {
 
 type SearchHit = RelatedTicketSummary;
 
-const STATUS_LABELS: Record<TicketStatus, string> = {
-  abierto: "Abierto",
-  en_proceso: "En proceso",
-  esperando_repuesto: "Esperando repuesto",
-  resuelto: "Resuelto",
-};
-
 type StatusFilter = "todos" | "resuelto" | "abiertos";
 
-export function TicketRelationsCard({ ticketId }: { ticketId: string }) {
+export function TicketRelationsCard({ ticketId, readOnly = false }: { ticketId: string; readOnly?: boolean }) {
   const [relations, setRelations] = useState<Relation[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -203,25 +197,27 @@ export function TicketRelationsCard({ ticketId }: { ticketId: string }) {
             </span>
           ) : null}
         </h2>
-        <button
-          type="button"
-          onClick={togglePicker}
-          aria-expanded={pickerOpen}
-          className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11.5px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-text-1)]"
-        >
-          {pickerOpen ? (
-            <>
-              <X size={11} aria-hidden /> Cerrar
-            </>
-          ) : (
-            <>
-              <Plus size={11} aria-hidden /> Vincular ticket
-            </>
-          )}
-        </button>
+        {!readOnly ? (
+          <button
+            type="button"
+            onClick={togglePicker}
+            aria-expanded={pickerOpen}
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[11.5px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-accent)]/40 hover:text-[var(--color-text-1)]"
+          >
+            {pickerOpen ? (
+              <>
+                <X size={11} aria-hidden /> Cerrar
+              </>
+            ) : (
+              <>
+                <Plus size={11} aria-hidden /> Vincular ticket
+              </>
+            )}
+          </button>
+        ) : null}
       </div>
 
-      {pickerOpen ? (
+      {!readOnly && pickerOpen ? (
         <div className="mb-3 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/30 p-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[200px] flex-1">
@@ -284,7 +280,7 @@ export function TicketRelationsCard({ ticketId }: { ticketId: string }) {
                         variant={ticketStatusBadgeVariant(hit.status)}
                         className={ticketStatusBadgeClassName(hit.status)}
                       >
-                        {STATUS_LABELS[hit.status]}
+                        {TICKET_STATUS_LABELS[hit.status]}
                       </Badge>
                       <span className="font-mono text-[10.5px] text-[var(--color-text-3)]">· {hit.busId}</span>
                     </div>
@@ -319,8 +315,9 @@ export function TicketRelationsCard({ ticketId }: { ticketId: string }) {
         <p className="text-[12px] text-[var(--color-text-3)]">Cargando…</p>
       ) : sortedRelations.length === 0 ? (
         <p className="text-sm text-[var(--color-text-3)]">
-          Sin tickets vinculados. Usa &quot;Vincular ticket&quot; para enlazar un ticket relacionado
-          (típicamente uno ya resuelto que sirva como referencia).
+          {readOnly
+            ? "Sin tickets vinculados."
+            : "Sin tickets vinculados. Usa \"Vincular ticket\" para enlazar un ticket relacionado (típicamente uno ya resuelto que sirva como referencia)."}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -339,7 +336,7 @@ export function TicketRelationsCard({ ticketId }: { ticketId: string }) {
                       variant={ticketStatusBadgeVariant(rel.related.status)}
                       className={ticketStatusBadgeClassName(rel.related.status)}
                     >
-                      {STATUS_LABELS[rel.related.status]}
+                      {TICKET_STATUS_LABELS[rel.related.status]}
                     </Badge>
                     <span className="font-mono text-[10.5px] text-[var(--color-text-3)]">· {rel.related.busId}</span>
                   </div>
@@ -358,20 +355,22 @@ export function TicketRelationsCard({ ticketId }: { ticketId: string }) {
                     <p className="mt-1 text-[11.5px] italic text-[var(--color-text-2)]">{rel.note}</p>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void unlinkTicket(rel.related.id)}
-                  disabled={removingId === rel.related.id}
-                  className="rounded-md p-1 text-[var(--color-text-3)] hover:bg-[var(--color-error-light)] hover:text-[var(--color-error)] disabled:opacity-60"
-                  aria-label={`Quitar vínculo con ${rel.related.shortId}`}
-                  title="Quitar vínculo"
-                >
-                  {removingId === rel.related.id ? (
-                    <Loader2 size={12} className="animate-spin" aria-hidden />
-                  ) : (
-                    <Trash2 size={12} aria-hidden strokeWidth={1.75} />
-                  )}
-                </button>
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => void unlinkTicket(rel.related.id)}
+                    disabled={removingId === rel.related.id}
+                    className="rounded-md p-1 text-[var(--color-text-3)] hover:bg-[var(--color-error-light)] hover:text-[var(--color-error)] disabled:opacity-60"
+                    aria-label={`Quitar vínculo con ${rel.related.shortId}`}
+                    title="Quitar vínculo"
+                  >
+                    {removingId === rel.related.id ? (
+                      <Loader2 size={12} className="animate-spin" aria-hidden />
+                    ) : (
+                      <Trash2 size={12} aria-hidden strokeWidth={1.75} />
+                    )}
+                  </button>
+                ) : null}
               </div>
             </li>
           ))}

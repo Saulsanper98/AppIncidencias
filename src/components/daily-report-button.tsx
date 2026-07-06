@@ -9,13 +9,13 @@ import {
   FileSpreadsheet,
   Info,
   Loader2,
-  X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { toast } from "@/components/toast-host";
 import { InlineCalendar } from "@/components/ui/inline-calendar";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { cn } from "@/lib/utils";
 
 type ReportEntry = {
@@ -66,6 +66,46 @@ export function DailyReportButton() {
   // Modal de "vehículos activos": se muestra antes de generar.
   const [activeBusesOpen, setActiveBusesOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [pickerAnchor, setPickerAnchor] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    openUp: boolean;
+  } | null>(null);
+
+  const POPOVER_WIDTH = 280;
+  const POPOVER_GAP = 8;
+  const POPOVER_ESTIMATED_HEIGHT = 420;
+
+  const updatePickerAnchor = useCallback(() => {
+    const root = pickerRef.current;
+    if (!root) return;
+    const rect = root.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < POPOVER_ESTIMATED_HEIGHT + POPOVER_GAP && rect.top > spaceBelow;
+    const top = openUp ? rect.top - POPOVER_GAP : rect.bottom + POPOVER_GAP;
+    const left = Math.min(
+      Math.max(12, rect.right - POPOVER_WIDTH),
+      window.innerWidth - POPOVER_WIDTH - 12,
+    );
+    setPickerAnchor({ top, left, width: POPOVER_WIDTH, openUp });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!pickerOpen) {
+      setPickerAnchor(null);
+      return;
+    }
+    updatePickerAnchor();
+    const onLayout = () => updatePickerAnchor();
+    window.addEventListener("resize", onLayout);
+    window.addEventListener("scroll", onLayout, true);
+    return () => {
+      window.removeEventListener("resize", onLayout);
+      window.removeEventListener("scroll", onLayout, true);
+    };
+  }, [pickerOpen, updatePickerAnchor]);
 
   const loadMonthDots = useCallback(async (ym: string) => {
     try {
@@ -81,11 +121,20 @@ export function DailyReportButton() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!pickerOpen) return;
+    void loadMonthDots(selectedDate.slice(0, 7));
+  }, [pickerOpen, selectedDate, loadMonthDots]);
+
   const refreshStatus = useCallback(async () => {
     try {
       const res = await fetch(`/api/reports/daily/today?date=${encodeURIComponent(selectedDate)}`, {
         credentials: "include",
       });
+      if (res.status === 401) {
+        pollingDisabledRef.current = true;
+        return;
+      }
       if (!res.ok) return;
       const data = (await res.json()) as ReportStatus;
       setStatus(data);
@@ -94,12 +143,18 @@ export function DailyReportButton() {
     }
   }, [selectedDate]);
 
+  const pollingDisabledRef = useRef(false);
+
   useEffect(() => {
+    pollingDisabledRef.current = false;
     void refreshStatus();
     // Solo refrescamos automaticamente cuando es el dia de hoy (estado vivo);
     // para dias pasados es un dato historico estable.
     if (selectedDate !== todayIso()) return;
-    const t = setInterval(() => void refreshStatus(), 60_000);
+    const t = setInterval(() => {
+      if (pollingDisabledRef.current) return;
+      void refreshStatus();
+    }, 60_000);
     return () => clearInterval(t);
   }, [refreshStatus, selectedDate]);
 
@@ -107,8 +162,11 @@ export function DailyReportButton() {
   useEffect(() => {
     if (!pickerOpen) return;
     const onDown = (event: MouseEvent) => {
-      if (!pickerRef.current) return;
-      if (!pickerRef.current.contains(event.target as Node)) setPickerOpen(false);
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (pickerRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setPickerOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setPickerOpen(false);
@@ -278,12 +336,22 @@ export function DailyReportButton() {
           </button>
         </div>
 
-        {pickerOpen ? (
-          <div
-            role="dialog"
-            aria-label="Elegir día del informe"
-            className="daily-report-popover absolute right-0 top-full z-[60] mt-2 w-[280px] origin-top-right overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-1)] shadow-[0_24px_64px_-20px_rgba(0,0,0,0.65)]"
-          >
+        {pickerOpen && pickerAnchor && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                ref={popoverRef}
+                role="dialog"
+                aria-label="Elegir día del informe"
+                style={{
+                  position: "fixed",
+                  top: pickerAnchor.top,
+                  left: pickerAnchor.left,
+                  width: pickerAnchor.width,
+                  zIndex: 200,
+                  transform: pickerAnchor.openUp ? "translateY(-100%)" : undefined,
+                }}
+                className="daily-report-popover max-h-[min(32rem,calc(100vh-1.5rem))] origin-top-right overflow-hidden overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-1)] shadow-[0_24px_64px_-20px_rgba(0,0,0,0.65)]"
+              >
             <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] bg-gradient-to-b from-[var(--color-surface-2)]/60 to-[var(--color-surface)] px-4 py-3">
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
@@ -400,8 +468,10 @@ export function DailyReportButton() {
                 {generating ? "Generando..." : "Generar XLSX"}
               </button>
             </footer>
-          </div>
-        ) : null}
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
 
       {warningOpen && typeof document !== "undefined"
@@ -448,77 +518,36 @@ function DuplicateWarningDialog({
   onCancel: () => void;
   onContinue: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
   const isToday = reportDate === todayIso();
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="daily-report-warning-title"
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onCancel();
-      }}
-    >
-      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[0_24px_64px_-20px_rgba(0,0,0,0.6)]">
-        <header className="flex items-start gap-3 border-b border-[var(--color-border)] bg-amber-500/10 px-5 py-4">
+    <ModalShell
+      open
+      onClose={onCancel}
+      size="md"
+      className="overflow-hidden p-0"
+      title={
+        <span className="flex items-start gap-3">
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-200">
             <AlertTriangle size={18} aria-hidden />
           </span>
-          <div className="min-w-0 flex-1">
-            <h2 id="daily-report-warning-title" className="text-sm font-semibold text-[var(--color-text-1)]">
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">
               {isToday
                 ? "El informe ya se generó hoy"
                 : `El informe del ${formatHumanDate(reportDate)} ya se generó`}
-            </h2>
-            <p className="mt-0.5 text-[12px] text-[var(--color-text-3)]">
+            </span>
+            <span className="mt-0.5 block text-[12px] font-normal text-[var(--color-text-3)]">
               {reports.length === 1
                 ? "Un compañero ya generó este informe."
                 : `Ya hay ${reports.length} generaciones de este informe.`}{" "}
               Puedes generarlo de nuevo si lo necesitas.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            aria-label="Cerrar"
-            className="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
-          >
-            <X size={16} aria-hidden />
-          </button>
-        </header>
-
-        <div className="max-h-64 overflow-y-auto px-5 py-4">
-          <ul className="space-y-2">
-            {reports.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 px-3 py-2"
-              >
-                <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-300" aria-hidden />
-                <div className="min-w-0 flex-1 text-[12.5px]">
-                  <p className="font-medium text-[var(--color-text-1)]">
-                    {r.generatedByName ?? "Usuario desconocido"}
-                  </p>
-                  <p className="text-[11.5px] text-[var(--color-text-3)]">
-                    {formatGeneratedAt(r.createdAt)} {"\u00b7"} {r.ticketCount}{" "}
-                    {r.ticketCount === 1 ? "incidencia" : "incidencias"}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-5 py-3">
+            </span>
+          </span>
+        </span>
+      }
+      footer={
+        <>
           <button
             type="button"
             onClick={onCancel}
@@ -534,9 +563,29 @@ function DuplicateWarningDialog({
             <FileSpreadsheet size={14} aria-hidden />
             Generar igualmente
           </button>
-        </footer>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <ul className="max-h-64 space-y-2 overflow-y-auto">
+        {reports.map((r) => (
+          <li
+            key={r.id}
+            className="flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 px-3 py-2"
+          >
+            <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-300" aria-hidden />
+            <div className="min-w-0 flex-1 text-[12.5px]">
+              <p className="font-medium text-[var(--color-text-1)]">
+                {r.generatedByName ?? "Usuario desconocido"}
+              </p>
+              <p className="text-[11.5px] text-[var(--color-text-3)]">
+                {formatGeneratedAt(r.createdAt)} {"\u00b7"} {r.ticketCount}{" "}
+                {r.ticketCount === 1 ? "incidencia" : "incidencias"}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </ModalShell>
   );
 }
 
@@ -571,15 +620,8 @@ function ActiveBusesDialog({
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    // Foco al abrir + ESC cierra.
-    inputRef.current?.focus();
     inputRef.current?.select();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  }, []);
 
   const parsed = Number(value);
   const isValid = Number.isFinite(parsed) && parsed >= 1 && parsed <= 9999 && Number.isInteger(parsed);
@@ -595,86 +637,29 @@ function ActiveBusesDialog({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="active-buses-title"
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onCancel();
-      }}
-    >
-      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[0_24px_64px_-20px_rgba(0,0,0,0.6)]">
-        <header className="flex items-start gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent-light)]/40 px-5 py-4">
+    <ModalShell
+      open
+      onClose={onCancel}
+      size="md"
+      shake={showError}
+      initialFocusRef={inputRef}
+      title={
+        <span className="flex items-start gap-3">
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent-light)] text-[var(--color-accent)]">
             <Bus size={18} aria-hidden />
           </span>
-          <div className="min-w-0 flex-1">
-            <h2 id="active-buses-title" className="text-sm font-semibold text-[var(--color-text-1)]">
-              Vehículos activos en el turno
-            </h2>
-            <p className="mt-0.5 text-[12px] text-[var(--color-text-3)]">
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Servicios activos en el turno</span>
+            <span className="mt-0.5 block text-[12px] font-normal text-[var(--color-text-3)]">
               {isToday
-                ? "Confirma cuántos vehículos hay operando ahora mismo."
-                : `Foto de la flota el ${formatHumanDate(reportDate)}.`}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            aria-label="Cerrar"
-            className="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
-          >
-            <X size={16} aria-hidden />
-          </button>
-        </header>
-
-        <div className="px-5 py-4">
-          <label htmlFor="active-buses-input" className="text-label text-[var(--color-text-2)]">
-            Nº de vehículos activos
-          </label>
-          <input
-            id="active-buses-input"
-            ref={inputRef}
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={9999}
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
-              if (touched) setTouched(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-            placeholder="Ej. 142"
-            className={cn(
-              "mt-2 w-full rounded-lg border bg-[var(--color-surface-2)] px-3 py-2.5 text-base font-semibold text-[var(--color-text-1)] tabular-nums placeholder:font-normal placeholder:text-[var(--color-text-3)] transition-colors focus:outline-none",
-              showError
-                ? "border-[var(--color-error)] focus:border-[var(--color-error)]"
-                : "border-[var(--color-border)] focus:border-[var(--color-accent)]",
-            )}
-          />
-          {showError ? (
-            <p className="mt-1.5 text-[11.5px] text-[var(--color-error)]">
-              Introduce un número entre 1 y 9999.
-            </p>
-          ) : null}
-
-          <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 px-2.5 py-2 text-[11.5px] text-[var(--color-text-3)]">
-            <Info size={12} className="mt-0.5 shrink-0" aria-hidden />
-            <span>
-              Es una <strong className="font-semibold text-[var(--color-text-2)]">foto del estado actual de la flota</strong>:
-              si generas varios informes hoy, cada uno lleva su propio número y no se suman entre sí.
+                ? "Confirma cuántos servicios hay activos ahora mismo."
+                : `Servicios activos el ${formatHumanDate(reportDate)}.`}
             </span>
-          </div>
-        </div>
-
-        <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-5 py-3">
+          </span>
+        </span>
+      }
+      footer={
+        <>
           <button
             type="button"
             onClick={onCancel}
@@ -701,9 +686,52 @@ function ActiveBusesDialog({
               </>
             )}
           </button>
-        </footer>
+        </>
+      }
+    >
+      <label htmlFor="active-buses-input" className="text-label text-[var(--color-text-2)]">
+        Nº de servicios activos
+      </label>
+      <input
+        id="active-buses-input"
+        ref={inputRef}
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={9999}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          if (touched) setTouched(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            handleSubmit();
+          }
+        }}
+        placeholder="Ej. 142"
+        className={cn(
+          "mt-2 w-full rounded-lg border bg-[var(--color-surface-2)] px-3 py-2.5 text-base font-semibold text-[var(--color-text-1)] tabular-nums placeholder:font-normal placeholder:text-[var(--color-text-3)] transition-colors focus:outline-none",
+          showError
+            ? "border-[var(--color-error)] focus:border-[var(--color-error)]"
+            : "border-[var(--color-border)] focus:border-[var(--color-accent)]",
+        )}
+      />
+      {showError ? (
+        <p className="mt-1.5 text-[11.5px] text-[var(--color-error)]">
+          Introduce un número entre 1 y 9999.
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 px-2.5 py-2 text-[11.5px] text-[var(--color-text-3)]">
+        <Info size={12} className="mt-0.5 shrink-0" aria-hidden />
+        <span>
+          Es una <strong className="font-semibold text-[var(--color-text-2)]">foto de los servicios activos en el turno</strong>:
+          si generas varios informes hoy, cada uno lleva su propio número y no se suman entre sí.
+        </span>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 

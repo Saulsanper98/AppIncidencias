@@ -23,10 +23,14 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MarkdownView } from "@/components/kb/MarkdownView";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SectionTabs } from "@/components/ui/section-tabs";
+import { KpiPill } from "@/components/ui/kpi-pill";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSseEvent } from "@/hooks/use-sse-event";
 import type {
   Announcement,
@@ -128,6 +132,9 @@ export function NovedadesPanel({
    * daba borradores enormes cuando llevaba varios días sin publicar.
    */
   const [autoDraftRange, setAutoDraftRange] = useState<"today" | 7 | 14 | 30>("today");
+  /** IDs en animación de colapso al marcar como leído (p15). */
+  const [readCollapsingIds, setReadCollapsingIds] = useState<Set<string>>(() => new Set());
+  const readCollapseTimers = useRef<Map<string, number>>(new Map());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -387,24 +394,63 @@ export function NovedadesPanel({
   };
 
   const toggleRead = async (announcement: Announcement) => {
+    const markingRead = !announcement.isRead;
+    const applyReadUpdate = () => {
+      setItems((prev) =>
+        prev
+          ? prev.map((a) => (a.id === announcement.id ? { ...a, isRead: markingRead } : a))
+          : prev,
+      );
+      window.dispatchEvent(new Event("ccmgc-announcements-changed"));
+    };
+
+    if (markingRead) {
+      setReadCollapsingIds((prev) => new Set(prev).add(announcement.id));
+      const existing = readCollapseTimers.current.get(announcement.id);
+      if (existing) window.clearTimeout(existing);
+      const timerId = window.setTimeout(() => {
+        readCollapseTimers.current.delete(announcement.id);
+        setReadCollapsingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(announcement.id);
+          return next;
+        });
+        void (async () => {
+          try {
+            const response = await fetch(
+              `/api/announcements/${encodeURIComponent(announcement.id)}/read`,
+              { method: "POST" },
+            );
+            if (!response.ok) throw new Error("No se pudo actualizar.");
+            applyReadUpdate();
+          } catch (error) {
+            setNotice({ kind: "error", text: error instanceof Error ? error.message : "Error" });
+          }
+        })();
+      }, 250);
+      readCollapseTimers.current.set(announcement.id, timerId);
+      return;
+    }
+
     try {
       const response = await fetch(
         `/api/announcements/${encodeURIComponent(announcement.id)}/read`,
-        { method: announcement.isRead ? "DELETE" : "POST" },
+        { method: "DELETE" },
       );
       if (!response.ok) throw new Error("No se pudo actualizar.");
-      // Mutación optimista local.
-      setItems((prev) =>
-        prev
-          ? prev.map((a) => (a.id === announcement.id ? { ...a, isRead: !announcement.isRead } : a))
-          : prev,
-      );
-      // Notifica al sidebar para refrescar el badge sin esperar a SSE.
-      window.dispatchEvent(new Event("ccmgc-announcements-changed"));
+      applyReadUpdate();
     } catch (error) {
       setNotice({ kind: "error", text: error instanceof Error ? error.message : "Error" });
     }
   };
+
+  useEffect(() => {
+    const timers = readCollapseTimers.current;
+    return () => {
+      for (const id of timers.values()) window.clearTimeout(id);
+      timers.clear();
+    };
+  }, []);
 
   // ── EDITOR (modo edición de pantalla completa) ───────────────────────────
   if (editing) {
@@ -426,6 +472,7 @@ export function NovedadesPanel({
   // ── LISTA ───────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
+      <SectionTabs preset="conocimiento" />
       {/* Hero */}
       <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-sky-500/[0.08] p-4 shadow-sm sm:p-5">
         <div
@@ -439,8 +486,8 @@ export function NovedadesPanel({
               <Megaphone size={20} strokeWidth={1.7} aria-hidden />
             </div>
             <div className="min-w-0">
-              <div className="dashboard-pretitle">
-                <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+              <div className="ccmgc-eyebrow dashboard-pretitle">
+                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
                 CCMGC · Comunicación interna
               </div>
               <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
@@ -452,51 +499,46 @@ export function NovedadesPanel({
               </p>
               {/* KPI pills propias del modulo. Solo se muestran las que tienen
                * valor real para no ensuciar el hero cuando la cuenta es 0. */}
+              <div className="mt-3 flex min-h-[2rem] flex-wrap items-center gap-1.5">
               {(kpis.criticos > 0 || kpis.avisos > 0 || kpis.novedades > 0 || kpis.sinLeer > 0) ? (
-                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <>
                   {kpis.criticos > 0 ? (
-                    <span
-                      className="tickets-kpi-pill tickets-kpi-pill--pulse"
-                      style={{ ["--pill-tone" as string]: "var(--color-error)" }}
-                    >
-                      <AlertOctagon size={12} strokeWidth={1.9} />
-                      <span className="tickets-kpi-pill-value">{kpis.criticos}</span>
-                      <span className="tickets-kpi-pill-label">Críticos</span>
-                    </span>
+                    <KpiPill
+                      label="Críticos"
+                      value={kpis.criticos}
+                      tone="error"
+                      pulse
+                      icon={<AlertOctagon size={12} strokeWidth={1.9} aria-hidden />}
+                    />
                   ) : null}
                   {kpis.avisos > 0 ? (
-                    <span
-                      className="tickets-kpi-pill"
-                      style={{ ["--pill-tone" as string]: "var(--color-warning)" }}
-                    >
-                      <AlertTriangle size={12} strokeWidth={1.9} />
-                      <span className="tickets-kpi-pill-value">{kpis.avisos}</span>
-                      <span className="tickets-kpi-pill-label">Avisos vigentes</span>
-                    </span>
+                    <KpiPill
+                      label="Avisos vigentes"
+                      value={kpis.avisos}
+                      tone="warning"
+                      icon={<AlertTriangle size={12} strokeWidth={1.9} aria-hidden />}
+                    />
                   ) : null}
                   {kpis.novedades > 0 ? (
-                    <span
-                      className="tickets-kpi-pill"
-                      style={{ ["--pill-tone" as string]: "#38bdf8" }}
-                    >
-                      <Sparkles size={12} strokeWidth={1.9} />
-                      <span className="tickets-kpi-pill-value">{kpis.novedades}</span>
-                      <span className="tickets-kpi-pill-label">Novedades 30d</span>
-                    </span>
+                    <KpiPill
+                      label="Novedades 30d"
+                      value={kpis.novedades}
+                      tone="info"
+                      icon={<Sparkles size={12} strokeWidth={1.9} aria-hidden />}
+                    />
                   ) : null}
                   {kpis.sinLeer > 0 ? (
-                    <span
-                      className="tickets-kpi-pill"
-                      style={{ ["--pill-tone" as string]: "var(--color-accent)" }}
+                    <KpiPill
+                      label="Sin leer"
+                      value={kpis.sinLeer}
+                      tone="accent"
                       title="Anuncios publicados que aún no has marcado como leídos"
-                    >
-                      <Eye size={12} strokeWidth={1.9} />
-                      <span className="tickets-kpi-pill-value">{kpis.sinLeer}</span>
-                      <span className="tickets-kpi-pill-label">Sin leer</span>
-                    </span>
+                      icon={<Eye size={12} strokeWidth={1.9} aria-hidden />}
+                    />
                   ) : null}
-                </div>
+                </>
               ) : null}
+              </div>
             </div>
           </div>
           {canEdit ? (
@@ -621,17 +663,21 @@ export function NovedadesPanel({
 
       {/* Tabs + filtro de estado (editor only) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-0.5 text-[12.5px] backdrop-blur">
+        <div className="flex flex-wrap items-center gap-1.5">
           {(["novedades", "avisos"] as const).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setTab(value)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all duration-150",
-                tab === value
-                  ? "segmented-pill--active"
-                  : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
+                "filter-chip border font-semibold",
+                value === "avisos"
+                  ? "border-amber-400/35 bg-amber-500/5 text-amber-100 hover:bg-amber-500/12"
+                  : "border-sky-400/35 bg-sky-500/5 text-sky-100 hover:bg-sky-500/12",
+                tab === value &&
+                  (value === "avisos"
+                    ? "border-amber-300 bg-amber-500/25 text-amber-50 shadow-[0_0_0_1px_rgba(251,191,36,0.35)]"
+                    : "border-sky-300 bg-sky-500/25 text-sky-50 shadow-[0_0_0_1px_rgba(56,189,248,0.35)]"),
               )}
             >
               {value === "avisos" ? (
@@ -644,17 +690,15 @@ export function NovedadesPanel({
           ))}
         </div>
         {canEdit ? (
-          <div className="inline-flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-0.5 text-[11px] backdrop-blur">
+          <div className="flex flex-wrap items-center gap-1.5">
             {(["publicado", "todos"] as const).map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setStatusFilter(value)}
                 className={cn(
-                  "rounded-md px-2.5 py-1 font-semibold transition-all duration-150",
-                  statusFilter === value
-                    ? "segmented-pill--active"
-                    : "text-[var(--color-text-2)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
+                  "filter-chip text-[11px] font-semibold",
+                  statusFilter === value && "filter-chip--active",
                 )}
               >
                 {value === "publicado" ? "Solo publicados" : "Todos (incl. borradores)"}
@@ -664,9 +708,32 @@ export function NovedadesPanel({
         ) : null}
       </div>
 
+      {canEdit ? (
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/35 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-[var(--color-text-3)]">
+              Avisos críticos abiertos
+            </p>
+            <p className="mt-1 text-lg font-semibold text-rose-200">{kpis.criticos}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/35 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-[var(--color-text-3)]">
+              Avisos vigentes
+            </p>
+            <p className="mt-1 text-lg font-semibold text-amber-200">{kpis.avisos}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/35 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-[var(--color-text-3)]">
+              Novedades 30 días
+            </p>
+            <p className="mt-1 text-lg font-semibold text-sky-200">{kpis.novedades}</p>
+          </div>
+        </div>
+      ) : null}
+
       {/* Lista */}
       {loading && !items ? (
-        <div className="h-32 animate-pulse rounded-2xl bg-[var(--color-surface-2)]" />
+        <Skeleton className="h-32 rounded-2xl" />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={tab === "avisos" ? Megaphone : Sparkles}
@@ -684,16 +751,27 @@ export function NovedadesPanel({
         />
       ) : (
         <ul className="space-y-3">
-          {filtered.map((a) => (
-            <AnnouncementCard
-              key={a.id}
-              announcement={a}
-              canEdit={canEdit}
-              onEdit={() => startEdit(a)}
-              onDelete={() => void removeItem(a.id)}
-              onToggleRead={() => void toggleRead(a)}
-            />
-          ))}
+          <AnimatePresence initial={false}>
+            {filtered.map((a) => (
+              <motion.li
+                key={a.id}
+                layout
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
+                className={readCollapsingIds.has(a.id) ? "ccmgc-collapse-exit" : undefined}
+              >
+                <AnnouncementCard
+                  announcement={a}
+                  canEdit={canEdit}
+                  onEdit={() => startEdit(a)}
+                  onDelete={() => void removeItem(a.id)}
+                  onToggleRead={() => void toggleRead(a)}
+                />
+              </motion.li>
+            ))}
+          </AnimatePresence>
         </ul>
       )}
     </div>
@@ -722,9 +800,9 @@ function AnnouncementCard({
   const hasBody = announcement.bodyMd && announcement.bodyMd.trim().length > 0;
 
   return (
-    <li
+    <div
       className={cn(
-        "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow hover:shadow-md",
+        "ccmgc-card-clickable rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow hover:shadow-md",
         announcement.severity === "critical" && "border-rose-500/35",
         announcement.severity === "warning" && "border-amber-500/35",
       )}
@@ -842,7 +920,7 @@ function AnnouncementCard({
           <MarkdownView source={announcement.bodyMd} />
         </div>
       ) : null}
-    </li>
+    </div>
   );
 }
 
@@ -865,7 +943,12 @@ function AnnouncementEditor({
   const isNew = !value.id;
 
   return (
-    <div className="space-y-4">
+    <motion.div
+      className="space-y-4"
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+    >
       <header className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
         <div>
           <h1 className="text-[18px] font-semibold text-[var(--color-text-1)]">
@@ -1111,6 +1194,6 @@ function AnnouncementEditor({
           </section>
         </aside>
       </div>
-    </div>
+    </motion.div>
   );
 }

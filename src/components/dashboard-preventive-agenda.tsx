@@ -3,6 +3,7 @@
 import { ArrowRight, CalendarClock, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type AgendaTask = {
   id: string;
@@ -29,7 +30,7 @@ function formatTime(iso: string | null): string {
 const URGENCY_STYLE = {
   overdue: {
     border: "var(--color-error)",
-    dot: "bg-[var(--color-error)] animate-pulse",
+    dot: "bg-[var(--color-error)] ccmgc-pulse-dot",
     time: "text-[var(--color-error)] font-semibold",
     label: "Vencida",
     labelCls: "text-[var(--color-error)]",
@@ -84,7 +85,7 @@ export function DashboardPreventiveAgenda() {
       {loading ? (
         <div className="space-y-2.5">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 animate-pulse rounded-lg bg-[var(--color-surface-2)]" />
+            <Skeleton key={i} className="h-16 rounded-lg" />
           ))}
         </div>
       ) : message ? (
