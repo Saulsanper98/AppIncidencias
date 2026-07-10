@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "CCMGC Ticketing",
     short_name: "CCMGC",
     description: "Gestión de incidencias y flota",
-    start_url: "/dashboard",
+    start_url: "/conductor",
     display: "standalone",
     background_color: "#0f172a",
     theme_color: "#2563eb",

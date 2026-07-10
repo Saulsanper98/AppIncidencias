@@ -55,6 +55,8 @@ export type TicketExportRow = {
   assetType: AssetType;
   linea: string;
   servicio: string;
+  serviceStopped: boolean;
+  impactedLines: number;
   conductor: string;
   assignedTo: string;
   slaDeadline: Date;
@@ -99,6 +101,8 @@ const COLUMNS: { key: keyof TicketExportRow | "shortId"; header: string; width: 
   { key: "assetType", header: "Activo", width: 12 },
   { key: "linea", header: "Línea", width: 11 },
   { key: "servicio", header: "Servicio", width: 12 },
+  { key: "serviceStopped", header: "Servicio detenido", width: 16 },
+  { key: "impactedLines", header: "Líneas impactadas", width: 16 },
   { key: "conductor", header: "Conductor", width: 16 },
   { key: "assignedTo", header: "Asignado a", width: 18 },
   { key: "slaDeadline", header: "SLA límite", width: 18 },

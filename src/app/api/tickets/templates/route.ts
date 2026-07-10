@@ -1,9 +1,9 @@
 /**
  * Plantillas de ticket reutilizables.
  *
- * - GET → devuelve plantillas visibles para el usuario (globales + personales).
- * - POST → crea una nueva plantilla. Solo los gestores pueden marcarla como
- *   `scope: "global"`; el resto crea siempre plantillas personales.
+ * - GET → devuelve plantillas visibles para el usuario (equipo + personales).
+ * - POST → crea una nueva plantilla. Técnicos y gestores pueden marcarla como
+ *   compartida con el equipo (`scope: "global"`); conductores solo personales.
  *
  * Las plantillas NO crean tickets por sí solas; solo proveen valores por
  * defecto al formulario de alta (`TicketCreateForm`). De esta forma evitamos
@@ -15,7 +15,7 @@ import { NextResponse } from "next/server";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import type { TicketPriority } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
-import { canCreateGlobalTicketTemplate } from "@/lib/rbac";
+import { canCreateGroupTicketTemplate, canEditTicketTemplate } from "@/lib/ticket-templates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,10 +34,11 @@ export async function GET(request: Request) {
   if (!actor.userId) {
     return NextResponse.json({ message: "Debes iniciar sesión" }, { status: 401 });
   }
+  const userId = actor.userId;
 
   const templates = await prisma.ticketTemplate.findMany({
     where: {
-      OR: [{ scope: "global" }, { ownerId: actor.userId }],
+      OR: [{ scope: "global" }, { ownerId: userId }],
     },
     orderBy: [{ scope: "asc" }, { category: "asc" }, { name: "asc" }],
     select: {
@@ -66,10 +67,7 @@ export async function GET(request: Request) {
     templates: templates.map((t) => ({
       ...t,
       // Indicamos al cliente si puede editar/eliminar esta plantilla.
-      canEdit:
-        t.scope === "global"
-          ? actor.role === "gestor_centro_control"
-          : t.ownerId === actor.userId,
+      canEdit: canEditTicketTemplate(t.scope, t.ownerId, userId, actor.role),
     })),
   });
 }
@@ -93,10 +91,12 @@ export async function POST(request: Request) {
   }
 
   const requestedScope =
-    typeof body.scope === "string" && body.scope === "global" ? "global" : "personal";
-  if (requestedScope === "global" && !canCreateGlobalTicketTemplate(actor.role)) {
+    typeof body.scope === "string" && (body.scope === "global" || body.scope === "group")
+      ? "global"
+      : "personal";
+  if (requestedScope === "global" && !canCreateGroupTicketTemplate(actor.role)) {
     return NextResponse.json(
-      { message: "Solo los gestores pueden crear plantillas globales" },
+      { message: "Solo el equipo operativo puede crear plantillas compartidas" },
       { status: 403 },
     );
   }

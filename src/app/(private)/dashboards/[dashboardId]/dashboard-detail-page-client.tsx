@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, LayoutDashboard, Plus, Presentation, Settings2, Star } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, Settings2, Sparkles, Star } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import "../dashboard-builder.css";
 import {
   DndContext,
   KeyboardSensor,
@@ -16,11 +17,15 @@ import {
 import { SortableContext, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable";
 
 import { AddWidgetModal } from "@/components/dashboard-builder/add-widget-modal";
+import { DashboardBuilderToolbar } from "@/components/dashboard-builder/dashboard-builder-toolbar";
 import { SortableWidget } from "@/components/dashboard-builder/sortable-widget";
 import { WidgetRenderer } from "@/components/dashboard-builder/widget-renderer";
 import { Badge } from "@/components/ui/badge";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { CHART_TYPES, type ChartType } from "@/lib/dashboard/chart-types";
+import { EMPTY_DASHBOARD_DATA, type CustomDashboardData } from "@/lib/dashboard/dashboard-data-types";
+import { getCompatibleCharts } from "@/lib/dashboard/data-sources";
+import { BUILTIN_VISUAL_PRESETS } from "@/lib/dashboard/visual-presets";
 import { mergeLayoutIntoConfig, parseWidgetLayout } from "@/lib/dashboard/widget-layout";
 import { cn } from "@/lib/utils";
 import type { SessionUser, UserRole } from "@/lib/domain";
@@ -43,12 +48,7 @@ type DashboardItem = {
   widgets: DashboardWidget[];
 };
 
-type DashboardData = {
-  tickets_by_status: { name: string; value: number }[];
-  tickets_by_operator: { name: string; value: number }[];
-  tickets_by_priority: { name: string; value: number }[];
-  sla_compliance: { day: string; cumplido: number; incumplido: number }[];
-};
+type DashboardData = CustomDashboardData;
 
 type VisualPreset = {
   id: string;
@@ -63,12 +63,7 @@ type VisualPreset = {
   };
 };
 
-const emptyData: DashboardData = {
-  tickets_by_status: [],
-  tickets_by_operator: [],
-  tickets_by_priority: [],
-  sla_compliance: [],
-};
+const emptyData: DashboardData = EMPTY_DASHBOARD_DATA;
 
 /**
  * Redimensionado manual del grid (columnas + asa de altura libre + presets).
@@ -88,10 +83,16 @@ export default function DashboardBuilderPage() {
   const [role, setRole] = useState<UserRole>("conductor");
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [addWidgetOpen, setAddWidgetOpen] = useState(false);
+  const [editWidget, setEditWidget] = useState<DashboardWidget | null>(null);
+  const [days, setDays] = useState<number>(7);
+  const [dataRefreshing, setDataRefreshing] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string | null>(null);
   const [presentationMode, setPresentationMode] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [savedPresets, setSavedPresets] = useState<VisualPreset[]>([]);
+  const [showEditHelp, setShowEditHelp] = useState(false);
   const [focusedWidgetId, setFocusedWidgetId] = useState<string | null>(null);
   // Preview en vivo del redimensionado de cada widget. Lo emite `SortableWidget`
   // en cada `mousemove` mientras se arrastra un asa y se limpia al soltar. Lo
@@ -130,18 +131,19 @@ export default function DashboardBuilderPage() {
   }, [dashboardId]);
 
   const fetchData = useCallback(async () => {
-    const dataResponse = await fetch(`/api/dashboards/${dashboardId}/data`, { cache: "no-store" });
-    const dataPayload = (await dataResponse.json()) as DashboardData & { message?: string };
-    if (!dataResponse.ok) {
-      throw new Error(dataPayload.message ?? "No se pudieron cargar datos del dashboard");
+    setDataRefreshing(true);
+    try {
+      const dataResponse = await fetch(`/api/dashboards/${dashboardId}/data?days=${days}`, { cache: "no-store" });
+      const dataPayload = (await dataResponse.json()) as CustomDashboardData & { message?: string };
+      if (!dataResponse.ok) {
+        throw new Error(dataPayload.message ?? "No se pudieron cargar datos del dashboard");
+      }
+      setData(dataPayload);
+      setLastRefreshedAt(new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }));
+    } finally {
+      setDataRefreshing(false);
     }
-    setData({
-      tickets_by_status: dataPayload.tickets_by_status ?? [],
-      tickets_by_operator: dataPayload.tickets_by_operator ?? [],
-      tickets_by_priority: dataPayload.tickets_by_priority ?? [],
-      sla_compliance: dataPayload.sla_compliance ?? [],
-    });
-  }, [dashboardId]);
+  }, [dashboardId, days]);
 
   useEffect(() => {
     const load = async () => {
@@ -165,6 +167,19 @@ export default function DashboardBuilderPage() {
 
     load();
   }, [dashboardId, fetchDashboard, fetchData]);
+
+  useEffect(() => {
+    if (loading) return;
+    void fetchData();
+  }, [days, loading, fetchData]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const handle = window.setInterval(() => {
+      void fetchData();
+    }, 60_000);
+    return () => window.clearInterval(handle);
+  }, [autoRefresh, fetchData]);
 
   useEffect(() => {
     try {
@@ -217,6 +232,28 @@ export default function DashboardBuilderPage() {
       }
     } catch (addError) {
       setError(addError instanceof Error ? addError.message : "No se pudo añadir el widget");
+    }
+  };
+
+  const handleSaveEditWidget = async (
+    widgetId: string,
+    widget: { title: string; chartType: string; dataSource: string; size: string; config: string },
+  ) => {
+    try {
+      setError(null);
+      const ok = await updateWidget(widgetId, widget);
+      if (!ok) return;
+      setDashboard((prev) =>
+        prev
+          ? {
+              ...prev,
+              widgets: prev.widgets.map((w) => (w.id === widgetId ? { ...w, ...widget } : w)),
+            }
+          : prev,
+      );
+      setEditWidget(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "No se pudo guardar el widget");
     }
   };
 
@@ -477,8 +514,10 @@ export default function DashboardBuilderPage() {
     pushUndoSnapshot();
     const current = sortedWidgets.find((item) => item.id === widgetId);
     if (!current) return;
-    const index = CHART_TYPES.indexOf(current.chartType as ChartType);
-    const nextChartType = CHART_TYPES[(index + 1) % CHART_TYPES.length];
+    const allowed = getCompatibleCharts(current.dataSource);
+    const pool = allowed.length > 0 ? allowed : CHART_TYPES;
+    const index = pool.indexOf(current.chartType as ChartType);
+    const nextChartType = pool[(index + 1) % pool.length] ?? pool[0] ?? "bar";
     const ok = await updateWidget(widgetId, { chartType: nextChartType });
     if (!ok) return;
     setDashboard((prev) =>
@@ -558,6 +597,32 @@ export default function DashboardBuilderPage() {
       dashboard.widgets.map(async (widget) => {
         const config = parseWidgetConfig(widget.config);
         const nextConfig = JSON.stringify({ ...config, ...preset.settings });
+        const ok = await updateWidget(widget.id, { config: nextConfig });
+        return { id: widget.id, ok, config: nextConfig };
+      }),
+    );
+    setDashboard((prev) =>
+      prev
+        ? {
+            ...prev,
+            widgets: prev.widgets.map((widget) => {
+              const updated = updates.find((item) => item.id === widget.id);
+              return updated?.ok ? { ...widget, config: updated.config } : widget;
+            }),
+          }
+        : prev,
+    );
+  };
+
+  const applyBuiltinPreset = async (presetId: string) => {
+    const preset = BUILTIN_VISUAL_PRESETS.find((item) => item.id === presetId);
+    if (!preset || !dashboard) return;
+    const { id: _id, name: _name, description: _description, ...settings } = preset;
+    pushUndoSnapshot();
+    const updates = await Promise.all(
+      dashboard.widgets.map(async (widget) => {
+        const config = parseWidgetConfig(widget.config);
+        const nextConfig = JSON.stringify({ ...config, ...settings });
         const ok = await updateWidget(widget.id, { config: nextConfig });
         return { id: widget.id, ok, config: nextConfig };
       }),
@@ -677,123 +742,132 @@ export default function DashboardBuilderPage() {
         </div>
       ) : null}
 
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboards" className="text-[var(--color-text-3)] hover:text-[var(--color-text-1)]">
-            <ArrowLeft size={16} />
-          </Link>
-          {editingName !== null ? (
-            <input
-              value={editingName}
-              onChange={(e) => setEditingName(e.target.value)}
-              onBlur={async () => {
-                if (skipNamePatchRef.current) {
-                  skipNamePatchRef.current = false;
-                  setEditingName(null);
-                  return;
-                }
-
-                if (editingName && editingName !== dashboard.name) {
-                  await fetch(`/api/dashboards/${dashboardId}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name: editingName }),
-                  });
-                  await fetchDashboard();
-                }
-
-                setEditingName(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") {
-                  skipNamePatchRef.current = true;
-                  setEditingName(null);
-                }
-              }}
-              className="text-2xl font-semibold bg-transparent border-b border-[var(--color-accent)] text-[var(--color-text-1)] focus:outline-none px-1"
-              autoFocus
-            />
-          ) : (
-            <h1
-              className={cn(
-                "text-heading",
-                isEditing && "cursor-text hover:text-[var(--color-accent)] transition-colors",
-              )}
-              onClick={() => isEditing && setEditingName(dashboard.name)}
+      <div className="space-y-3">
+        <div className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[color-mix(in_oklab,var(--color-accent)_8%,transparent)] p-4 shadow-sm">
+          <div aria-hidden className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-[var(--color-accent)]/10 blur-2xl" />
+          <div className="relative flex flex-wrap items-center gap-3">
+            <Link
+              href="/dashboards"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)]"
             >
-              {dashboard.name}
-            </h1>
-          )}
-          <Badge variant="neutral">{dashboard.widgets.length} widgets</Badge>
-        </div>
-        {role === "gestor_centro_control" ? (
-          <div className="flex gap-2 items-center">
-            <button
-              onClick={() => setPresentationMode((v) => !v)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-all",
-                presentationMode
-                  ? "border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)]"
-                  : "border-[var(--color-border)] text-[var(--color-text-2)]",
-              )}
-            >
-              <Presentation size={14} />
-              {presentationMode ? "Salir presentacion" : "Presentacion"}
-            </button>
-            {isEditing ? (
-              <button
-                onClick={() => setAddWidgetOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white transition-all hover:bg-[var(--color-accent-hover)]"
-              >
-                <Plus size={14} />
-                Añadir widget
-              </button>
-            ) : null}
-            <button
-              onClick={() => {
-                setIsEditing((prev) => {
-                  if (prev) setFocusedWidgetId(null);
-                  return !prev;
-                });
-              }}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-all",
-                isEditing
-                  ? "border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)]"
-                  : "border-[var(--color-border)] text-[var(--color-text-2)]",
-              )}
-            >
-              {isEditing ? (
-                <>
-                  <Check size={14} />
-                  Guardar
-                </>
+              <ArrowLeft size={16} />
+            </Link>
+            <div className="min-w-0 flex-1">
+              {editingName !== null ? (
+                <input
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={async () => {
+                    if (skipNamePatchRef.current) {
+                      skipNamePatchRef.current = false;
+                      setEditingName(null);
+                      return;
+                    }
+                    if (editingName && editingName !== dashboard.name) {
+                      await fetch(`/api/dashboards/${dashboardId}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ name: editingName }),
+                      });
+                      await fetchDashboard();
+                    }
+                    setEditingName(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") {
+                      skipNamePatchRef.current = true;
+                      setEditingName(null);
+                    }
+                  }}
+                  className="w-full max-w-md bg-transparent text-xl font-semibold text-[var(--color-text-1)] border-b border-[var(--color-accent)] focus:outline-none"
+                  autoFocus
+                />
               ) : (
-                <>
-                  <Settings2 size={14} />
-                  Editar
-                </>
+                <h1
+                  className={cn(
+                    "truncate text-xl font-semibold tracking-tight text-[var(--color-text-1)]",
+                    isEditing && role === "gestor_centro_control" && "cursor-text hover:text-[var(--color-accent)]",
+                  )}
+                  onClick={() => isEditing && role === "gestor_centro_control" && setEditingName(dashboard.name)}
+                >
+                  {dashboard.name}
+                </h1>
               )}
-            </button>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-3)]">
+                <Badge variant="neutral">{dashboard.widgets.length} widgets</Badge>
+                <span>Periodo {days} días</span>
+                {lastRefreshedAt ? <span>· {lastRefreshedAt}</span> : null}
+              </div>
+            </div>
           </div>
-        ) : null}
+        </div>
+
+        <DashboardBuilderToolbar
+          days={days}
+          onDaysChange={setDays}
+          onRefresh={() => void fetchData()}
+          dataRefreshing={dataRefreshing}
+          autoRefresh={autoRefresh}
+          onToggleAutoRefresh={() => setAutoRefresh((v) => !v)}
+          lastRefreshedAt={lastRefreshedAt}
+          isEditing={isEditing}
+          onToggleEditing={() => {
+            setIsEditing((prev) => {
+              if (prev) setFocusedWidgetId(null);
+              return !prev;
+            });
+          }}
+          presentationMode={presentationMode}
+          onTogglePresentation={() => setPresentationMode((v) => !v)}
+          onAddWidget={() => setAddWidgetOpen(true)}
+          canEdit={role === "gestor_centro_control"}
+        />
       </div>
       {role === "gestor_centro_control" && isEditing ? (
-        <p className="-mt-2 mb-2 text-[11px] text-[var(--color-text-3)]">
-          <span className="font-medium text-[var(--color-text-2)]">Redimensionar libre:</span> arrastra el asa de la
-          esquina inferior derecha para cambiar ancho (1-100%) y alto (180-900 px) a la vez, en vivo. Para un solo eje,
-          usa los presets de arriba: ¼ ⅓ ½ ⅔ ¾ 1/1 (ancho) · S/M/L/XL (alto).{" "}
-          <span className="font-medium text-[var(--color-text-2)]">Atajos:</span> Ctrl+Z deshacer · Ctrl+Shift+Z o Ctrl+Y
-          rehacer · P presentación · L leyenda (widget en foco) · flechas mover foco.
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setShowEditHelp((v) => !v)}
+            className="text-[11px] text-[var(--color-accent)] hover:underline"
+          >
+            {showEditHelp ? "Ocultar ayuda de edición" : "Ver ayuda de edición"}
+          </button>
+        </div>
+      ) : null}
+      {role === "gestor_centro_control" && isEditing && showEditHelp ? (
+        <p className="-mt-1 mb-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-[11px] text-[var(--color-text-3)]">
+          Arrastra el asa inferior derecha para redimensionar · presets ¼–1/1 y S–XL · Ctrl+Z/Y deshacer · P presentación ·
+          L leyenda · icono lápiz para editar fuente y gráfica.
         </p>
       ) : null}
       {role === "gestor_centro_control" && isEditing && !presentationMode ? (
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm text-[var(--color-text-2)]">Preset manager</p>
-            <p className="text-[11px] text-[var(--color-text-3)]">Aplicar visual en 1 clic a todos los widgets</p>
+        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles size={15} className="text-[var(--color-accent)]" />
+            <div>
+              <p className="text-sm font-medium text-[var(--color-text-1)]">Estilo del panel</p>
+              <p className="text-[11px] text-[var(--color-text-3)]">Presets visuales en un clic para todos los widgets</p>
+            </div>
           </div>
+          <div className="flex flex-wrap gap-2">
+            {BUILTIN_VISUAL_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => void applyBuiltinPreset(preset.id)}
+                className="dashboard-preset-chip rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-left hover:border-[var(--color-border-hover)]"
+              >
+                <span className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-1)]">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: preset.accentColor }} />
+                  {preset.name}
+                </span>
+                <span className="mt-0.5 block text-[10px] text-[var(--color-text-3)]">{preset.description}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 border-t border-[var(--color-border)] pt-3">
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">Tus presets guardados</p>
           <div className="flex items-center gap-2">
             <input
               value={presetName}
@@ -835,22 +909,38 @@ export default function DashboardBuilderPage() {
                 ))}
             </div>
           ) : null}
+          </div>
         </div>
       ) : null}
       {sortedWidgets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--color-border)] py-20 text-center">
-          <LayoutDashboard size={48} className="mb-3 text-[var(--color-text-3)]" />
-          <p className="text-subheading text-[var(--color-text-2)]">Dashboard vacío</p>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]/50 py-16 text-center">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)]">
+            <LayoutDashboard size={28} className="text-[var(--color-text-3)]" />
+          </div>
+          <p className="text-subheading text-[var(--color-text-2)]">Panel vacío</p>
           {role === "gestor_centro_control" ? (
             <>
-              <p className="mb-4 mt-1 text-caption">Activa el modo edición para añadir widgets</p>
-              <button
-                onClick={() => setIsEditing(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white transition-all hover:bg-[var(--color-accent-hover)]"
-              >
-                <Settings2 size={14} />
-                Activar edición
-              </button>
+              <p className="mb-4 mt-1 max-w-sm text-caption text-[var(--color-text-3)]">
+                Añade widgets manualmente o vuelve a Cuadros y crea otro panel desde una plantilla.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  onClick={() => {
+                    setIsEditing(true);
+                    setAddWidgetOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white transition-all hover:bg-[var(--color-accent-hover)]"
+                >
+                  <Settings2 size={14} />
+                  Añadir primer widget
+                </button>
+                <Link
+                  href="/dashboards"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text-2)] hover:border-[var(--color-border-hover)]"
+                >
+                  Ver plantillas
+                </Link>
+              </div>
             </>
           ) : (
             <p className="mt-1 text-caption">El gestor aún no ha añadido widgets</p>
@@ -904,6 +994,7 @@ export default function DashboardBuilderPage() {
                   <WidgetRenderer
                     widget={{ ...widget, chartType: widget.chartType as ChartType }}
                     data={data ?? emptyData}
+                    days={days}
                     isEditing={isEditing}
                     onRemove={handleRemoveWidget}
                     onDuplicate={handleDuplicateWidget}
@@ -913,7 +1004,14 @@ export default function DashboardBuilderPage() {
                     onQuickChangeSource={handleQuickChangeSource}
                     presentationMode={presentationMode}
                     animationDelayMs={Math.min(index * 35, 260)}
-                    onRequestEdit={role === "gestor_centro_control" ? () => setIsEditing(true) : undefined}
+                    onRequestEdit={
+                      role === "gestor_centro_control"
+                        ? () => {
+                            setIsEditing(true);
+                            setEditWidget(widget);
+                          }
+                        : undefined
+                    }
                     exportRootRef={(el) => {
                       widgetRootRefs.current[widget.id] = el;
                     }}
@@ -939,6 +1037,26 @@ export default function DashboardBuilderPage() {
         open={addWidgetOpen}
         onClose={() => setAddWidgetOpen(false)}
         onAdd={handleAddWidget}
+        dashboardId={dashboardId}
+        userId={sessionUserId}
+      />
+      <AddWidgetModal
+        open={Boolean(editWidget)}
+        onClose={() => setEditWidget(null)}
+        onAdd={handleAddWidget}
+        onSaveEdit={handleSaveEditWidget}
+        editWidget={
+          editWidget
+            ? {
+                id: editWidget.id,
+                title: editWidget.title,
+                chartType: editWidget.chartType,
+                dataSource: editWidget.dataSource,
+                size: editWidget.size,
+                config: editWidget.config,
+              }
+            : undefined
+        }
         dashboardId={dashboardId}
         userId={sessionUserId}
       />

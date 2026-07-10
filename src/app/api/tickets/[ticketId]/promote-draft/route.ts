@@ -146,6 +146,8 @@ export async function POST(
           lineaLabel: lineaCheck.normalized,
           servicioLabel: data.servicioLabel?.trim() || null,
           conductorLabel: data.conductorLabel?.trim() || null,
+          serviceStopped: data.serviceStopped,
+          impactedLines: data.impactedLines,
           incidentOccurredAt: incidentAt && !Number.isNaN(incidentAt.getTime()) ? incidentAt : ticket.incidentOccurredAt,
           ...(data.assignToMe ? { assignedToUserId: actor.userId } : {}),
           ...(toStatus === "resuelto" ? { resolvedAt: now } : { resolvedAt: null }),

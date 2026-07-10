@@ -25,13 +25,16 @@
     "test:report-date-range": "tsx scripts/test-report-date-range.ts",
     "test:analytics-math": "tsx scripts/test-analytics-math.ts",
     "test:smoke": "npm run test:rbac && npm run test:ticket-filters && npm run test:ticket-labels && npm run test:ticketing && npm run test:desvios:parser && npm run test:desvios:rbac && npm run test:desvios:reminders && npm run test:desvios:urgencia && npm run test:report-date-range && npm run test:analytics-math",
+    "power-bi:verify": "powershell -ExecutionPolicy Bypass -File ./scripts/power-bi-verify-api.ps1",
     "db:migrate": "prisma migrate dev",
     "db:seed": "node --env-file=.env --import tsx ./scripts/seed-dev.ts",
     "db:backfill-tipologia": "node scripts/backfill-tipologia.js",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "deploy:linux": "sudo bash scripts/linux/bootstrap.sh",
-    "rebuild:linux": "sudo bash scripts/linux/rebuild.sh"
+    "rebuild:linux": "sudo bash scripts/linux/rebuild.sh",
+    "docker:build": "docker build -t ccmgc-ticketing:prod .",
+    "docker:build:script": "bash scripts/docker/build-prod.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

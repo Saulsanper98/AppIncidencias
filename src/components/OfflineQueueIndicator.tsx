@@ -42,11 +42,21 @@ export function OfflineQueueIndicator() {
     if (busy) return;
     setBusy(true);
     try {
-      await flush(async (payload) => {
+      await flush(async (draft) => {
+        if (draft.hasAttachments) {
+          const { loadAttachments } = await import("@/lib/offline-attachments");
+          const files = await loadAttachments(draft.id);
+          const fd = new FormData();
+          fd.append("ticket", JSON.stringify(draft.payload));
+          for (const file of files) fd.append("files", file);
+          const res = await fetch("/api/tickets", { method: "POST", body: fd });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return;
+        }
         const res = await fetch("/api/tickets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(draft.payload),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       });

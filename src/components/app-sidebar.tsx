@@ -77,8 +77,6 @@ type MenuSection = {
 // dedicado (TicketsModule view="bandeja").
 //
 // La barra de pestañas la pinta el componente `SectionTabs` en cada página.
-// "Inventario" se ocultó del menú (mayo 2026, decisión del centro: no se usa
-// de momento). La ruta /inventory sigue accesible por URL si hace falta.
 const menuSections: MenuSection[] = [
   {
     title: "Operación",
@@ -412,10 +410,9 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
     if (href === "/tickets") {
       return pathname === "/tickets" || pathname.startsWith("/handover");
     }
-    // "Preventivo" agrupa el calendario preventivo y el banner de buses
-    // anómalos. El antiguo /inventory ya no tiene entrada en el menú.
+    // "Preventivo" agrupa el calendario preventivo y el banner de buses anómalos.
     if (href === "/preventivo") {
-      return pathname.startsWith("/preventivo") || pathname.startsWith("/inventory");
+      return pathname.startsWith("/preventivo");
     }
     // "Mi cuenta" cubre solo /account.
     if (href === "/account") {

@@ -24,6 +24,8 @@ import {
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { ShiftHeroCard } from "@/components/handover/ShiftHeroCard";
+import { isUiUnificationEnabled } from "@/ui-unification/feature";
+import { HandoverHeroUnified } from "@/ui-unification/heroes/HandoverHeroUnified";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -343,6 +345,9 @@ export default function HandoverPage() {
 
   return (
     <div className="space-y-5">
+      {isUiUnificationEnabled() ? (
+        <HandoverHeroUnified showSavedFlash={showSavedFlash} />
+      ) : (
       <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -382,6 +387,7 @@ export default function HandoverPage() {
           </div>
         </div>
       </header>
+      )}
 
       <ShiftHeroCard unackedCount={unacked.length} authorOfLastHandover={lastHandoverAuthor} />
 

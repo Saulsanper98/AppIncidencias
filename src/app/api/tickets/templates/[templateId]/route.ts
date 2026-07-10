@@ -6,7 +6,7 @@
  *
  * Reglas:
  *   - Plantillas `personal` solo las gestiona su dueño.
- *   - Plantillas `global` solo las gestionan los `gestor_centro_control`.
+ *   - Plantillas compartidas (`global`): las gestiona su autor o un gestor.
  */
 
 import { NextResponse } from "next/server";
@@ -14,7 +14,7 @@ import { NextResponse } from "next/server";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import type { TicketPriority } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
-import { canCreateGlobalTicketTemplate } from "@/lib/rbac";
+import { canCreateGroupTicketTemplate, canEditTicketTemplate } from "@/lib/ticket-templates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,10 +40,7 @@ async function loadAndAuthorize(request: Request, params: RouteParams["params"])
   if (!template) {
     return { error: NextResponse.json({ message: "Plantilla no encontrada" }, { status: 404 }) };
   }
-  const allowed =
-    template.scope === "global"
-      ? actor.role === "gestor_centro_control"
-      : template.ownerId === actor.userId;
+  const allowed = canEditTicketTemplate(template.scope, template.ownerId, actor.userId, actor.role);
   if (!allowed) {
     return { error: NextResponse.json({ message: "No autorizado" }, { status: 403 }) };
   }
@@ -64,15 +61,16 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   // Cambio de scope: solo gestor lo permite y debe ser uno de los dos valores.
   let nextScope = template.scope;
-  if (typeof body.scope === "string" && (body.scope === "personal" || body.scope === "global")) {
-    if (body.scope !== template.scope) {
-      if (!canCreateGlobalTicketTemplate(actor.role)) {
+  if (typeof body.scope === "string" && (body.scope === "personal" || body.scope === "global" || body.scope === "group")) {
+    const normalizedScope = body.scope === "group" ? "global" : body.scope;
+    if (normalizedScope !== template.scope) {
+      if (!canCreateGroupTicketTemplate(actor.role)) {
         return NextResponse.json(
-          { message: "Solo los gestores pueden cambiar el ámbito" },
+          { message: "Solo el equipo operativo puede cambiar el ámbito" },
           { status: 403 },
         );
       }
-      nextScope = body.scope;
+      nextScope = normalizedScope;
     }
   }
 

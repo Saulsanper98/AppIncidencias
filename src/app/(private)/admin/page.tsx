@@ -267,6 +267,44 @@ export default async function AdminHomePage() {
 
       <section className="grid gap-2 sm:grid-cols-2">
         <Link
+          href="/admin/salud"
+          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 hover:border-emerald-400/40"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Salud · sistema
+              </p>
+              <p className="mt-1 text-sm text-[var(--color-text-2)]">
+                Poller de desvíos, scheduler, entorno y disco.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-200">
+              <Signal size={12} aria-hidden />
+              Ops
+            </span>
+          </div>
+        </Link>
+        <Link
+          href="/admin/operacion"
+          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 hover:border-sky-400/40"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                Operación automática
+              </p>
+              <p className="mt-1 text-sm text-[var(--color-text-2)]">
+                Reglas de asignación y umbrales de escalado.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/35 bg-sky-500/10 px-2 py-0.5 text-xs font-semibold text-sky-200">
+              <ShieldCheck size={12} aria-hidden />
+              Reglas
+            </span>
+          </div>
+        </Link>
+        <Link
           href="/admin/analytics"
           className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 hover:border-cyan-400/40"
         >
@@ -285,7 +323,7 @@ export default async function AdminHomePage() {
             </span>
           </div>
         </Link>
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5">
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 sm:col-span-2">
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">

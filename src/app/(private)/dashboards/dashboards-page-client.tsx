@@ -17,14 +17,17 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { SectionTabs } from "@/components/ui/section-tabs";
+import "./dashboard-builder.css";
 import { EmptyState } from "@/components/ui/empty-state";
 import { KpiPill } from "@/components/ui/kpi-pill";
 import { DashboardViewSkeleton } from "@/components/ui/view-skeletons";
 import type { SessionUser, UserRole } from "@/lib/domain";
 import { cn } from "@/lib/utils";
+import { DASHBOARD_TEMPLATES } from "@/lib/dashboard/templates";
 
 type DashboardWidgetLite = {
   id: string;
@@ -42,6 +45,7 @@ type DashboardListItem = {
 };
 
 export default function DashboardsPage() {
+  const router = useRouter();
   const [dashboards, setDashboards] = useState<DashboardListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +112,47 @@ export default function DashboardsPage() {
       await fetchDashboards();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "No se pudo crear el dashboard");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleCreateFromTemplate = async (templateId: string) => {
+    const template = DASHBOARD_TEMPLATES.find((item) => item.id === templateId);
+    if (!template || creating) return;
+    try {
+      setCreating(true);
+      setError(null);
+      const response = await fetch("/api/dashboards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: template.name }),
+      });
+      const payload = (await response.json()) as { message?: string; dashboard?: { id: string } };
+      if (!response.ok || !payload.dashboard?.id) {
+        throw new Error(payload.message ?? "No se pudo crear el panel desde plantilla");
+      }
+      const dashboardId = payload.dashboard.id;
+      for (const widget of template.widgets) {
+        const widgetRes = await fetch(`/api/dashboards/${dashboardId}/widgets`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: widget.title,
+            chartType: widget.chartType,
+            dataSource: widget.dataSource,
+            size: widget.size,
+            config: JSON.stringify(widget.config ?? {}),
+          }),
+        });
+        if (!widgetRes.ok) {
+          const widgetPayload = (await widgetRes.json()) as { message?: string };
+          throw new Error(widgetPayload.message ?? "No se pudo añadir un widget de la plantilla");
+        }
+      }
+      router.push(`/dashboards/${dashboardId}`);
+    } catch (templateError) {
+      setError(templateError instanceof Error ? templateError.message : "No se pudo crear desde plantilla");
     } finally {
       setCreating(false);
     }
@@ -197,8 +242,8 @@ export default function DashboardsPage() {
                 Custom Dashboards
               </h1>
               <p className="mt-0.5 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
-                Crea paneles personalizados para operación y análisis. Marca uno como principal para que se abra al
-                pulsar &quot;Dashboard&quot;.
+                Paneles con KPIs operativos, tendencias de tickets, SLA y vistas embebidas. Marca uno como principal para
+                que se abra al pulsar &quot;Dashboard&quot;.
               </p>
             </div>
           </div>
@@ -278,8 +323,56 @@ export default function DashboardsPage() {
             Inicio rápido del constructor
           </p>
           <p className="mt-1 text-sm text-[var(--color-text-2)]">
-            1) Crea un panel, 2) abre el panel y activa <strong>Editar</strong>, 3) añade widgets y ajusta tamaños con arrastre.
+            Usa una plantilla preconfigurada con KPIs y gráficas de tickets, o crea un panel vacío y añade widgets en modo{" "}
+            <strong>Editar</strong>.
           </p>
+        </section>
+      ) : null}
+
+      {isManager ? (
+        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-[var(--color-accent)]" />
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--color-text-1)]">Plantillas listas para usar</h2>
+                <p className="text-[11px] text-[var(--color-text-3)]">Un clic y tienes un panel completo con layout optimizado</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {DASHBOARD_TEMPLATES.map((template) => {
+              const Icon = template.icon;
+              return (
+                <button
+                  key={template.id}
+                  type="button"
+                  disabled={creating}
+                  onClick={() => void handleCreateFromTemplate(template.id)}
+                  className="dashboard-template-card group relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 text-left shadow-sm hover:border-[color-mix(in_oklab,var(--color-border)_60%,var(--color-accent)_40%)] disabled:opacity-60"
+                >
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full blur-2xl opacity-60 transition-opacity group-hover:opacity-100"
+                    style={{ background: `color-mix(in oklab, ${template.accentColor} 25%, transparent)` }}
+                  />
+                  <div
+                    className="relative mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]"
+                    style={{ color: template.accentColor }}
+                  >
+                    <Icon size={18} strokeWidth={1.7} aria-hidden />
+                  </div>
+                  <p className="relative font-medium text-[var(--color-text-1)]">{template.name}</p>
+                  <p className="relative mt-1 line-clamp-2 text-[12px] leading-snug text-[var(--color-text-3)]">
+                    {template.description}
+                  </p>
+                  <p className="relative mt-3 text-[11px] font-medium" style={{ color: template.accentColor }}>
+                    {template.widgets.length} widgets · Crear ahora
+                  </p>
+                </button>
+              );
+            })}
+          </div>
         </section>
       ) : null}
 

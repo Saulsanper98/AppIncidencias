@@ -21,6 +21,7 @@ function isPublicApi(pathname: string, method: string): boolean {
   if (pathname === "/api/auth/session") return true;
   if (pathname === "/api/users" && method === "GET") return true;
   if (pathname === "/api/tickets/from-email" && method === "POST") return true;
+  if (pathname.startsWith("/api/bi/")) return true;
   return false;
 }
 

@@ -74,7 +74,7 @@ if (Test-Path ".\certs") {
 }
 
 $readme = @"
-CCMGC Ticketing — paquete de migración Windows → Linux
+CCMGC Ticketing — paquete de migración Windows → Linux / Docker
 Generado: $stamp
 
 En la VM Debian (con el repo clonado en /opt/ccmgc-ticketing):
@@ -87,6 +87,13 @@ En la VM Debian (con el repo clonado en /opt/ccmgc-ticketing):
   sudo chmod +x scripts/linux/*.sh
   sudo bash scripts/linux/bootstrap.sh
 
+En el host Docker / Portainer (node-prod):
+
+  scp el zip al host Docker
+  sudo bash scripts/docker/import-migration-bundle.sh /tmp/ccmgc-migration-$stamp.zip
+  cd /opt/app-incidencias/prod/src && sudo docker build -t ccmgc-ticketing:prod .
+  Ver docs/DEPLOY-DOCKER-PORTAINER.md
+
 Ver docs/DEPLOY-DEBIAN.md y AGENTS-LINUX.md
 "@
 Set-Content -Path (Join-Path $bundleRoot "LEEME.txt") -Value $readme -Encoding UTF8
@@ -97,4 +104,5 @@ Compress-Archive -Path (Join-Path $bundleRoot "*") -DestinationPath $zipPath -Fo
 
 Write-Host ""
 Write-Host "[OK] Bundle: $zipPath" -ForegroundColor Green
-Write-Host "     Copia este zip a la VM Debian y sigue docs/DEPLOY-DEBIAN.md" -ForegroundColor Cyan
+Write-Host "     Linux: docs/DEPLOY-DEBIAN.md" -ForegroundColor Cyan
+Write-Host "     Docker/Portainer: docs/DEPLOY-DOCKER-PORTAINER.md" -ForegroundColor Cyan

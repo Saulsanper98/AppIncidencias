@@ -1544,7 +1544,7 @@ export function CatalogAdminPanel() {
               <h2 className="text-subheading">Buses anómalos</h2>
               <p className="max-w-xl text-[11.5px] text-[var(--color-text-3)]">
                 Detección automática de buses con un volumen de incidencias inusualmente alto en la ventana
-                de tiempo configurada. El banner aparece en Preventivo y en Inventario.
+                de tiempo configurada. El banner aparece en Preventivo.
               </p>
             </div>
           </div>
@@ -1679,8 +1679,7 @@ export function CatalogAdminPanel() {
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] text-[var(--color-text-3)]">
-            Los cambios afectan al banner de <code className="rounded bg-[var(--color-surface-2)] px-1">Inventario</code>
-            {" "}en cuanto se refresca la página (caché de 30 s).
+            Los cambios afectan al banner de buses anómalos en Preventivo
           </p>
           <button
             type="button"

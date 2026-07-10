@@ -160,15 +160,9 @@ function FormProgressBar({
 function FormHeaderExtras({
   busId,
   lineaLabel,
-  form,
-  setForm,
-  sessionUser,
 }: {
   busId: string;
   lineaLabel: string;
-  form: FormState;
-  setForm: React.Dispatch<React.SetStateAction<FormState>>;
-  sessionUser: SessionUser | null;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -181,7 +175,7 @@ function FormHeaderExtras({
       >
         <span>
           <span className="font-medium text-[var(--color-accent)]">Más contexto</span>
-          <span className="text-[var(--color-text-3)]"> · plantillas y tickets del bus</span>
+          <span className="text-[var(--color-text-3)]"> · historial del bus</span>
         </span>
         <ChevronDown
           size={16}
@@ -190,9 +184,8 @@ function FormHeaderExtras({
         />
       </button>
       {open ? (
-        <div className="mt-3 space-y-4 border-t border-[var(--color-border)]/60 pt-3">
+        <div className="mt-3 border-t border-[var(--color-border)]/60 pt-3">
           <BusOperationalContextPanel busId={busId} lineaLabel={lineaLabel} plain />
-          <TicketTemplatePicker form={form} setForm={setForm} sessionUser={sessionUser} embedded />
         </div>
       ) : null}
     </div>
@@ -946,13 +939,9 @@ export function TicketCreateForm({
           onJump={jumpToFormSection}
         />
 
-        <FormHeaderExtras
-          busId={trimmedBusId}
-          lineaLabel={form.lineaLabel}
-          form={form}
-          setForm={setForm}
-          sessionUser={sessionUser}
-        />
+        <TicketTemplatePicker form={form} setForm={setForm} sessionUser={sessionUser} defaultExpanded />
+
+        <FormHeaderExtras busId={trimmedBusId} lineaLabel={form.lineaLabel} />
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col">

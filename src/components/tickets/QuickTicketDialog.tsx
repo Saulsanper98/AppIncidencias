@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Sparkles, Zap } from "lucide-react";
 
 import type { TicketTemplate } from "@/components/tickets/TicketTemplatePicker";
+import { ticketTemplateScopeLabel } from "@/lib/ticket-templates";
 import { defaultForm } from "@/components/tickets/tickets-module-types";
 import type {
   CatalogBus,
@@ -115,11 +116,16 @@ export function QuickTicketDialog({
     return templates
       .filter((t) => t.tipo && t.subtipo && t.subsubtipo && t.title)
       .sort((a, b) => {
-        // Globales primero, luego personales; dentro de cada grupo por nombre.
         if (a.scope !== b.scope) return a.scope === "global" ? -1 : 1;
         return a.name.localeCompare(b.name, "es");
       });
   }, [templates]);
+
+  const templatesByScope = useMemo(() => {
+    const group = usableTemplates.filter((t) => t.scope === "global");
+    const personal = usableTemplates.filter((t) => t.scope !== "global");
+    return { group, personal };
+  }, [usableTemplates]);
 
   const selectedTemplate = useMemo(
     () => usableTemplates.find((t) => t.id === selectedTemplateId) ?? null,
@@ -335,10 +341,13 @@ export function QuickTicketDialog({
             ) : templateError ? (
               <p className="mt-1 text-[12px] text-[var(--color-error)]">{templateError}</p>
             ) : usableTemplates.length === 0 ? (
-              <p className="mt-1 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 text-[12px] text-[var(--color-text-3)]">
-                Aún no hay plantillas reutilizables. Guarda una desde el formulario completo
-                marcando "Incluir variables operativas".
-              </p>
+              <div className="mt-1 space-y-2 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2.5 text-[12px] text-[var(--color-text-3)]">
+                <p>Aún no hay plantillas reutilizables para ticket rápido.</p>
+                <p className="text-[11px]">
+                  Crea la tuya en <span className="font-medium text-[var(--color-text-2)]">Nuevo ticket → Plantillas</span>,
+                  con tipología completa y título, marcando «Incluir variables operativas» si quieres usarla aquí.
+                </p>
+              </div>
             ) : (
               <>
                 <Select
@@ -347,14 +356,30 @@ export function QuickTicketDialog({
                   className="mt-1"
                 >
                   <option value="">— Elegir plantilla —</option>
-                  {usableTemplates.map((tpl) => (
-                    <option key={tpl.id} value={tpl.id}>
-                      {tpl.scope === "global" ? "🌐 " : "👤 "}
-                      {tpl.name}
-                      {tpl.category ? ` · ${tpl.category}` : ""}
-                    </option>
-                  ))}
+                  {templatesByScope.group.length > 0 ? (
+                    <optgroup label={ticketTemplateScopeLabel("global")}>
+                      {templatesByScope.group.map((tpl) => (
+                        <option key={tpl.id} value={tpl.id}>
+                          {tpl.name}
+                          {tpl.category ? ` · ${tpl.category}` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {templatesByScope.personal.length > 0 ? (
+                    <optgroup label={ticketTemplateScopeLabel("personal")}>
+                      {templatesByScope.personal.map((tpl) => (
+                        <option key={tpl.id} value={tpl.id}>
+                          {tpl.name}
+                          {tpl.category ? ` · ${tpl.category}` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
                 </Select>
+                <p className="mt-1.5 text-[10.5px] text-[var(--color-text-3)]">
+                  ¿Falta la tuya? Créala en Nuevo ticket → Plantillas de ticket → Guardar como plantilla.
+                </p>
                 {selectedTemplate ? (
                   <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10.5px]">
                     <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[var(--color-text-2)]">

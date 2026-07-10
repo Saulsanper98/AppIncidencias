@@ -35,6 +35,7 @@ import {
 } from "react";
 import { LayersControl, MapContainer, Pane, ScaleControl, TileLayer, useMap, useMapEvents } from "react-leaflet";
 
+import { MapActiveDesviosStrip } from "@/components/mapa/MapActiveDesviosStrip";
 import { MapDateField } from "@/components/mapa/map-date-field";
 import { MapClusteredMarkers } from "@/components/mapa/map-clustered-markers";
 import { MapPreventiveMarkers, MapWarehouseMarkers } from "@/components/mapa/map-context-markers";
@@ -454,34 +455,44 @@ function MapIslandMaxBoundsWhenFitting() {
 }
 
 /**
- * Centra la vista solo al cambiar el ticket seleccionado.
- * - No resetea el “último vuelo” si faltan coords un instante (refresco API), para no disparar otro flyTo al mismo id.
- * - Conserva el zoom actual del usuario (no fuerza nivel 13), solo desplaza el centro.
+ * Centra y acerca la vista al ticket seleccionado.
+ * `flyNonce` fuerza un nuevo vuelo aunque sea el mismo id (p. ej. clic repetido en la bandeja).
  */
 function MapFlyTo({
   targetId,
   lat,
   lng,
+  flyNonce = 0,
+  minZoom = 15,
 }: {
   targetId: string | null;
   lat: number | null;
   lng: number | null;
+  flyNonce?: number;
+  minZoom?: number;
 }) {
   const map = useMap();
-  const lastFlownTargetRef = useRef<string | null>(null);
+  const lastFlownKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!targetId) {
-      lastFlownTargetRef.current = null;
+      lastFlownKeyRef.current = null;
       return;
     }
     if (lat == null || lng == null) {
       return;
     }
-    if (lastFlownTargetRef.current === targetId) return;
-    lastFlownTargetRef.current = targetId;
-    const z = map.getZoom();
-    map.flyTo([lat, lng], z, { duration: 0.45, animate: true });
-  }, [targetId, lat, lng, map]);
+    const key = `${targetId}:${flyNonce}`;
+    if (lastFlownKeyRef.current === key) return;
+    lastFlownKeyRef.current = key;
+    const reduceMotion =
+      typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const z = Math.max(map.getZoom(), minZoom);
+    if (reduceMotion) {
+      map.setView([lat, lng], z, { animate: false });
+    } else {
+      map.flyTo([lat, lng], z, { duration: 0.5, animate: true });
+    }
+  }, [targetId, lat, lng, flyNonce, minZoom, map]);
   return null;
 }
 
@@ -1018,6 +1029,7 @@ export function MapaView() {
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [refreshUi, setRefreshUi] = useState<"idle" | "loading" | "ok" | "err">("idle");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mapFlyNonce, setMapFlyNonce] = useState(0);
   const [selectionAnnounced, setSelectionAnnounced] = useState("");
   const [highlightTicketId, setHighlightTicketId] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<"panel" | "map">("panel");
@@ -1027,6 +1039,7 @@ export function MapaView() {
   const [mapTileOpacity, setMapTileOpacity] = useState(100);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [mapPresets, setMapPresets] = useState<MapFilterPreset[]>([]);
+  const [desvioLineFilter, setDesvioLineFilter] = useState<string | null>(null);
 
   const listItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const listScrollRef = useRef<HTMLDivElement>(null);
@@ -1347,8 +1360,22 @@ export function MapaView() {
     return () => clearInterval(id);
   }, [autoRefreshSec, load]);
 
+  const focusTicketOnMap = useCallback(
+    (ticketId: string, options?: { switchToMapTab?: boolean }) => {
+      setSelectedId(ticketId);
+      setMapFlyNonce((n) => n + 1);
+      if (options?.switchToMapTab !== false && !mapaMuro) {
+        setMobileTab("map");
+      }
+    },
+    [mapaMuro],
+  );
+
   useEffect(() => {
-    if (ticketFromUrl) setSelectedId(ticketFromUrl);
+    if (ticketFromUrl) {
+      setSelectedId(ticketFromUrl);
+      setMapFlyNonce((n) => n + 1);
+    }
   }, [ticketFromUrl]);
 
   useEffect(() => {
@@ -1894,6 +1921,14 @@ export function MapaView() {
           </div>
 
           <div className="mapa-bandeja__scope shrink-0 border-b border-[var(--color-border)]/45 px-2.5 py-2 sm:px-3">
+            <MapActiveDesviosStrip
+              activeLineFilter={desvioLineFilter}
+              onLineFilter={(linea) => {
+                setDesvioLineFilter(linea);
+                if (linea) setListSearch(linea);
+                else setListSearch("");
+              }}
+            />
             <MapScopeToggle
               scope={scope}
               onChange={handleScopeChange}
@@ -1959,7 +1994,7 @@ export function MapaView() {
                             else listItemRefs.current.delete(t.id);
                           }}
                           onMouseEnter={() => setHighlightTicketId(t.id)}
-                          onClick={() => setSelectedId(t.id)}
+                          onClick={() => focusTicketOnMap(t.id)}
                           style={{
                             borderLeftColor: isSelected
                               ? "var(--color-accent)"
@@ -2575,7 +2610,12 @@ export function MapaView() {
               <MapLayoutInvalidate layoutKey={mapLayoutKey} />
               <MapIslandMaxBoundsWhenFitting />
               <MapLeafletScale />
-              <MapFlyTo targetId={flyTargetId} lat={flyLatLng.lat} lng={flyLatLng.lng} />
+              <MapFlyTo
+                targetId={flyTargetId}
+                lat={flyLatLng.lat}
+                lng={flyLatLng.lng}
+                flyNonce={mapFlyNonce}
+              />
               <MapToolbarControls
                 features={effectiveFeatures}
                 mapShellRef={mapShellRef}
@@ -2587,7 +2627,7 @@ export function MapaView() {
                 selectedId={selectedId}
                 hoveredId={highlightTicketId}
                 onHoverTicket={setHighlightTicketId}
-                onSelectTicket={setSelectedId}
+                onSelectTicket={focusTicketOnMap}
                 onMapBackgroundClick={() => setSelectedId(null)}
                 suppressMarkerPopup={mapaMuro}
                 wallMode={mapaMuro}

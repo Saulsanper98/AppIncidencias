@@ -30,6 +30,8 @@ import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Input } from "@/components/ui/input";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isUiUnificationEnabled } from "@/ui-unification/feature";
+import { BitacoraHeroUnified } from "@/ui-unification/heroes/BitacoraHeroUnified";
 import {
   entryDisplayTitle,
   entryExcerpt,
@@ -191,6 +193,14 @@ export function BitacoraIndex() {
   return (
     <BitacoraPageShell className={cn(viewMode === "kanban" ? "max-w-5xl" : "max-w-3xl")}>
       <div className="b-log-home">
+        {isUiUnificationEnabled() ? (
+          <BitacoraHeroUnified
+            stats={stats}
+            activeShift={activeShift}
+            ShiftIcon={ShiftIcon}
+            onNewEntry={() => router.push("/bitacora/nueva")}
+          />
+        ) : (
         <header className="b-log-home__header">
           <div className="b-log-home__header-main">
             <h1 className="b-log-home__title">Bitácora de turno</h1>
@@ -212,6 +222,7 @@ export function BitacoraIndex() {
             <FeedbackTargetButton id="bitacora" label="Bitácora de turno" />
           </div>
         </header>
+        )}
 
         <div className="b-log-home__filters-card b-log-home__filters">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

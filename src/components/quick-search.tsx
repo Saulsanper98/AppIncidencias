@@ -29,11 +29,11 @@ import {
   LayoutDashboard,
   MapPinned,
   NotebookPen,
-  Package,
   Route,
   Search,
   Shield,
   UserCircle2,
+  Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -86,7 +86,7 @@ const ROUTES: StaticTarget[] = [
   { kind: "route", id: "dashboard", label: "Dashboard", hint: "Panel operativo", href: "/dashboard", Icon: LayoutDashboard, shortcut: "G D" },
   { kind: "route", id: "bandeja", label: "Bandeja", hint: "Listado de tickets", href: "/bandeja", Icon: Inbox, shortcut: "G B" },
   { kind: "route", id: "tickets", label: "Tickets", hint: "Nuevo ticket y mantenimiento preventivo", href: "/tickets", Icon: ClipboardList, shortcut: "G T" },
-  { kind: "route", id: "inventory", label: "Inventario", hint: "Repuestos y stock", href: "/inventory", Icon: Package, shortcut: "G I" },
+  { kind: "route", id: "preventivo", label: "Preventivo", hint: "Buses anómalos", href: "/preventivo", Icon: Wrench, shortcut: "G P" },
   { kind: "route", id: "mapa", label: "Mapa", hint: "Vista geográfica", href: "/mapa", Icon: MapPinned, shortcut: "G M" },
   { kind: "route", id: "novedades", label: "Novedades", hint: "Avisos y cambios de versión", href: "/novedades", Icon: Bell },
   { kind: "route", id: "kb", label: "Base de conocimiento", hint: "Manuales y FAQs", href: "/kb", Icon: BookOpen, shortcut: "G K" },

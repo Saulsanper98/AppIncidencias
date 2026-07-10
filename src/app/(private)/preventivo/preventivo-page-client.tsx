@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
-import { AnomalousBusesBanner } from "@/components/inventory/AnomalousBusesBanner";
+import { AnomalousBusesBanner } from "@/components/preventivo/AnomalousBusesBanner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { InlineCalendar } from "@/components/ui/inline-calendar";

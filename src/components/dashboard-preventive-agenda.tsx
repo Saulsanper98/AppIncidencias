@@ -113,7 +113,7 @@ export function DashboardPreventiveAgenda() {
           <p className="mt-0.5 text-xs text-[var(--color-text-3)]">No hay mantenimientos programados</p>
           <button
             type="button"
-            onClick={() => router.push("/inventory")}
+            onClick={() => router.push("/preventivo")}
             className="mt-3 inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]"
           >
             Ver inventario <ArrowRight size={11} strokeWidth={1.5} />

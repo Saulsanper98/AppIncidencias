@@ -26,7 +26,7 @@ export function ConductorViewPanel() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/tickets?status=todos&operator=todas&busId=todas", { cache: "no-store" });
+        const res = await fetch("/api/tickets?status=todos", { cache: "no-store" });
         if (!res.ok) return;
         const data = (await res.json()) as { tickets: TicketRow[] };
         setTickets(data.tickets ?? []);

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 import { DashboardCriticalChip } from "./DashboardCriticalChip";
 import { DashboardKpiStrip, getDashboardCriticalCounts } from "./DashboardKpiStrip";
+import { OperationalNowCard } from "./OperationalNowCard";
 import type { KpisData } from "./dashboard-types";
 
 function relativeRefresh(date: Date): string {
@@ -155,6 +156,8 @@ export function DashboardHero({
           />
         </div>
       ) : null}
+
+      {!isConductor ? <OperationalNowCard /> : null}
     </header>
   );
 }

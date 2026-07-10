@@ -161,10 +161,7 @@ export function canUseScheduler(role: UserRole) {
   return role === "gestor_centro_control";
 }
 
-/** Plantillas de ticket con alcance global (no solo personales). */
-export function canCreateGlobalTicketTemplate(role: UserRole) {
-  return role === "gestor_centro_control";
-}
+export { canCreateGlobalTicketTemplate, canCreateGroupTicketTemplate } from "@/lib/ticket-templates";
 
 /** Borrado directo de tickets (solo gestores). */
 export function canSoftDeleteTicket(role: UserRole) {

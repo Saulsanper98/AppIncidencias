@@ -7,9 +7,8 @@
  * red intentamos reenviar cada uno.
  *
  * El payload guardado es exactamente el JSON que se enviaría a
- * `POST /api/tickets`. No se incluyen archivos adjuntos (los Blobs no
- * sobreviven a `localStorage`); el usuario tendrá que añadirlos cuando
- * el ticket esté creado.
+ * `POST /api/tickets`. Los adjuntos se guardan en IndexedDB (`offline-attachments.ts`)
+ * y se referencian con `hasAttachments: true`.
  *
  * API mínima — el cliente puede:
  *  - `enqueue(payload)`: añade un borrador.
@@ -25,6 +24,7 @@ export type OfflineTicketDraft = {
   id: string;
   createdAt: string;
   payload: Record<string, unknown>;
+  hasAttachments?: boolean;
 };
 
 type Listener = () => void;
@@ -57,15 +57,28 @@ function genId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-export function enqueue(payload: Record<string, unknown>): OfflineTicketDraft {
+export function enqueue(payload: Record<string, unknown>, options?: { hasAttachments?: boolean }): OfflineTicketDraft {
   const draft: OfflineTicketDraft = {
     id: genId(),
     createdAt: new Date().toISOString(),
     payload,
+    hasAttachments: options?.hasAttachments ?? false,
   };
   const list = readAll();
   list.push(draft);
   writeAll(list);
+  return draft;
+}
+
+export async function enqueueWithAttachments(
+  payload: Record<string, unknown>,
+  files: File[],
+): Promise<OfflineTicketDraft> {
+  const draft = enqueue(payload, { hasAttachments: files.length > 0 });
+  if (files.length > 0) {
+    const { saveAttachments } = await import("@/lib/offline-attachments");
+    await saveAttachments(draft.id, files);
+  }
   return draft;
 }
 
@@ -95,13 +108,17 @@ export function subscribe(listener: Listener): () => void {
  * Retorna `{ sent, remaining }` con los contadores tras el ciclo.
  */
 export async function flush(
-  send: (payload: Record<string, unknown>) => Promise<void>,
+  send: (draft: OfflineTicketDraft) => Promise<void>,
 ): Promise<{ sent: number; remaining: number }> {
   const drafts = readAll();
   let sent = 0;
   for (const draft of drafts) {
     try {
-      await send(draft.payload);
+      await send(draft);
+      if (draft.hasAttachments) {
+        const { clearAttachments } = await import("@/lib/offline-attachments");
+        await clearAttachments(draft.id);
+      }
       remove(draft.id);
       sent++;
     } catch {

@@ -126,6 +126,9 @@ export async function GET(request: Request) {
     const mineRaw = searchParams.get("mine") ?? searchParams.get("assignee");
     const mineActive = mineRaw === "1" || mineRaw === "true" || mineRaw === "me";
     const onlyMine = mineActive && actor.userId ? actor.userId : null;
+    // Conductores solo ven tickets que ellos crearon.
+    const conductorScope =
+      actor.role === "conductor" && actor.userId ? actor.userId : null;
 
     let partTicketIds: string[] | null = null;
     if (partCodeRaw) {
@@ -157,6 +160,7 @@ export async function GET(request: Request) {
         bus: operator && operator !== "todas" ? { operator } : undefined,
         tipo: tipo && tipo !== "todos" ? tipo : undefined,
         ...(onlyMine ? { assignedToUserId: onlyMine } : {}),
+        ...(conductorScope ? { createdByUserId: conductorScope } : {}),
         ...(partTicketIds !== null
           ? partTicketIds.length > 0
             ? { id: { in: partTicketIds } }
@@ -479,6 +483,8 @@ export async function POST(request: Request) {
         lineaLabel: resolvedLineaLabel ?? null,
         servicioLabel: servicioLabel ?? null,
         conductorLabel: conductorLabel ?? null,
+        serviceStopped,
+        impactedLines,
         ...(latitude !== undefined && longitude !== undefined
           ? {
               latitude,

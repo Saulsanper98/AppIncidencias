@@ -57,7 +57,8 @@ function roleMatrix() {
   assert.equal(canUseScheduler("tecnico_campo"), false);
 
   assert.equal(canCreateGlobalTicketTemplate("gestor_centro_control"), true);
-  assert.equal(canCreateGlobalTicketTemplate("tecnico_campo"), false);
+  assert.equal(canCreateGlobalTicketTemplate("tecnico_campo"), true);
+  assert.equal(canCreateGlobalTicketTemplate("conductor"), false);
 
   assert.equal(canSoftDeleteTicket("tecnico_campo"), false);
   assert.equal(canSoftDeleteTicket("gestor_centro_control"), true);

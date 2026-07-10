@@ -203,6 +203,8 @@ export async function GET(request: Request) {
       assetType: t.asset.type,
       linea: t.lineaLabel ?? "",
       servicio: t.servicioLabel ?? "",
+      serviceStopped: t.serviceStopped,
+      impactedLines: t.impactedLines,
       conductor: t.conductorLabel ?? "",
       assignedTo: t.assignedTo?.name ?? "",
       slaDeadline: t.slaDeadline,

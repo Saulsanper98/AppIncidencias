@@ -27,6 +27,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { DesvioImportPdfDialog } from "@/components/desvios/DesvioImportPdfDialog";
 import { EstadoBadge } from "@/components/desvios/EstadoBadge";
 import { OrigenBadge } from "@/components/desvios/OrigenBadge";
+import { PollerStatusChip } from "@/components/desvios/PollerStatusChip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Input } from "@/components/ui/input";
@@ -520,9 +521,12 @@ function Header({
               <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
               CCMGC · Operación
             </div>
-            <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
-              Desvíos
-            </h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h1 className="dashboard-hero-title text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
+                Desvíos
+              </h1>
+              <PollerStatusChip />
+            </div>
             <p className="mt-1 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
               Circulares informativas detectadas automáticamente o creadas a mano.
               Confirma los pendientes, archiva los resueltos.

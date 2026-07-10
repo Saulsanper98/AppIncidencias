@@ -30,6 +30,7 @@ import {
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { DesviosReportPanel } from "@/components/reports/DesviosReportPanel";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -620,6 +621,8 @@ export default function ReportesPage() {
           </section>
         </>
       )}
+
+      <DesviosReportPanel />
     </div>
   );
 }

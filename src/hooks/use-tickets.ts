@@ -8,7 +8,6 @@ import type {
   CatalogBus,
   CatalogPayload,
   CreateTicketPayload,
-  InventorySummaryItem,
   LocalUser,
   MaintenanceAlertView,
   PreventiveTaskView,
@@ -78,7 +77,6 @@ export function useTickets() {
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<"success" | "warning" | "info">("success");
   const [noticePlacement, setNoticePlacement] = useState<"card" | "toast" | "center">("card");
-  const [inventorySummary, setInventorySummary] = useState<InventorySummaryItem[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEventView[]>([]);
   const [maintenanceAlerts, setMaintenanceAlerts] = useState<MaintenanceAlertView[]>([]);
   // Ventana en días con la que el backend está agrupando los fallos para las
@@ -500,16 +498,6 @@ export function useTickets() {
     [currentUserId, role],
   );
 
-  const fetchInventorySummary = useCallback(async () => {
-    const response = await fetch("/api/inventory/summary", { cache: "no-store" });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error(text || "Error al cargar inventario");
-    }
-    const data = JSON.parse(text) as { summary: InventorySummaryItem[] };
-    setInventorySummary(data.summary);
-  }, []);
-
   const fetchAuditEvents = useCallback(async () => {
     const response = await fetch("/api/audit/recent", { cache: "no-store" });
     const text = await response.text();
@@ -574,7 +562,6 @@ export function useTickets() {
         "todos",
         initialMine,
       );
-      await fetchInventorySummary();
       await fetchAuditEvents();
       await fetchMaintenanceAlerts();
       await fetchPreventiveTasks();
@@ -589,7 +576,6 @@ export function useTickets() {
     fetchUsers,
     fetchSession,
     fetchTickets,
-    fetchInventorySummary,
     fetchAuditEvents,
     fetchMaintenanceAlerts,
     fetchPreventiveTasks,
@@ -613,7 +599,6 @@ export function useTickets() {
 
   const refreshTicketsAndSideData = useCallback(async () => {
     await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
-    await fetchInventorySummary();
     await fetchAuditEvents();
     await fetchMaintenanceAlerts();
     await fetchPreventiveTasks();
@@ -626,7 +611,6 @@ export function useTickets() {
     onlyMine,
     tipoFilter,
     fetchTickets,
-    fetchInventorySummary,
     fetchAuditEvents,
     fetchMaintenanceAlerts,
     fetchPreventiveTasks,
@@ -772,17 +756,10 @@ export function useTickets() {
           : {}),
       };
 
-      // Si estamos offline y NO hay adjuntos (no se pueden serializar Files
-      // a localStorage), encolamos el borrador para envío diferido. El
-      // OfflineQueueIndicator del layout privado avisará al usuario y hará
-      // los reintentos al recuperar conexión.
-      if (
-        typeof navigator !== "undefined" &&
-        navigator.onLine === false &&
-        stagedUploadFiles.length === 0
-      ) {
-        const { enqueue } = await import("@/lib/offline-ticket-queue");
-        enqueue(ticketJson);
+      // Si estamos offline, encolamos el borrador (con adjuntos en IndexedDB si los hay).
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        const { enqueueWithAttachments } = await import("@/lib/offline-ticket-queue");
+        await enqueueWithAttachments(ticketJson, stagedUploadFiles);
         try {
           sessionStorage.removeItem(TICKET_FORM_DRAFT_KEY);
         } catch {
@@ -836,11 +813,6 @@ export function useTickets() {
       }
 
       const resPayload = (await response.json()) as {
-        inventory?: {
-          status: "reservado" | "sin_stock" | "skipped";
-          partCode: string;
-          warehouseName?: string;
-        };
         createdClosed?: boolean;
         assignedToActor?: boolean;
       };
@@ -851,12 +823,6 @@ export function useTickets() {
           resPayload.assignedToActor
             ? "Ticket creado y cerrado en tu nombre."
             : "Ticket creado directamente como resuelto.",
-        );
-      } else if (resPayload.inventory?.status === "reservado") {
-        setNoticeTone("info");
-        setNoticePlacement("center");
-        setNotice(
-          `Repuesto ${resPayload.inventory.partCode} reservado en ${resPayload.inventory.warehouseName ?? "almacén"}.`,
         );
       }
 
@@ -1346,7 +1312,6 @@ export function useTickets() {
     setNoticeTone,
     noticePlacement,
     setNoticePlacement,
-    inventorySummary,
     auditEvents,
     maintenanceAlerts,
     maintenanceWindowDays,

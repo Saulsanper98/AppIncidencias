@@ -1,4 +1,4 @@
-const ALLOWED_PREFIXES = ["/dashboard", "/bandeja", "/tickets", "/inventory", "/dashboards", "/admin"] as const;
+const ALLOWED_PREFIXES = ["/dashboard", "/bandeja", "/tickets", "/conductor", "/dashboards", "/admin"] as const;
 
 /** Evita redirecciones abiertas: solo rutas internas permitidas. */
 export function safeInternalNextPath(raw: string | null | undefined): string | null {

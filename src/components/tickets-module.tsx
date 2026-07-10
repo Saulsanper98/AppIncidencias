@@ -42,6 +42,8 @@ import { ExcelExportMenu } from "@/components/tickets/ExcelExportMenu";
 import { QuickTicketDialog } from "@/components/tickets/QuickTicketDialog";
 import { SavedViewsBar } from "@/components/tickets/SavedViewsBar";
 import { ExpressTicketPanel } from "@/components/tickets/ExpressTicketPanel";
+import { isUiUnificationEnabled } from "@/ui-unification/feature";
+import { TicketsModuleHeroUnified } from "@/ui-unification/heroes/TicketsModuleHeroUnified";
 import { TicketCreateForm } from "@/components/tickets/TicketCreateForm";
 import { TicketsBandeja } from "@/components/tickets/TicketsBandeja";
 import type {
@@ -416,6 +418,23 @@ function TicketsHeroHeader({
   maintenanceAlertsCount?: number;
   preventiveTasksCount?: number;
 }) {
+  if (isUiUnificationEnabled()) {
+    return (
+      <TicketsModuleHeroUnified
+        view={view}
+        total={total}
+        abiertos={abiertos}
+        borradores={borradores}
+        enProceso={enProceso}
+        esperandoRepuesto={esperandoRepuesto}
+        resueltosHoy={resueltosHoy}
+        slaVencidos={slaVencidos}
+        maintenanceAlertsCount={maintenanceAlertsCount}
+        preventiveTasksCount={preventiveTasksCount}
+      />
+    );
+  }
+
   const copy =
     view === "manage"
       ? {

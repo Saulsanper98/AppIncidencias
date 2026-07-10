@@ -21,6 +21,7 @@ import { MotionPrefSync } from "@/components/motion-pref-sync";
 import { NavigationProgress } from "@/components/navigation-progress";
 import { NotificationBell } from "@/components/notification-bell";
 import { OfflineQueueIndicator } from "@/components/OfflineQueueIndicator";
+import { UiUnificationProvider } from "@/ui-unification/UiUnificationProvider";
 import { PushNotificationPrompt } from "@/components/notifications/PushNotificationPrompt";
 import { QuickSearch } from "@/components/quick-search";
 import { ToastHost } from "@/components/toast-host";
@@ -65,7 +66,6 @@ export default function PrivateLayout({
   const [kbCrumbTitle, setKbCrumbTitle] = useState<string | null>(null);
   const [bitacoraCrumbTitle, setBitacoraCrumbTitle] = useState<string | null>(null);
   const [desvioCrumbTitle, setDesvioCrumbTitle] = useState<string | null>(null);
-  const [inventoryControlRoom, setInventoryControlRoom] = useState(false);
   const [mapaMuro, setMapaMuro] = useState(false);
   const [lecturaMuro, setLecturaMuro] = useState(false);
   const [feedbackTarget, setFeedbackTarget] = useState<FeedbackPrefillTarget | null>(null);
@@ -101,15 +101,6 @@ export default function PrivateLayout({
     if (parts[0] === "tickets" && parts.length === 2 && parts[1]) return;
     router.replace("/lectura");
   }, [sessionUser?.isReadOnly, pathname, router]);
-
-  useEffect(() => {
-    const onInvSurface = (e: Event) => {
-      const ce = e as CustomEvent<{ active?: boolean }>;
-      setInventoryControlRoom(Boolean(ce.detail?.active));
-    };
-    window.addEventListener("ccmgc-inventory-control-room", onInvSurface as EventListener);
-    return () => window.removeEventListener("ccmgc-inventory-control-room", onInvSurface as EventListener);
-  }, []);
 
   useEffect(() => {
     // Evento global "ccmgc-open-feedback": tres modos de uso.
@@ -300,8 +291,8 @@ export default function PrivateLayout({
     if (pathname.startsWith("/dashboard")) {
       return [root, { label: "Dashboard", href: "/dashboard" }];
     }
-    if (pathname.startsWith("/inventory")) {
-      return [root, { label: "Inventario", href: "/inventory" }];
+    if (pathname.startsWith("/conductor")) {
+      return [root, { label: "Conductor", href: "/conductor" }];
     }
     if (pathname.startsWith("/mapa")) {
       return [root, { label: "Mapa", href: "/mapa" }];
@@ -385,6 +376,7 @@ export default function PrivateLayout({
   const appChromeHidden = mapaMuroChrome || lecturaMuroChrome;
 
   return (
+    <UiUnificationProvider>
     <div
       className={
         isMapaRoute
@@ -402,9 +394,7 @@ export default function PrivateLayout({
         <MapaMuroUrlSync setMapaMuro={setMapaMuro} />
         <LecturaMuroUrlSync setLecturaMuro={setLecturaMuro} />
       </Suspense>
-      {inventoryControlRoom ? null : (
-        <AppSidebar chromeFadeHidden={appChromeHidden} />
-      )}
+      <AppSidebar chromeFadeHidden={appChromeHidden} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Banner global de avisos críticos / warnings. Aparece encima del
             header cuando hay un Announcement publicado y sin leer. Se monta
@@ -424,12 +414,7 @@ export default function PrivateLayout({
         <header
           className={cn(
             "ccmgc-glass-header ccmgc-app-header",
-            inventoryControlRoom
-              ? // En movil reservamos pl-14 para que el boton hamburguesa
-                // flotante del sidebar (fixed left-4 top-4, 44px) no tape
-                // los breadcrumbs ni la primera accion del header.
-                "sticky top-0 z-20 flex h-11 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)]/90 pl-14 pr-3 backdrop-blur-md md:pl-4 md:pr-4"
-              : "sticky top-0 z-20 flex h-14 items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 pl-14 pr-3 backdrop-blur-md sm:gap-3 md:pl-4 md:pr-4 lg:pl-6 lg:pr-6",
+            "sticky top-0 z-20 flex h-14 items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 pl-14 pr-3 backdrop-blur-md sm:gap-3 md:pl-4 md:pr-4 lg:pl-6 lg:pr-6",
             "app-chrome-fade-out",
             appChromeHidden && "app-chrome-fade-out--hidden",
           )}
@@ -551,15 +536,10 @@ export default function PrivateLayout({
           // pagina entera ni provoca que la barra inferior aparezca en
           // movil cuando un descendiente se sale por la derecha.
           className={
-            inventoryControlRoom
-              ? "min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-2 md:px-4 md:pb-4 md:pt-3"
-              : appChromeHidden
-                ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-1 pb-1 pt-1 sm:px-2 sm:pb-2 sm:pt-2"
+            appChromeHidden
+              ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-1 pb-1 pt-1 sm:px-2 sm:pb-2 sm:pt-2"
               : isMapaRoute
                 ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-3 sm:px-4 md:px-6 md:pb-6 md:pt-4"
-                // Padding reducido en movil para no robar 48px (px-6) que en
-                // pantallas de 320px son el 15% del ancho. En tablets y
-                // desktop volvemos al ritmo de 24px.
                 : "min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-3 sm:px-4 md:px-6 md:pb-6 md:pt-4"
           }
         >
@@ -587,5 +567,6 @@ export default function PrivateLayout({
       {/* El FAB de feedback no aplica a cuentas de solo lectura: no pueden enviar nada. */}
       {sessionUser?.isReadOnly ? null : <FeedbackFAB />}
     </div>
+    </UiUnificationProvider>
   );
 }

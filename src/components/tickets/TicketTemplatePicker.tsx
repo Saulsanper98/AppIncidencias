@@ -9,6 +9,7 @@ import { Input, Select } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import type { FormState } from "@/components/tickets/tickets-module-types";
 import type { SessionUser } from "@/lib/domain";
+import { canCreateGroupTicketTemplate, ticketTemplateScopeLabel } from "@/lib/ticket-templates";
 import { cn } from "@/lib/utils";
 
 /**
@@ -45,6 +46,8 @@ type Props = {
   sessionUser: SessionUser | null;
   /** Sin cáscara colapsable: contenido directo (p. ej. dentro de «Más contexto»). */
   embedded?: boolean;
+  /** Expandido al montar (recomendado en el formulario de nuevo ticket). */
+  defaultExpanded?: boolean;
 };
 
 function templateSubtitle(tpl: TicketTemplate): string {
@@ -60,9 +63,15 @@ function templateSubtitle(tpl: TicketTemplate): string {
  * Vive en la cabecera del formulario (fuera del acordeón de pasos) como
  * franja colapsable premium. Solo carga el listado al expandir por primera vez.
  */
-export function TicketTemplatePicker({ form, setForm, sessionUser, embedded = false }: Props) {
+export function TicketTemplatePicker({
+  form,
+  setForm,
+  sessionUser,
+  embedded = false,
+  defaultExpanded = false,
+}: Props) {
   const reduceMotion = useReducedMotion();
-  const [expanded, setExpanded] = useState(embedded);
+  const [expanded, setExpanded] = useState(embedded || defaultExpanded);
   const [templates, setTemplates] = useState<TicketTemplate[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,13 +149,18 @@ export function TicketTemplatePicker({ form, setForm, sessionUser, embedded = fa
     if (!templates) return [] as { key: string; label: string; items: TicketTemplate[] }[];
     const byKey = new Map<string, { key: string; label: string; items: TicketTemplate[] }>();
     for (const t of templates) {
+      const scopeLabel = ticketTemplateScopeLabel(t.scope);
       const key = `${t.scope}::${t.category ?? "—"}`;
-      const label =
-        (t.scope === "global" ? "Compartidas" : "Mis plantillas") + (t.category ? ` · ${t.category}` : "");
+      const label = `${scopeLabel}${t.category ? ` · ${t.category}` : ""}`;
       if (!byKey.has(key)) byKey.set(key, { key, label, items: [] });
       byKey.get(key)!.items.push(t);
     }
-    return Array.from(byKey.values());
+    const order = (scope: string) => (scope === "personal" ? 1 : 0);
+    return Array.from(byKey.values()).sort((a, b) => {
+      const scopeA = a.key.split("::")[0] ?? "";
+      const scopeB = b.key.split("::")[0] ?? "";
+      return order(scopeA) - order(scopeB) || a.label.localeCompare(b.label, "es");
+    });
   }, [templates]);
 
   const canSaveTemplate = Boolean(form.title || form.description || form.tipo);
@@ -155,7 +169,8 @@ export function TicketTemplatePicker({ form, setForm, sessionUser, embedded = fa
     <div className={cn("ccmgc-template-panel", embedded && "!border-0 !bg-transparent !p-0")}>
       <div className="ccmgc-template-panel__toolbar">
         <p className="ccmgc-template-panel__intro">
-          Aplica una plantilla y ajusta lo que necesites. El bus y el equipo no se modifican.
+          Elige una plantilla para rellenar el formulario al instante, o guarda la configuración actual como plantilla
+          personal o de equipo.
         </p>
         <Button
           type="button"
@@ -188,7 +203,7 @@ export function TicketTemplatePicker({ form, setForm, sessionUser, embedded = fa
           <Layers size={18} className="text-[var(--color-text-3)]" aria-hidden />
           <p>Aún no hay plantillas guardadas.</p>
           <p className="text-[11px] text-[var(--color-text-3)]">
-            Rellena el formulario y pulsa «Guardar como plantilla».
+            Rellena título, tipología o descripción y pulsa «Guardar como plantilla» para crear la tuya.
           </p>
         </div>
       ) : (
@@ -286,7 +301,7 @@ export function TicketTemplatePicker({ form, setForm, sessionUser, embedded = fa
           </span>
           <span className="ccmgc-template-trigger__copy">
             <span className="ccmgc-template-trigger__title">Plantillas de ticket</span>
-            <span className="ccmgc-template-trigger__hint">Rellena tipología y detalle con un clic</span>
+            <span className="ccmgc-template-trigger__hint">Personal o de equipo · aplicar o guardar con un clic</span>
           </span>
         </span>
         <span className="ccmgc-template-trigger__meta">
@@ -334,7 +349,7 @@ function SaveTemplateDialog({
   onClose: () => void;
   onSaved: (tpl: TicketTemplate) => void;
 }) {
-  const canShare = sessionUser?.role === "gestor_centro_control";
+  const canShare = canCreateGroupTicketTemplate(sessionUser?.role ?? "conductor");
   const [name, setName] = useState(() => {
     const base = form.title?.trim();
     return base && base.length > 0 ? base.slice(0, 80) : "";
@@ -448,9 +463,9 @@ function SaveTemplateDialog({
             disabled={!canShare}
             className="mt-1"
           >
-            <option value="personal">Solo para mí</option>
+            <option value="personal">Personal — solo yo</option>
             <option value="global" disabled={!canShare}>
-              Compartida con todo el centro de control{canShare ? "" : " (requiere gestor)"}
+              Del equipo — compartida con técnicos y gestores{canShare ? "" : " (requiere rol operativo)"}
             </option>
           </Select>
         </label>

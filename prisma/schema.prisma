@@ -263,6 +263,10 @@ model Ticket {
   lineaLabel String?
   /// Etiqueta libre del servicio/turno/recorrido (opcional, texto libre puro).
   servicioLabel String?
+  /// Si la incidencia detuvo el servicio comercial (persistido para BI / KPIs).
+  serviceStopped Boolean @default(false)
+  /// Número de líneas impactadas declaradas al crear (1–10).
+  impactedLines  Int     @default(1)
   /// Nombre del conductor en el momento de la incidencia (opcional, texto libre).
   conductorLabel String?
   /// Técnico de campo asignado al ticket (opcional).
@@ -916,8 +920,8 @@ model AnnouncementRead {
 
 /// Plantilla de ticket reutilizable. Pre-rellena título, descripción, tipo,
 /// subtipo, subsubtipo y prioridad al crear un ticket. `scope = personal` =>
-/// solo la ve / edita el dueño; `scope = global` => visible para todos pero
-/// editable solo por gestores. Campo `category` libre para agrupar en el UI.
+/// solo la ve / edita el dueño; `scope = global` => visible para el equipo
+/// operativo (técnicos y gestores) pero editable por su autor o un gestor.
 model TicketTemplate {
   id          String          @id @default(cuid())
   name        String

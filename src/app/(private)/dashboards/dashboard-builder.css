@@ -1,0 +1,31 @@
+.dashboard-widget-card {
+  background-image: linear-gradient(
+    165deg,
+    color-mix(in oklab, var(--color-surface) 92%, var(--color-accent) 8%) 0%,
+    var(--color-surface) 42%
+  );
+}
+
+.dashboard-kpi-card {
+  background-image: radial-gradient(
+    ellipse 80% 60% at 100% 0%,
+    color-mix(in oklab, var(--kpi-accent, var(--color-accent)) 12%, transparent),
+    transparent 70%
+  );
+}
+
+.dashboard-template-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.dashboard-template-card:hover {
+  transform: translateY(-2px);
+}
+
+.dashboard-preset-chip {
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.dashboard-preset-chip:hover {
+  transform: translateY(-1px);
+}
