@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     let parsed;
     try {
-      parsed = parseBusImportBuffer(buffer);
+      parsed = await parseBusImportBuffer(buffer);
     } catch (error) {
       return NextResponse.json(
         { message: error instanceof Error ? error.message : "No se pudo leer el archivo." },

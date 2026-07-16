@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomInt } from "node:crypto";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -50,14 +51,14 @@ export function generateTemporaryPassword(): string {
   const digits = "23456789"; // sin 0/1
   const all = lower + upper + digits;
 
-  const rand = (chars: string) => chars[Math.floor(Math.random() * chars.length)];
+  const rand = (chars: string) => chars[randomInt(0, chars.length)];
 
   // Garantizamos al menos un caracter de cada grupo para cumplir validateStrength.
   const required = [rand(upper), rand(lower), rand(digits), rand(digits)];
   while (required.length < 14) required.push(rand(all));
 
   for (let i = required.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(0, i + 1);
     [required[i], required[j]] = [required[j], required[i]];
   }
 

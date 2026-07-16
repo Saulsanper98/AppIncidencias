@@ -39,6 +39,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { HandoverPendingItem } from "@/lib/handover-pending-items";
 import { pendingTextFromTicket } from "@/lib/handover-pending-items";
 import { hapticMedium } from "@/lib/motion";
+import {
+  currentShiftFromHour,
+  formatRelativeShort,
+  SHIFT_LABEL as SHIFT_LABEL_BASE,
+  todayYmd,
+  type ShiftKey,
+} from "@/lib/shift-utils";
 import { cn } from "@/lib/utils";
 import { isUiUnificationEnabled } from "@/ui-unification/feature";
 import { HandoverHeroUnified } from "@/ui-unification/heroes/HandoverHeroUnified";
@@ -57,7 +64,7 @@ import { HandoverHeroUnified } from "@/ui-unification/heroes/HandoverHeroUnified
 type Handover = {
   id: string;
   shiftDate: string;
-  shift: "M" | "T" | "N";
+  shift: ShiftKey;
   authorId: string | null;
   authorName: string | null;
   summary: string;
@@ -80,30 +87,18 @@ function parseTimelineTab(raw: string | null): TimelineTab {
   return "all";
 }
 
-const SHIFT_LABEL: Record<Handover["shift"], string> = {
-  M: "Mañana",
-  T: "Tarde",
-  N: "Noche",
-};
-const SHIFT_ICON: Record<Handover["shift"], typeof Sunrise> = {
+const SHIFT_LABEL: Record<ShiftKey, string> = SHIFT_LABEL_BASE;
+const SHIFT_ICON: Record<ShiftKey, typeof Sunrise> = {
   M: Sunrise,
   T: Sunset,
   N: Moon,
 };
 
-function todayYmd(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 const HANDOVER_DRAFT_KEY = "ccmgc_handover_draft_v2";
 
 type HandoverDraft = {
   shiftDate: string;
-  shift: "M" | "T" | "N";
+  shift: ShiftKey;
   summary: string;
   alerts: string;
   /** Líneas de pendientes en borrador (aún sin id de servidor). */
@@ -122,24 +117,6 @@ function newDraftLineId(): string {
 }
 
 type PendingDraftRow = { key: string; text: string; ticketId?: string | null };
-
-function formatRelativeShort(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  if (seconds < 5) return "ahora mismo";
-  if (seconds < 60) return `hace ${seconds}s`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `hace ${minutes} min`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `hace ${hours}h`;
-  const days = Math.round(hours / 24);
-  return `hace ${days}d`;
-}
-
-function currentShiftFromHour(hour: number): "M" | "T" | "N" {
-  if (hour >= 6 && hour < 14) return "M";
-  if (hour >= 14 && hour < 22) return "T";
-  return "N";
-}
 
 export default function HandoverPage() {
   const router = useRouter();
@@ -395,6 +372,15 @@ export default function HandoverPage() {
       setPendingSuggestBusy(false);
     }
   }, [pendingSuggestBusy]);
+
+  /** Al abrir el formulario vacío, pre-rellena checklist una vez con tickets alta. */
+  const autoSuggestDoneRef = useRef(false);
+  useEffect(() => {
+    if (autoSuggestDoneRef.current) return;
+    if (pendingDraft.length > 0 || summary.trim() || alerts.trim()) return;
+    autoSuggestDoneRef.current = true;
+    void suggestUrgentPending();
+  }, [pendingDraft.length, summary, alerts, suggestUrgentPending]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -71,6 +71,16 @@ export async function GET(request: Request) {
 
     const statusWhere = ticketStatusWhereForFilters(status, scope, { includeBorrador: true });
 
+    const limitRaw = Number.parseInt(searchParams.get("limit") ?? "2000", 10);
+    const limit = Math.min(5000, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 2000));
+
+    const west = Number.parseFloat(searchParams.get("west") ?? "");
+    const south = Number.parseFloat(searchParams.get("south") ?? "");
+    const east = Number.parseFloat(searchParams.get("east") ?? "");
+    const north = Number.parseFloat(searchParams.get("north") ?? "");
+    const hasBbox =
+      [west, south, east, north].every((n) => Number.isFinite(n)) && west < east && south < north;
+
     const where = {
       status: statusWhere,
       priority: priority === "todos" ? undefined : priority,
@@ -84,6 +94,12 @@ export async function GET(request: Request) {
       ...(urgent ? { OR: [{ priority: "alta" as const }, { slaDeadline: { lt: now } }] } : {}),
       ...(createdAfter ? { createdAt: { gte: createdAfter } } : {}),
       ...(createdBefore ? { createdAt: { lte: createdBefore } } : {}),
+      ...(hasBbox
+        ? {
+            latitude: { gte: south, lte: north },
+            longitude: { gte: west, lte: east },
+          }
+        : {}),
     };
 
     const selectBase = {
@@ -118,6 +134,7 @@ export async function GET(request: Request) {
         where,
         select: { ...selectBase, mapPlaceMunicipio: true },
         orderBy: { createdAt: "desc" },
+        take: limit,
       });
     } catch (error) {
       if (!isMissingMapPlaceMunicipioColumn(error)) throw error;
@@ -125,6 +142,7 @@ export async function GET(request: Request) {
         where,
         select: { ...selectBase },
         orderBy: { createdAt: "desc" },
+        take: limit,
       });
     }
 
@@ -148,6 +166,8 @@ export async function GET(request: Request) {
       center: GRAN_CANARIA_CENTER,
       bounds: GRAN_CANARIA_BOUNDS,
       features,
+      limit,
+      truncated: features.length >= limit,
       fetchedAt: now.toISOString(),
     });
   } catch (error) {

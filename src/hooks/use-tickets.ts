@@ -34,10 +34,12 @@ import {
   type TicketCsvExportRow,
 } from "@/lib/tickets/ticket-export-csv";
 import { currentShiftFromHour, type ShiftKey, VALID_SHIFTS } from "@/lib/shift-utils";
+import { toast } from "@/components/toast-host";
 
 export function useTickets() {
   const router = useRouter();
   const pathname = usePathname();
+  const slaToastShownRef = useRef(false);
   // Ruta base sobre la que sincronizamos los filtros como query string.
   // El modulo de tickets vive en dos paginas distintas: /bandeja (vista
   // primaria del centro) y /tickets (gestion + preventivo). Cuando el
@@ -526,6 +528,22 @@ export function useTickets() {
       }
       const data = JSON.parse(text) as { tickets: TicketView[] };
       setTickets(data.tickets);
+      if (!slaToastShownRef.current) {
+        const now = Date.now();
+        const overdue = data.tickets.filter(
+          (t) =>
+            t.status !== "resuelto" &&
+            Boolean(t.slaDeadline) &&
+            new Date(t.slaDeadline).getTime() < now,
+        ).length;
+        if (overdue > 0) {
+          slaToastShownRef.current = true;
+          toast.warning(`${overdue} ticket(s) con SLA vencido`, {
+            description: "Revisa la bandeja con filtro SLA o el panel de salud del turno.",
+            duration: 6000,
+          });
+        }
+      }
     },
     [currentUserId, role],
   );
@@ -1466,6 +1484,7 @@ export function useTickets() {
     inboxScreenReaderSummary,
     filtersInUrl,
     loadData,
+    refreshTicketsAndSideData,
     handleCreateTicket,
     openStatusChangeModal,
     handleStatusChange,

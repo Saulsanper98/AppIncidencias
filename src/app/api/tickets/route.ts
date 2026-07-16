@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 // El handler maneja subidas multipart con vídeos (hasta 120 MB combinados),
@@ -150,62 +149,53 @@ export async function GET(request: Request) {
       }
     }
 
-    const tickets = await prisma.ticket.findMany({
-      where: {
-        ...(status === "borrador"
-          ? pendingCompletionWhere()
-          : { status: status === "todos" ? undefined : status }),
-        priority: priority === "todos" ? undefined : priority,
-        busId: busId && busId !== "todas" ? busId : undefined,
-        bus: operator && operator !== "todas" ? { operator } : undefined,
-        tipo: tipo && tipo !== "todos" ? tipo : undefined,
-        ...(onlyMine ? { assignedToUserId: onlyMine } : {}),
-        ...(conductorScope ? { createdByUserId: conductorScope } : {}),
-        ...(partTicketIds !== null
-          ? partTicketIds.length > 0
-            ? { id: { in: partTicketIds } }
-            : { id: { equals: "__ccmgc_no_ticket_for_partcode__" } }
-          : {}),
-      },
-      include: {
-        bus: true,
-        asset: true,
-        assignedTo: { select: { id: true, name: true } },
-        comments: {
-          orderBy: { createdAt: "desc" },
-        },
-        attachments: {
-          orderBy: { createdAt: "desc" },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    // Los metadatos de adjunto (mimeType, sizeBytes) están en columnas que Prisma
-    // no genera todavía en el select de include, así que tiramos de raw query.
-    // Feo pero funciona hasta que migremos a un campo calculado.
-    const attachmentIds = tickets.flatMap((t) => t.attachments.map((a) => a.id));
-    type AttachmentMetaRow = {
-      id: string;
-      mimeType: string | null;
-      sizeBytes: number | null;
-      diskFileName: string | null;
+    const where = {
+      ...(status === "borrador"
+        ? pendingCompletionWhere()
+        : { status: status === "todos" ? undefined : status }),
+      priority: priority === "todos" ? undefined : priority,
+      busId: busId && busId !== "todas" ? busId : undefined,
+      bus: operator && operator !== "todas" ? { operator } : undefined,
+      tipo: tipo && tipo !== "todos" ? tipo : undefined,
+      ...(onlyMine ? { assignedToUserId: onlyMine } : {}),
+      ...(conductorScope ? { createdByUserId: conductorScope } : {}),
+      ...(partTicketIds !== null
+        ? partTicketIds.length > 0
+          ? { id: { in: partTicketIds } }
+          : { id: { equals: "__ccmgc_no_ticket_for_partcode__" } }
+        : {}),
     };
-    const metaById = new Map<string, AttachmentMetaRow>();
-    if (attachmentIds.length > 0) {
-      const rows = await prisma.$queryRaw<AttachmentMetaRow[]>`
-        SELECT "id", "mimeType", "sizeBytes", "diskFileName"
-        FROM "TicketAttachment"
-        WHERE "id" IN (${Prisma.join(attachmentIds)})
-      `;
-      for (const row of rows) {
-        metaById.set(row.id, row);
-      }
-    }
+
+    // Listado ligero: sin bodies de comentarios/adjuntos (van en GET /api/tickets/[id]).
+    const pageRaw = Number.parseInt(searchParams.get("page") ?? "1", 10);
+    const pageSizeRaw = Number.parseInt(searchParams.get("pageSize") ?? "200", 10);
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+    const pageSize = Math.min(500, Math.max(1, Number.isFinite(pageSizeRaw) ? pageSizeRaw : 200));
+    const skip = (page - 1) * pageSize;
+
+    const [total, tickets] = await Promise.all([
+      prisma.ticket.count({ where }),
+      prisma.ticket.findMany({
+        where,
+        include: {
+          bus: true,
+          asset: true,
+          assignedTo: { select: { id: true, name: true } },
+          _count: { select: { comments: true, attachments: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: pageSize,
+      }),
+    ]);
 
     return NextResponse.json({
       role: actor.role,
       actorName: actor.displayName,
+      page,
+      pageSize,
+      total,
+      hasMore: skip + tickets.length < total,
       tickets: tickets.map((ticket) => ({
         id: ticket.id,
         busId: ticket.busId,
@@ -237,23 +227,10 @@ export async function GET(request: Request) {
         updatedAt: ticket.updatedAt.toISOString(),
         incidentOccurredAt: ticket.incidentOccurredAt?.toISOString() ?? null,
         needsCompletion: ticket.needsCompletion,
-        attachments: ticket.attachments.map((a) => {
-          const meta = metaById.get(a.id);
-          const diskFileName = meta?.diskFileName ?? null;
-          return {
-            id: a.id,
-            fileName: a.fileName,
-            mimeType: meta?.mimeType ?? null,
-            sizeBytes: meta?.sizeBytes ?? null,
-            downloadUrl: diskFileName ? `/api/tickets/attachments/${a.id}` : null,
-          };
-        }),
-        comments: ticket.comments.map((comment) => ({
-          id: comment.id,
-          author: comment.author,
-          body: comment.body,
-          createdAt: comment.createdAt.toISOString(),
-        })),
+        commentCount: ticket._count.comments,
+        attachmentCount: ticket._count.attachments,
+        attachments: [],
+        comments: [],
       })),
     });
   } catch (error) {

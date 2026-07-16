@@ -235,6 +235,8 @@ model Asset {
   slaMinutes   Int?
   bus          Bus       @relation(fields: [busId], references: [id], onDelete: Cascade)
   tickets      Ticket[]
+
+  @@index([busId])
 }
 
 model Ticket {
@@ -300,6 +302,11 @@ model Ticket {
   @@index([createdByUserId])
   @@index([resolvedAt])
   @@index([status, updatedAt])
+  @@index([busId])
+  @@index([assignedToUserId])
+  @@index([createdAt])
+  @@index([slaDeadline])
+  @@index([assetId])
 }
 
 /// Relacion N:N entre tickets para "adjuntar" tickets ya resueltos (u otros)
@@ -497,6 +504,8 @@ model TicketComment {
   body      String
   createdAt DateTime @default(now())
   ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
 }
 
 model TicketAttachment {
@@ -509,6 +518,8 @@ model TicketAttachment {
   diskFileName String?
   createdAt    DateTime @default(now())
   ticket       Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
 }
 
 model Warehouse {
@@ -784,6 +795,10 @@ model PreventiveTask {
   bus             Bus                  @relation(fields: [busId], references: [id], onDelete: Cascade)
   createdByUser   User?                @relation("PreventiveTaskCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   assignedToUser  User?                @relation("PreventiveTaskAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  @@index([busId])
+  @@index([status])
+  @@index([scheduledAt])
 }
 
 model CustomDashboard {

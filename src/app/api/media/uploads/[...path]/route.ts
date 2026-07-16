@@ -6,12 +6,10 @@ import type { ReadableStream as NodeReadable } from "node:stream/web";
 import { Readable } from "stream";
 
 import { isMediaAuthError, requireMediaSession } from "@/lib/api-auth";
-import { isSafeUploadId, resolveSafeUploadsPath } from "@/lib/safe-upload-path";
+import { resolveSafeUploadsPath } from "@/lib/safe-upload-path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const MAX_NAME_LEN = 128;
 
 const EXT_MIME: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -19,33 +17,23 @@ const EXT_MIME: Record<string, string> = {
   ".png": "image/png",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".pdf": "application/pdf",
   ".mp4": "video/mp4",
   ".webm": "video/webm",
   ".mov": "video/quicktime",
-  ".pdf": "application/pdf",
+  ".bin": "application/octet-stream",
 };
 
 export async function GET(
   request: Request,
-  ctx: { params: Promise<{ articleId: string; name: string }> },
+  ctx: { params: Promise<{ path: string[] }> },
 ) {
   const session = requireMediaSession(request);
   if (isMediaAuthError(session)) return session;
 
-  const { articleId, name } = await ctx.params;
-  if (
-    !articleId ||
-    !isSafeUploadId(articleId) ||
-    !name ||
-    name.length > MAX_NAME_LEN ||
-    !/^[a-zA-Z0-9_.-]+$/.test(name) ||
-    name.startsWith(".") ||
-    name.includes("..")
-  ) {
-    return new NextResponse("Not found", { status: 404 });
-  }
-
-  const filePath = resolveSafeUploadsPath(["kb", articleId, name]);
+  const { path: segments } = await ctx.params;
+  const filePath = resolveSafeUploadsPath(segments ?? []);
   if (!filePath) {
     return new NextResponse("Not found", { status: 404 });
   }
@@ -54,24 +42,19 @@ export async function GET(
     const info = await stat(filePath);
     if (!info.isFile()) return new NextResponse("Not found", { status: 404 });
 
-    const ext = extname(name).toLowerCase();
+    const ext = extname(filePath).toLowerCase();
     const mime = EXT_MIME[ext] ?? "application/octet-stream";
     const nodeStream = createReadStream(filePath);
     const webStream = Readable.toWeb(nodeStream) as NodeReadable<Uint8Array>;
 
-    const headers = new Headers({
-      "Content-Type": mime,
-      "Content-Length": String(info.size),
-      "Cache-Control": "private, max-age=3600",
-      "X-Content-Type-Options": "nosniff",
-    });
-    if (ext === ".pdf") {
-      headers.set("Content-Disposition", `inline; filename="${name}"`);
-    }
-
-    return new NextResponse(webStream as unknown as ReadableStream<Uint8Array>, {
+    return new NextResponse(webStream as unknown as BodyInit, {
       status: 200,
-      headers,
+      headers: {
+        "Content-Type": mime,
+        "Content-Length": String(info.size),
+        "Cache-Control": "private, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+      },
     });
   } catch {
     return new NextResponse("Not found", { status: 404 });

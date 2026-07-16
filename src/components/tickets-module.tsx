@@ -43,6 +43,7 @@ import { ExcelExportMenu } from "@/components/tickets/ExcelExportMenu";
 import { QuickTicketDialog } from "@/components/tickets/QuickTicketDialog";
 import { SavedViewsBar } from "@/components/tickets/SavedViewsBar";
 import { BandejaHandoverBanner } from "@/components/tickets/BandejaHandoverBanner";
+import { ShiftHealthBanner } from "@/components/operations/ShiftHealthBanner";
 import { ExpressTicketPanel } from "@/components/tickets/ExpressTicketPanel";
 import { isUiUnificationEnabled } from "@/ui-unification/feature";
 import { TicketsModuleHeroUnified } from "@/ui-unification/heroes/TicketsModuleHeroUnified";
@@ -61,6 +62,7 @@ import { ticketNeedsCompletion } from "@/lib/tickets/pending-completion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { KpiPill, kpiToneValueClass, type KpiTone } from "@/components/ui/kpi-pill";
 import { Input, Select } from "@/components/ui/input";
 import {
@@ -773,6 +775,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
         preventiveTasksCount={t.preventiveTasks.length}
         onSlaKpiClick={() => t.setSlaOverdueOnly(true)}
       />
+      {view === "bandeja" ? <ShiftHealthBanner className="mb-3" /> : null}
       {view === "bandeja" ? <BandejaHandoverBanner /> : null}
       <section
         className={cn(
@@ -866,19 +869,19 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
           <p id="tickets-inbox-hint" className="sr-only">
             {t.inboxScreenReaderSummary}
           </p>
-          {t.error && (
-            <div
-              role="alert"
-              aria-live="assertive"
-              className={cn(
-                "mb-3 flex items-center gap-2 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error-light)] px-4 py-3 text-sm text-[var(--color-error)]",
-                view === "bandeja" && "mx-4 mt-4",
-              )}
-            >
-              <AlertCircle size={14} className="flex-shrink-0" />
-              {t.error}
+          {t.error ? (
+            <div className={cn("mb-3", view === "bandeja" && "mx-4 mt-4")}>
+              <ErrorState
+                icon={AlertCircle}
+                title="No se pudo cargar la bandeja"
+                hint={t.error}
+                compact
+                onRetry={() => {
+                  void t.refreshTicketsAndSideData?.();
+                }}
+              />
             </div>
-          )}
+          ) : null}
           {t.notice && t.noticePlacement === "toast" && typeof document !== "undefined"
             ? createPortal(
                 <div

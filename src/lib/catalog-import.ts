@@ -1,6 +1,5 @@
-import * as XLSX from "xlsx";
-
 import { prisma } from "@/lib/prisma";
+import { readFirstSheetRows } from "@/lib/sheet-import";
 
 export type BusImportRow = {
   /** Fila del Excel/CSV (1-indexada, sin contar la cabecera). */
@@ -69,29 +68,17 @@ function splitLineas(raw: string): string[] {
  * Parsea un archivo Excel/CSV y devuelve filas validadas + errores por fila.
  * No escribe en base de datos: úsalo como "dry-run".
  */
-export function parseBusImportBuffer(buffer: Buffer): BusImportParseResult {
-  let workbook: XLSX.WorkBook;
+export async function parseBusImportBuffer(buffer: Buffer): Promise<BusImportParseResult> {
+  let rows: string[][];
   try {
-    workbook = XLSX.read(buffer, { type: "buffer" });
+    rows = await readFirstSheetRows(buffer);
   } catch (error) {
     throw new Error(
-      `No se pudo leer el archivo. Asegúrate de subir un .xlsx, .xls o .csv válido. (${
+      `No se pudo leer el archivo. Asegúrate de subir un .xlsx o .csv válido. (${
         error instanceof Error ? error.message : String(error)
       })`,
     );
   }
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) {
-    throw new Error("El archivo no contiene ninguna hoja.");
-  }
-  const sheet = workbook.Sheets[sheetName];
-
-  // Convertimos a matriz de strings (header:1 mantiene celdas vacías como "").
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-    header: 1,
-    defval: "",
-    blankrows: false,
-  });
 
   if (rows.length === 0) {
     throw new Error("El archivo está vacío.");

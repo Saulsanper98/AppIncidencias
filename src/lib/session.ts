@@ -1,6 +1,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-export const SESSION_COOKIE_NAME = "ccmgc_user";
+import { SESSION_COOKIE_NAME } from "@/lib/session-constants";
+
+export { SESSION_COOKIE_NAME };
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 
 /**

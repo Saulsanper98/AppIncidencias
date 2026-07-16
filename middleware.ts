@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { isSessionTokenShape, SESSION_COOKIE_NAME } from "@/lib/session-edge";
 
 const PUBLIC_PAGE_PATHS = new Set(["/login", "/offline"]);
 
@@ -15,7 +15,7 @@ function isPublicPage(pathname: string): boolean {
 
 /**
  * APIs accesibles sin cookie de sesión.
- * El resto de `/api/*` exige cookie (la validez la confirma cada handler).
+ * El resto de `/api/*` exige cookie (la validez HMAC la confirma cada handler).
  */
 function isPublicApi(pathname: string, method: string): boolean {
   if (pathname === "/api/auth/session") return true;
@@ -26,23 +26,41 @@ function isPublicApi(pathname: string, method: string): boolean {
 }
 
 function requiresSession(pathname: string, method: string): boolean {
+  if (pathname.startsWith("/uploads/")) return true;
   if (pathname.startsWith("/api/")) {
     return !isPublicApi(pathname, method);
   }
   return !isPublicPage(pathname);
 }
 
-/** Sin cookie de sesión no entras. No valida el token: eso lo hace cada API / página servidor. */
+function hasSessionCookieShape(request: NextRequest): boolean {
+  const raw = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  return isSessionTokenShape(raw);
+}
+
+/**
+ * Gate Edge: exige cookie con forma `v1.*.*` (no basura).
+ * HMAC completo lo validan handlers Node / `requireActiveUser`.
+ * `/uploads/*` se reescribe a proxy autenticado.
+ */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const method = request.method.toUpperCase();
+
+  if (pathname.startsWith("/uploads/")) {
+    if (!hasSessionCookieShape(request)) {
+      return new NextResponse("Sesión requerida", { status: 401 });
+    }
+    const rewriteUrl = request.nextUrl.clone();
+    rewriteUrl.pathname = `/api/media/uploads${pathname.slice("/uploads".length)}`;
+    return NextResponse.rewrite(rewriteUrl);
+  }
 
   if (!requiresSession(pathname, method)) {
     return NextResponse.next();
   }
 
-  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (sessionCookie) {
+  if (hasSessionCookieShape(request)) {
     return NextResponse.next();
   }
 
@@ -62,10 +80,9 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * No interceptar estáticos de Next ni assets públicos.
-     * Si el middleware redirige un chunk JS a /login, el navegador recibe
-     * HTML con MIME text/html y bloquea el script (síntoma tras deploy).
+     * Incluye /uploads/* (también .jpg/.png): antes se excluían por extensión
+     * y saltaban el gate. Siguen fuera _next, iconos y offline.
      */
-    "/((?!_next/|favicon.ico|sw\\.js|manifest\\.webmanifest|icons/|offline|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/|favicon.ico|sw\\.js|manifest\\.webmanifest|icons/|offline).*)",
   ],
 };

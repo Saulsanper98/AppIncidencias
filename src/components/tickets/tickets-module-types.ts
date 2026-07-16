@@ -16,6 +16,9 @@ export type TicketView = Ticket & {
   assetType: AssetType;
   attachments: TicketAttachmentView[];
   comments: { id: string; author: string; body: string; createdAt: string }[];
+  /** Conteos del listado ligero (GET /api/tickets); el detalle trae arrays completos. */
+  commentCount?: number;
+  attachmentCount?: number;
 };
 
 export type CatalogBus = {

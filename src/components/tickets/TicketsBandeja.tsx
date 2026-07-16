@@ -771,11 +771,11 @@ export function TicketsBandeja({
                   </span>
                   <span className="flex items-center gap-1">
                     <CheckCircle2 size={11} />
-                    {ticket.comments.length} comentarios
+                    {(ticket.commentCount ?? ticket.comments.length)} comentarios
                   </span>
                   <span className="flex items-center gap-1">
                     <Camera size={11} />
-                    {ticket.attachments.length} adjuntos
+                    {(ticket.attachmentCount ?? ticket.attachments.length)} adjuntos
                   </span>
                 </div>
                 {(getAllowedTransitions(role, ticket.status, isReadOnly).length > 0 ||

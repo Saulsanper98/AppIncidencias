@@ -30,6 +30,7 @@
  *    marque como procesado y un humano lo revise.
  */
 
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { writeAuditEvent } from "@/lib/auth-context";
@@ -43,6 +44,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const VALID_PRIORITIES: TicketPriority[] = ["alta", "media", "baja"];
+
+function secretsEqual(provided: string, required: string): boolean {
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(required, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 function getProvidedSecret(request: Request): string | null {
   const auth = request.headers.get("authorization");
@@ -88,7 +96,7 @@ export async function POST(request: Request) {
       );
     }
     const provided = getProvidedSecret(request);
-    if (provided !== requiredSecret) {
+    if (!provided || !secretsEqual(provided, requiredSecret)) {
       return NextResponse.json({ message: "No autorizado" }, { status: 401 });
     }
 
