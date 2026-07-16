@@ -26,8 +26,36 @@ import { trackLoginEvent } from "@/lib/login-telemetry";
 import { userRoleLabel } from "@/lib/user-role-labels";
 import { cn } from "@/lib/utils";
 
-const LAST_DEV_USER_KEY = "ccmgc_login_last_dev_user_id";
+const LAST_USER_KEY = "ccmgc_login_last_user_id";
+/** Clave legacy (dev); se migra a LAST_USER_KEY al leer. */
+const LAST_USER_KEY_LEGACY = "ccmgc_login_last_dev_user_id";
 const LOGIN_HIGH_CONTRAST_KEY = "ccmgc_login_high_contrast";
+
+function readLastUserId(): string | null {
+  try {
+    const current = localStorage.getItem(LAST_USER_KEY);
+    if (current) return current;
+    const legacy = localStorage.getItem(LAST_USER_KEY_LEGACY);
+    if (legacy) {
+      localStorage.setItem(LAST_USER_KEY, legacy);
+      localStorage.removeItem(LAST_USER_KEY_LEGACY);
+      return legacy;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeLastUserId(userId: string) {
+  if (!userId) return;
+  try {
+    localStorage.setItem(LAST_USER_KEY, userId);
+    localStorage.removeItem(LAST_USER_KEY_LEGACY);
+  } catch {
+    /* ignore */
+  }
+}
 
 type LocalUser = {
   id: string;
@@ -103,19 +131,15 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
         typeof window !== "undefined" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (reducedMotion) {
-        window.setTimeout(go, delayMs);
+        go();
         return;
       }
       window.setTimeout(() => {
-        document.body.style.transition = "opacity 0.1s ease";
-        document.body.style.opacity = "0.72";
-        window.setTimeout(() => {
-          go();
-          window.requestAnimationFrame(() => {
-            document.body.style.opacity = "";
-            document.body.style.transition = "";
-          });
-        }, 90);
+        const stage = document.querySelector<HTMLElement>("[data-login-page]");
+        if (stage) {
+          stage.classList.add("login-stage--exiting");
+        }
+        window.setTimeout(go, 180);
       }, delayMs);
     },
     [router],
@@ -232,7 +256,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
     let initialId = "";
     if (usersList.length > 0) {
       try {
-        const storedId = localStorage.getItem(LAST_DEV_USER_KEY);
+        const storedId = readLastUserId();
         if (storedId && usersList.some((u) => u.id === storedId)) {
           initialId = storedId;
         }
@@ -253,8 +277,14 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
   }, [loadBootstrap, bootstrapAttempt]);
 
   useEffect(() => {
+    // Bootstrap: foco en Reintentar. Login: foco en contraseña (no re-POST ciego).
     if (error) {
-      retryRef.current?.focus();
+      if (errorSource === "login") {
+        passwordInputRef.current?.focus();
+        passwordInputRef.current?.select?.();
+      } else {
+        retryRef.current?.focus();
+      }
       return;
     }
     if (!ready || loggingIn || flashWelcome) return;
@@ -273,15 +303,10 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
       return;
     }
     userPickerTriggerRef.current?.focus();
-  }, [ready, sessionUser, devSelector, users.length, loggingIn, flashWelcome, error, selectedUserId]);
+  }, [ready, sessionUser, devSelector, users.length, loggingIn, flashWelcome, error, errorSource, selectedUserId]);
 
   const persistLastDevUser = (userId: string) => {
-    if (!userId) return;
-    try {
-      localStorage.setItem(LAST_DEV_USER_KEY, userId);
-    } catch {
-      /* ignore */
-    }
+    writeLastUserId(userId);
   };
 
   const handleLogin = async () => {
@@ -368,11 +393,13 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
     setError(null);
     setErrorSource(null);
     if (src === "login") {
-      void handleLogin();
-    } else {
-      invalidateUsersCache();
-      setBootstrapAttempt((n) => n + 1);
+      // No reenviar las mismas credenciales: el usuario corrige la contraseña.
+      passwordInputRef.current?.focus();
+      passwordInputRef.current?.select?.();
+      return;
     }
+    invalidateUsersCache();
+    setBootstrapAttempt((n) => n + 1);
   };
 
   const handleRetryEmptyList = () => {
@@ -392,52 +419,58 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
 
       <section
         id="login-main"
-        className={cn("login-section rounded-xl outline-none")}
+        className={cn("login-section outline-none")}
         aria-busy={!ready}
         aria-labelledby={`${formId}-heading`}
       >
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 id={`${formId}-heading`} className="text-subheading text-[var(--color-text-1)]">
-            {sessionUser ? t.activeSession(sessionUser.name) : t.signIn}
-          </h2>
-          <div className="login-segmented flex shrink-0">
-            <button
-              ref={langEsRef}
-              type="button"
-              className={cn(
-                "login-focusable login-segmented-item px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                locale === "es"
-                  ? "bg-[var(--color-surface-2)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_var(--color-border)]"
-                  : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
-              )}
-              onClick={() => setLocalePersist("es")}
-              aria-pressed={locale === "es"}
-            >
-              {t.langEs}
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "login-focusable login-segmented-item px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                locale === "en"
-                  ? "bg-[var(--color-surface-2)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_var(--color-border)]"
-                  : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
-              )}
-              onClick={() => setLocalePersist("en")}
-              aria-pressed={locale === "en"}
-            >
-              {t.langEn}
-            </button>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="login-access-kicker">{t.operationalAccess}</p>
+            <h2 id={`${formId}-heading`} className="login-access-title mt-1">
+              {sessionUser ? t.activeSession(sessionUser.name) : t.signIn}
+            </h2>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="login-segmented flex" role="group" aria-label={locale === "en" ? "Language" : "Idioma"}>
+              <button
+                ref={langEsRef}
+                type="button"
+                className={cn(
+                  "login-focusable login-segmented-item px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                  locale === "es"
+                    ? "bg-[var(--color-surface-2)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_var(--color-border)]"
+                    : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+                )}
+                onClick={() => setLocalePersist("es")}
+                aria-pressed={locale === "es"}
+              >
+                {t.langEs}
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "login-focusable login-segmented-item px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                  locale === "en"
+                    ? "bg-[var(--color-surface-2)] text-[var(--color-text-1)] shadow-[inset_0_0_0_1px_var(--color-border)]"
+                    : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+                )}
+                onClick={() => setLocalePersist("en")}
+                aria-pressed={locale === "en"}
+              >
+                {t.langEn}
+              </button>
+            </div>
             <button
               type="button"
               aria-pressed={highContrast}
-              className={cn(
-                "login-focusable login-segmented-item px-2 text-[10px] font-semibold transition-colors",
-                highContrast
-                  ? "bg-[color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface-2))] text-[var(--color-text-1)]"
-                  : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
-              )}
+              aria-label={t.contrastAria}
               title={t.contrast}
+              className={cn(
+                "login-focusable login-contrast-toggle min-h-11 min-w-11 rounded-xl border px-2.5 text-[11px] font-semibold transition-colors",
+                highContrast
+                  ? "border-[color-mix(in_oklab,var(--color-accent)_40%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface-2))] text-[var(--color-text-1)]"
+                  : "border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[color-mix(in_oklab,var(--color-surface-2)_70%,transparent)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+              )}
               onClick={() => {
                 const next = !highContrast;
                 setHighContrast(next);
@@ -465,15 +498,15 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
 
         <div className="space-y-3">
           {sessionUser ? (
-            <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-full border border-[color-mix(in_oklab,var(--color-success)_35%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-success-light)_44%,transparent)] px-3 py-1 text-[12px] font-medium text-[color-mix(in_oklab,var(--color-success)_66%,white)]">
+            <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-md border border-[color-mix(in_oklab,var(--color-success)_35%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-success-light)_44%,transparent)] px-2.5 py-1 text-[12px] font-medium text-[color-mix(in_oklab,var(--color-success)_66%,white)]">
               <ShieldCheck size={13} aria-hidden />
               <span>{roleLine}</span>
             </div>
           ) : (
-            <p className="text-[12.5px] text-[var(--color-text-3)]">{t.selectUserProtected}</p>
+            <p className="text-[12.5px] leading-relaxed text-[var(--color-text-3)]">{t.selectUserProtected}</p>
           )}
           {flashWelcome ? (
-            <p className="text-[13px] font-medium text-[var(--color-success)]" role="status">
+            <p className="login-welcome-flash text-[13px] font-medium text-[var(--color-success)]" role="status">
               {flashWelcome}
             </p>
           ) : null}
@@ -484,7 +517,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                 <div>
                   <label
                     htmlFor="login-user-select"
-                    className="mb-1 block text-label tracking-wide text-[var(--color-text-3)]"
+                    className="mb-1 block text-label tracking-wide text-[var(--color-text-2)]"
                   >
                     {t.labelUser}
                   </label>
@@ -513,9 +546,20 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                       id="login-user-select"
                       value={selectedUserId}
                       options={loginUserOptions}
+                      labels={{
+                        accounts: t.listboxAccounts,
+                        select: t.listboxSelect,
+                        searchPlaceholder: t.listboxSearchPlaceholder,
+                        clearSearch: t.listboxClearSearch,
+                        noMatches: t.listboxNoMatches,
+                      }}
                       onChange={(v) => {
                         setSelectedUserId(v);
                         persistLastDevUser(v);
+                        if (errorSource === "login") {
+                          setError(null);
+                          setErrorSource(null);
+                        }
                       }}
                       aria-describedby="login-user-hint"
                     />
@@ -527,7 +571,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                   <div>
                     <label
                       htmlFor="login-password"
-                      className="mb-1 block text-label tracking-wide text-[var(--color-text-3)]"
+                      className="mb-1 block text-label tracking-wide text-[var(--color-text-2)]"
                     >
                       {t.fieldPasswordLabel}
                     </label>
@@ -545,13 +589,40 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                         autoComplete="current-password"
                         placeholder={t.fieldPasswordPlaceholder}
                         value={passwordInput}
-                        onChange={(e) => setPasswordInput(e.target.value)}
-                        className="login-focusable login-input-premium w-full rounded-lg py-2 pl-9 pr-16 text-[13px] text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none"
+                        aria-invalid={errorSource === "login" && Boolean(error)}
+                        aria-describedby={
+                          errorSource === "login" && error
+                            ? "login-error-msg login-user-hint"
+                            : "login-user-hint"
+                        }
+                        onChange={(e) => {
+                          setPasswordInput(e.target.value);
+                          if (errorSource === "login") {
+                            setError(null);
+                            setErrorSource(null);
+                          }
+                        }}
+                        className="login-focusable login-input-premium min-h-11 w-full rounded-lg py-2.5 pl-9 pr-[4.5rem] text-[13px] text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none"
                       />
                       <button
                         type="button"
-                        onClick={() => setShowPassword((v) => !v)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)]"
+                        onClick={() => {
+                          const el = passwordInputRef.current;
+                          const start = el?.selectionStart ?? null;
+                          const end = el?.selectionEnd ?? null;
+                          setShowPassword((v) => !v);
+                          window.requestAnimationFrame(() => {
+                            const input = passwordInputRef.current;
+                            if (!input || start == null || end == null) return;
+                            try {
+                              input.setSelectionRange(start, end);
+                            } catch {
+                              /* ignore */
+                            }
+                            input.focus();
+                          });
+                        }}
+                        className="login-focusable login-password-toggle absolute right-1.5 top-1/2 flex min-h-9 min-w-[3.25rem] -translate-y-1/2 items-center justify-center rounded-md px-2 text-[11px] font-medium transition-colors hover:text-[var(--color-text-1)]"
                         aria-label={showPassword ? t.hidePassword : t.showPassword}
                       >
                         {showPassword ? t.hidePassword : t.showPassword}
@@ -608,10 +679,10 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                   }
                 >
                   {loggingIn ? (
-                    <>
+                    <span className="login-cta-loading inline-flex items-center gap-2">
                       <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-                      {t.signingIn}
-                    </>
+                      <span className="login-cta-loading__label">{t.signingIn}</span>
+                    </span>
                   ) : (
                     t.signIn
                   )}
@@ -641,7 +712,9 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
         {error ? (
           <div className="flex flex-col gap-3 pt-1">
             <div
+              id="login-error-msg"
               role="alert"
+              aria-live="assertive"
               className={cn(
                 "flex items-start gap-3 rounded-xl border border-[color-mix(in_oklab,var(--color-error)_50%,var(--color-border))] bg-[color-mix(in_oklab,var(--color-error-light)_45%,transparent)] p-4 text-[15px] leading-snug text-[var(--color-text-1)] transition-[border-color,box-shadow] duration-200",
                 errorShake && "ccmgc-shake shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-error)_35%,transparent)]",
@@ -650,8 +723,8 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
               <AlertCircle size={18} className="mt-0.5 shrink-0 text-[var(--color-error)]" aria-hidden />
               <span>{error}</span>
             </div>
-            <Button ref={retryRef} type="button" variant="secondary" className="w-full" onClick={handleRetry}>
-              {t.retry}
+            <Button ref={retryRef} type="button" variant="secondary" className="min-h-11 w-full" onClick={handleRetry}>
+              {errorSource === "login" ? t.fixCredentials : t.retry}
             </Button>
           </div>
         ) : null}

@@ -969,6 +969,9 @@ model ShiftHandover {
   summary           String
   alerts            String?
   pendingActions    String?
+  /// Checklist de pendientes trazables (JSON: HandoverPendingItem[]).
+  /// Complementa `pendingActions` (texto legado / resumen).
+  pendingItemsJson  String?
   /// Snapshot opcional de tickets abiertos relevantes al cierre (JSON
   /// serializado). El cliente lo pinta como lista clicable; si falta,
   /// solo se muestran los campos de texto.

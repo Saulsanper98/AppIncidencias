@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   CheckCircle2,
+  Circle,
   ClipboardList,
   Clock,
   Database,
@@ -13,6 +15,7 @@ import {
   Handshake,
   Loader2,
   Moon,
+  Plus,
   Save,
   Send,
   Sparkles,
@@ -20,6 +23,7 @@ import {
   Sunset,
   Trash2,
   UserCheck,
+  X,
 } from "lucide-react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
@@ -33,6 +37,7 @@ import { Input, Select, Textarea } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { HandoverPendingItem } from "@/lib/handover-pending-items";
 import { hapticMedium } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +61,8 @@ type Handover = {
   summary: string;
   alerts: string | null;
   pendingActions: string | null;
+  pendingItems: HandoverPendingItem[];
+  openPendingCount: number;
   openTickets: { id: string; title: string; busId: string; priority: string; status: string }[] | null;
   createdAt: string;
   acknowledgedById: string | null;
@@ -64,7 +71,12 @@ type Handover = {
   wasMine?: boolean;
 };
 
-type TimelineTab = "all" | "unacked" | "mine";
+type TimelineTab = "all" | "unacked" | "open_pending" | "mine";
+
+function parseTimelineTab(raw: string | null): TimelineTab {
+  if (raw === "unacked" || raw === "open_pending" || raw === "mine" || raw === "all") return raw;
+  return "all";
+}
 
 const SHIFT_LABEL: Record<Handover["shift"], string> = {
   M: "Mañana",
@@ -85,17 +97,29 @@ function todayYmd(): string {
   return `${y}-${m}-${day}`;
 }
 
-const HANDOVER_DRAFT_KEY = "ccmgc_handover_draft_v1";
+const HANDOVER_DRAFT_KEY = "ccmgc_handover_draft_v2";
 
 type HandoverDraft = {
   shiftDate: string;
   shift: "M" | "T" | "N";
   summary: string;
   alerts: string;
-  pendingActions: string;
+  /** Líneas de pendientes en borrador (aún sin id de servidor). */
+  pendingDraftLines: string[];
+  /** Compat con borradores v1. */
+  pendingActions?: string;
   includeSnapshot: boolean;
   savedAt: number;
 };
+
+function newDraftLineId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `draft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+type PendingDraftRow = { key: string; text: string };
 
 function formatRelativeShort(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));
@@ -116,6 +140,11 @@ function currentShiftFromHour(hour: number): "M" | "T" | "N" {
 }
 
 export default function HandoverPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get("focus");
+
   const [items, setItems] = useState<Handover[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -125,8 +154,10 @@ export default function HandoverPage() {
   const [shift, setShift] = useState<"M" | "T" | "N">(() => currentShiftFromHour(new Date().getHours()));
   const [summary, setSummary] = useState("");
   const [alerts, setAlerts] = useState("");
-  const [pendingActions, setPendingActions] = useState("");
+  const [pendingDraft, setPendingDraft] = useState<PendingDraftRow[]>([]);
+  const [pendingInput, setPendingInput] = useState("");
   const [includeSnapshot, setIncludeSnapshot] = useState(true);
+  const [itemBusyId, setItemBusyId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<
     | { kind: "ack"; handover: Handover }
     | { kind: "del"; handover: Handover }
@@ -138,7 +169,23 @@ export default function HandoverPage() {
   const [draftNowTick, setDraftNowTick] = useState<number>(() => Date.now());
   const draftHydratedRef = useRef(false);
   const [actorId, setActorId] = useState<string | null>(null);
-  const [tab, setTab] = useState<TimelineTab>("all");
+  const [tab, setTab] = useState<TimelineTab>(() => parseTimelineTab(searchParams.get("tab")));
+
+  const setTabAndUrl = useCallback(
+    (next: TimelineTab) => {
+      setTab(next);
+      const q = new URLSearchParams(searchParams.toString());
+      if (next === "all") q.delete("tab");
+      else q.set("tab", next);
+      const qs = q.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  useEffect(() => {
+    setTab(parseTimelineTab(searchParams.get("tab")));
+  }, [searchParams]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -150,7 +197,16 @@ export default function HandoverPage() {
         return;
       }
       const data = (await res.json()) as { items: Handover[]; actorId?: string };
-      setItems(data.items ?? []);
+      setItems(
+        (data.items ?? []).map((h) => ({
+          ...h,
+          pendingItems: Array.isArray(h.pendingItems) ? h.pendingItems : [],
+          openPendingCount:
+            typeof h.openPendingCount === "number"
+              ? h.openPendingCount
+              : (h.pendingItems ?? []).filter((i) => i.status === "abierta").length,
+        })),
+      );
       if (data.actorId) setActorId(data.actorId);
     } catch {
       setError("No se pudieron cargar los pases");
@@ -169,12 +225,28 @@ export default function HandoverPage() {
     draftHydratedRef.current = true;
     if (typeof window === "undefined") return;
     try {
-      const raw = window.localStorage.getItem(HANDOVER_DRAFT_KEY);
+      const raw =
+        window.localStorage.getItem(HANDOVER_DRAFT_KEY) ??
+        window.localStorage.getItem("ccmgc_handover_draft_v1");
       if (!raw) return;
       const draft = JSON.parse(raw) as Partial<HandoverDraft>;
       if (typeof draft.summary === "string") setSummary(draft.summary);
       if (typeof draft.alerts === "string") setAlerts(draft.alerts);
-      if (typeof draft.pendingActions === "string") setPendingActions(draft.pendingActions);
+      if (Array.isArray(draft.pendingDraftLines)) {
+        setPendingDraft(
+          draft.pendingDraftLines
+            .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+            .map((text) => ({ key: newDraftLineId(), text })),
+        );
+      } else if (typeof draft.pendingActions === "string" && draft.pendingActions.trim()) {
+        setPendingDraft(
+          draft.pendingActions
+            .split(/\n+/)
+            .map((t) => t.trim())
+            .filter(Boolean)
+            .map((text) => ({ key: newDraftLineId(), text })),
+        );
+      }
       if (typeof draft.includeSnapshot === "boolean") setIncludeSnapshot(draft.includeSnapshot);
       if (draft.shiftDate && /^\d{4}-\d{2}-\d{2}$/.test(draft.shiftDate)) setShiftDate(draft.shiftDate);
       if (draft.shift === "M" || draft.shift === "T" || draft.shift === "N") setShift(draft.shift);
@@ -190,7 +262,7 @@ export default function HandoverPage() {
     const isDirty =
       summary.trim().length > 0 ||
       alerts.trim().length > 0 ||
-      pendingActions.trim().length > 0;
+      pendingDraft.some((r) => r.text.trim().length > 0);
     if (!isDirty) return;
     const t = window.setTimeout(() => {
       const draft: HandoverDraft = {
@@ -198,7 +270,7 @@ export default function HandoverPage() {
         shift,
         summary,
         alerts,
-        pendingActions,
+        pendingDraftLines: pendingDraft.map((r) => r.text.trim()).filter(Boolean),
         includeSnapshot,
         savedAt: Date.now(),
       };
@@ -211,7 +283,7 @@ export default function HandoverPage() {
       }
     }, 500);
     return () => window.clearTimeout(t);
-  }, [summary, alerts, pendingActions, includeSnapshot, shiftDate, shift]);
+  }, [summary, alerts, pendingDraft, includeSnapshot, shiftDate, shift]);
 
   // Tick para refrescar el "Guardado hace…".
   useEffect(() => {
@@ -229,15 +301,32 @@ export default function HandoverPage() {
   const clearDraft = useCallback(() => {
     setSummary("");
     setAlerts("");
-    setPendingActions("");
+    setPendingDraft([]);
+    setPendingInput("");
     setDraftSavedAt(null);
     if (typeof window !== "undefined") {
       try {
         window.localStorage.removeItem(HANDOVER_DRAFT_KEY);
+        window.localStorage.removeItem("ccmgc_handover_draft_v1");
       } catch {
         /* ignore */
       }
     }
+  }, []);
+
+  const addPendingDraftLine = useCallback(() => {
+    const text = pendingInput.trim();
+    if (!text) return;
+    if (pendingDraft.length >= 20) {
+      setError("Máximo 20 pendientes por pase");
+      return;
+    }
+    setPendingDraft((prev) => [...prev, { key: newDraftLineId(), text: text.slice(0, 280) }]);
+    setPendingInput("");
+  }, [pendingInput, pendingDraft.length]);
+
+  const removePendingDraftLine = useCallback((key: string) => {
+    setPendingDraft((prev) => prev.filter((r) => r.key !== key));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -246,6 +335,10 @@ export default function HandoverPage() {
       setError("El resumen es obligatorio");
       return;
     }
+    const pendingItems = [
+      ...pendingDraft.map((r) => r.text.trim()).filter(Boolean),
+      ...(pendingInput.trim() ? [pendingInput.trim()] : []),
+    ].slice(0, 20);
     setSubmitting(true);
     setError(null);
     try {
@@ -257,7 +350,7 @@ export default function HandoverPage() {
           shift,
           summary: summary.trim(),
           alerts: alerts.trim() || null,
-          pendingActions: pendingActions.trim() || null,
+          pendingItems,
           includeSnapshot,
         }),
       });
@@ -270,11 +363,13 @@ export default function HandoverPage() {
       // para entradas seguidas (p. ej. dos pases en el mismo día).
       setSummary("");
       setAlerts("");
-      setPendingActions("");
+      setPendingDraft([]);
+      setPendingInput("");
       setDraftSavedAt(null);
       if (typeof window !== "undefined") {
         try {
           window.localStorage.removeItem(HANDOVER_DRAFT_KEY);
+          window.localStorage.removeItem("ccmgc_handover_draft_v1");
         } catch {
           /* ignore */
         }
@@ -328,8 +423,56 @@ export default function HandoverPage() {
     [load],
   );
 
+  const runToggleItem = useCallback(
+    async (h: Handover, item: HandoverPendingItem) => {
+      const action = item.status === "abierta" ? "complete_item" : "reopen_item";
+      setItemBusyId(item.id);
+      try {
+        const res = await fetch(`/api/handover/${h.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, itemId: item.id }),
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { message?: string };
+          setError(data.message ?? "No se pudo actualizar el pendiente");
+          return;
+        }
+        const data = (await res.json()) as {
+          handover?: { pendingItems?: HandoverPendingItem[]; openPendingCount?: number };
+        };
+        const nextItems = data.handover?.pendingItems;
+        if (nextItems) {
+          hapticMedium();
+          setItems((prev) =>
+            (prev ?? []).map((row) =>
+              row.id === h.id
+                ? {
+                    ...row,
+                    pendingItems: nextItems,
+                    openPendingCount:
+                      data.handover?.openPendingCount ??
+                      nextItems.filter((i) => i.status === "abierta").length,
+                  }
+                : row,
+            ),
+          );
+        } else {
+          await load();
+        }
+      } finally {
+        setItemBusyId(null);
+      }
+    },
+    [load],
+  );
+
   const unacked = useMemo(
     () => (items ?? []).filter((h) => !h.acknowledgedAt),
+    [items],
+  );
+  const withOpenPending = useMemo(
+    () => (items ?? []).filter((h) => (h.openPendingCount ?? 0) > 0),
     [items],
   );
   const mine = useMemo(
@@ -338,10 +481,25 @@ export default function HandoverPage() {
   );
   const visibleItems = useMemo(() => {
     if (tab === "unacked") return unacked;
+    if (tab === "open_pending") return withOpenPending;
     if (tab === "mine") return mine;
     return items ?? [];
-  }, [tab, items, unacked, mine]);
+  }, [tab, items, unacked, withOpenPending, mine]);
+  const openPendingTotal = useMemo(
+    () => (items ?? []).reduce((acc, h) => acc + (h.openPendingCount ?? 0), 0),
+    [items],
+  );
   const lastHandoverAuthor = useMemo(() => (items ?? [])[0]?.authorName ?? null, [items]);
+
+  useEffect(() => {
+    if (!focusId || loading || !items) return;
+    const el = document.getElementById(`handover-${focusId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("handover-card--focus");
+    const timer = window.setTimeout(() => el.classList.remove("handover-card--focus"), 2400);
+    return () => window.clearTimeout(timer);
+  }, [focusId, loading, items, tab]);
 
   return (
     <div className="space-y-5">
@@ -527,16 +685,59 @@ export default function HandoverPage() {
             tone="success"
             number={3}
             title="Acciones pendientes"
-            description="Tareas concretas que el turno entrante debe atender."
-            filled={pendingActions.trim().length > 0}
+            description="Añade tareas concretas. El turno entrante podrá marcarlas como hechas."
+            filled={pendingDraft.length > 0 || pendingInput.trim().length > 0}
           >
-            <Textarea
-              value={pendingActions}
-              onChange={(e) => setPendingActions(e.target.value)}
-              rows={2}
-              placeholder="Ej. Llamar a operadora X a las 16:00; revisar reset de SAE bus 4521 antes de salida; cerrar ticket 28A2."
-              maxLength={4000}
-            />
+            {pendingDraft.length > 0 ? (
+              <ul className="mb-2 space-y-1.5">
+                {pendingDraft.map((row, idx) => (
+                  <li
+                    key={row.key}
+                    className="flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 px-2.5 py-1.5"
+                  >
+                    <span className="mt-0.5 text-[10px] font-semibold tabular-nums text-[var(--color-text-3)]">
+                      {idx + 1}.
+                    </span>
+                    <span className="min-w-0 flex-1 text-[12.5px] text-[var(--color-text-1)]">{row.text}</span>
+                    <button
+                      type="button"
+                      onClick={() => removePendingDraftLine(row.key)}
+                      className="shrink-0 rounded p-0.5 text-[var(--color-text-3)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-error)]"
+                      title="Quitar pendiente"
+                    >
+                      <X size={12} aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={pendingInput}
+                onChange={(e) => setPendingInput(e.target.value.slice(0, 280))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addPendingDraftLine();
+                  }
+                }}
+                placeholder="Ej. Confirmar desvío Línea 3 con tráfico"
+                className="flex-1"
+                maxLength={280}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={addPendingDraftLine}
+                disabled={!pendingInput.trim() || pendingDraft.length >= 20}
+              >
+                <Plus size={12} className="mr-1" aria-hidden /> Añadir
+              </Button>
+            </div>
+            <p className="mt-1.5 text-[10.5px] text-[var(--color-text-3)]">
+              Enter para añadir · máx. 20 · {pendingDraft.length}/20
+            </p>
           </FormBlock>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-3">
@@ -582,6 +783,7 @@ export default function HandoverPage() {
               [
                 { id: "all", label: "Todos", count: (items ?? []).length },
                 { id: "unacked", label: "Por firmar", count: unacked.length },
+                { id: "open_pending", label: "Pendientes", count: openPendingTotal },
                 { id: "mine", label: "Mis pases", count: mine.length },
               ] as { id: TimelineTab; label: string; count: number }[]
             ).map((t) => {
@@ -592,7 +794,7 @@ export default function HandoverPage() {
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  onClick={() => setTab(t.id)}
+                  onClick={() => setTabAndUrl(t.id)}
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-[11.5px] font-medium transition-colors",
                     active
@@ -606,7 +808,7 @@ export default function HandoverPage() {
                       "inline-flex h-4 min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums",
                       active
                         ? "bg-white/20 text-white"
-                        : t.id === "unacked" && t.count > 0
+                        : (t.id === "unacked" || t.id === "open_pending") && t.count > 0
                           ? "bg-[var(--color-warning-light)] text-[var(--color-warning)]"
                           : "bg-[var(--color-surface-3)] text-[var(--color-text-3)]",
                     )}
@@ -632,18 +834,22 @@ export default function HandoverPage() {
               title={
                 tab === "unacked"
                   ? "Sin pases pendientes"
-                  : tab === "mine"
-                    ? "Sin pases entregados"
-                    : "Sin pases registrados"
+                  : tab === "open_pending"
+                    ? "Sin pendientes abiertos"
+                    : tab === "mine"
+                      ? "Sin pases entregados"
+                      : "Sin pases registrados"
               }
               hint={
                 tab === "unacked"
                   ? "No hay pases pendientes de firmar."
-                  : tab === "mine"
-                    ? "Aún no has entregado ningún pase."
-                    : tab === "all"
-                      ? "Entrega el primero usando el formulario de arriba."
-                      : "Todavía no hay pases registrados."
+                  : tab === "open_pending"
+                    ? "No hay tareas abiertas en los pases recientes."
+                    : tab === "mine"
+                      ? "Aún no has entregado ningún pase."
+                      : tab === "all"
+                        ? "Entrega el primero usando el formulario de arriba."
+                        : "Todavía no hay pases registrados."
               }
               compact
             />
@@ -652,6 +858,8 @@ export default function HandoverPage() {
               {visibleItems.map((h, i) => (
                 <motion.li
                   key={h.id}
+                  id={`handover-${h.id}`}
+                  className="scroll-mt-24 rounded-xl transition-[box-shadow,border-color] duration-300"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.06, duration: 0.22, ease: "easeOut" }}
@@ -659,6 +867,8 @@ export default function HandoverPage() {
                   <HandoverTimelineCard
                     handover={h}
                     isMine={actorId ? h.authorId === actorId : h.wasMine ?? false}
+                    itemBusyId={itemBusyId}
+                    onToggleItem={(item) => void runToggleItem(h, item)}
                     onAck={() => setConfirm({ kind: "ack", handover: h })}
                     onDelete={() => setConfirm({ kind: "del", handover: h })}
                   />
@@ -797,21 +1007,28 @@ function relativeShortEs(iso: string): string {
 function HandoverTimelineCard({
   handover: h,
   isMine,
+  itemBusyId,
+  onToggleItem,
   onAck,
   onDelete,
 }: {
   handover: Handover;
   isMine: boolean;
+  itemBusyId: string | null;
+  onToggleItem: (item: HandoverPendingItem) => void;
   onAck: () => void;
   onDelete: () => void;
 }) {
   const Icon = SHIFT_ICON[h.shift];
   const tone = SHIFT_TONE[h.shift];
+  const pendingItems = h.pendingItems ?? [];
+  const hasChecklist = pendingItems.length > 0;
   return (
     <div
       className={cn(
         "group relative overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/30 transition-all",
         !h.acknowledgedAt && "ring-1 ring-[var(--color-warning)]/40",
+        (h.openPendingCount ?? 0) > 0 && h.acknowledgedAt && "ring-1 ring-[var(--color-accent)]/25",
       )}
     >
       <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", tone.bar)} />
@@ -853,6 +1070,11 @@ function HandoverTimelineCard({
                   Tuyo
                 </span>
               ) : null}
+              {(h.openPendingCount ?? 0) > 0 ? (
+                <span className="rounded-full border border-[var(--color-warning)]/30 bg-[var(--color-warning-light)] px-1.5 py-0 text-[9.5px] font-semibold text-[var(--color-warning)]">
+                  {h.openPendingCount} abiertas
+                </span>
+              ) : null}
             </div>
             <p className="mt-0.5 text-[12px] text-[var(--color-text-3)]">
               por <span className="text-[var(--color-text-2)]">{h.authorName ?? "—"}</span>
@@ -873,7 +1095,71 @@ function HandoverTimelineCard({
                 </p>
               </div>
             ) : null}
-            {h.pendingActions ? (
+            {hasChecklist ? (
+              <div className="mt-2 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)] px-2.5 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-accent)]">
+                  <Clock size={10} className="mr-1 inline" aria-hidden />
+                  Acciones pendientes
+                </p>
+                <ul className="mt-1.5 space-y-1">
+                  {pendingItems.map((item) => {
+                    const done = item.status === "hecha" || item.status === "cancelada";
+                    const busy = itemBusyId === item.id;
+                    return (
+                      <li key={item.id} className="flex items-start gap-2">
+                        <button
+                          type="button"
+                          disabled={busy || item.status === "cancelada"}
+                          onClick={() => onToggleItem(item)}
+                          className={cn(
+                            "mt-0.5 shrink-0 rounded text-[var(--color-accent)] transition-colors disabled:opacity-50",
+                            done
+                              ? "text-[var(--color-success)]"
+                              : "hover:text-[var(--color-accent)]",
+                          )}
+                          title={
+                            item.status === "cancelada"
+                              ? "Cancelada"
+                              : done
+                                ? "Reabrir pendiente"
+                                : "Marcar como hecha"
+                          }
+                          aria-label={done ? "Reabrir pendiente" : "Marcar como hecha"}
+                        >
+                          {busy ? (
+                            <Loader2 size={14} className="animate-spin" aria-hidden />
+                          ) : done ? (
+                            <CheckCircle2 size={14} aria-hidden />
+                          ) : (
+                            <Circle size={14} aria-hidden />
+                          )}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={cn(
+                              "text-[12.5px] leading-snug text-[var(--color-text-1)]",
+                              done && "text-[var(--color-text-3)] line-through",
+                            )}
+                          >
+                            {item.text}
+                          </p>
+                          {done && item.doneByName ? (
+                            <p className="mt-0.5 text-[10px] text-[var(--color-text-3)]">
+                              {item.status === "cancelada" ? "Cancelada" : "Hecha"} por{" "}
+                              {item.doneByName}
+                              {item.doneAt ? ` · ${relativeShortEs(item.doneAt)}` : ""}
+                            </p>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-1.5 text-[10px] text-[var(--color-text-3)]">
+                  Clic en el círculo para marcar hecha. La firma del pase no cierra estas tareas.
+                </p>
+              </div>
+            ) : h.pendingActions ? (
               <div className="mt-2 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)] px-2.5 py-2">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-accent)]">
                   <Clock size={10} className="mr-1 inline" aria-hidden />
@@ -881,6 +1167,9 @@ function HandoverTimelineCard({
                 </p>
                 <p className="mt-0.5 whitespace-pre-line text-[12px] text-[var(--color-text-2)]">
                   {h.pendingActions}
+                </p>
+                <p className="mt-1 text-[10px] text-[var(--color-text-3)]">
+                  Pase legado (texto). Los nuevos pases permiten marcar cada tarea.
                 </p>
               </div>
             ) : null}

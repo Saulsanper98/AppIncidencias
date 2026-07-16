@@ -37,6 +37,28 @@ export function shiftWindowLabel(shift: ShiftKey): string {
   return "22:00 – 06:00";
 }
 
+/** Minutos hasta el cierre del turno actual (M 14:00 · T 22:00 · N 06:00). */
+export function minutesUntilShiftEnd(now: Date = new Date()): number {
+  const h = now.getHours();
+  const minsOfDay = h * 60 + now.getMinutes() + now.getSeconds() / 60;
+  let endMins: number;
+  if (h >= 6 && h < 14) {
+    endMins = 14 * 60;
+  } else if (h >= 14 && h < 22) {
+    endMins = 22 * 60;
+  } else if (h >= 22) {
+    endMins = 24 * 60 + 6 * 60;
+  } else {
+    endMins = 6 * 60;
+  }
+  return Math.max(0, Math.round(endMins - minsOfDay));
+}
+
+/** True si quedan `thresholdMins` o menos para el relevo. */
+export function isNearShiftEnd(thresholdMins = 45, now: Date = new Date()): boolean {
+  return minutesUntilShiftEnd(now) <= thresholdMins;
+}
+
 export function formatRelativeShort(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));
   if (seconds < 5) return "ahora mismo";

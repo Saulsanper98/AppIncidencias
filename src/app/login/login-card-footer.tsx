@@ -23,7 +23,7 @@ export function LoginCardFooter() {
   const support = process.env.NEXT_PUBLIC_SUPPORT_URL ?? (supportMail ? `mailto:${supportMail}` : null);
 
   return (
-    <footer className="mt-4 border-t border-[var(--color-border)] pt-3 text-center text-[11px] leading-snug text-[var(--color-text-3)]">
+    <footer className="login-access-footer mt-8 text-[11px] leading-snug text-[var(--color-text-3)]">
       <p>
         v{version} · {envLabel(locale)}
         {legal || support ? (

@@ -5,12 +5,20 @@
  *    recepción si la hay).
  *  - POST → crea un pase nuevo del turno actual. El cliente envía
  *    `shiftDate` (yyyy-mm-dd) y `shift` (M/T/N), más los campos de texto.
- *    Opcionalmente se guarda un snapshot de tickets abiertos (`includeSnapshot`).
+ *    Opcionalmente se guarda un snapshot de tickets abiertos (`includeSnapshot`)
+ *    y una checklist de pendientes (`pendingItems`).
  */
 
 import { NextResponse } from "next/server";
 
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
+import {
+  countOpenPendingItems,
+  normalizePendingItemsInput,
+  parsePendingItemsJson,
+  pendingItemsToLegacyText,
+  serializePendingItems,
+} from "@/lib/handover-pending-items";
 import { prisma } from "@/lib/prisma";
 import { canCreateHandover } from "@/lib/rbac";
 
@@ -51,6 +59,7 @@ export async function GET(request: Request) {
       summary: true,
       alerts: true,
       pendingActions: true,
+      pendingItemsJson: true,
       openTicketsJson: true,
       createdAt: true,
       updatedAt: true,
@@ -62,14 +71,28 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     actorId: actor.userId,
-    items: items.map((h) => ({
-      ...h,
-      createdAt: h.createdAt.toISOString(),
-      updatedAt: h.updatedAt.toISOString(),
-      acknowledgedAt: h.acknowledgedAt?.toISOString() ?? null,
-      openTickets: h.openTicketsJson ? safeJson(h.openTicketsJson) : null,
-      wasMine: h.authorId === actor.userId,
-    })),
+    items: items.map((h) => {
+      const pendingItems = parsePendingItemsJson(h.pendingItemsJson);
+      return {
+        id: h.id,
+        shiftDate: h.shiftDate,
+        shift: h.shift,
+        authorId: h.authorId,
+        authorName: h.authorName,
+        summary: h.summary,
+        alerts: h.alerts,
+        pendingActions: h.pendingActions,
+        pendingItems,
+        openPendingCount: countOpenPendingItems(pendingItems),
+        createdAt: h.createdAt.toISOString(),
+        updatedAt: h.updatedAt.toISOString(),
+        acknowledgedById: h.acknowledgedById,
+        acknowledgedByName: h.acknowledgedByName,
+        acknowledgedAt: h.acknowledgedAt?.toISOString() ?? null,
+        openTickets: h.openTicketsJson ? safeJson(h.openTicketsJson) : null,
+        wasMine: h.authorId === actor.userId,
+      };
+    }),
   });
 }
 
@@ -113,7 +136,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "El resumen es obligatorio" }, { status: 400 });
   }
   const alerts = sanitizeText(body.alerts, 4000);
-  const pendingActions = sanitizeText(body.pendingActions, 4000);
+  const pendingItems = normalizePendingItemsInput(body.pendingItems);
+  const pendingItemsJson = serializePendingItems(pendingItems);
+  // Compat: texto legado = join de ítems, o el textarea si aún llega sin checklist.
+  const pendingActions =
+    pendingItemsToLegacyText(pendingItems) ?? sanitizeText(body.pendingActions, 4000);
 
   // Snapshot opcional de tickets abiertos (criterio: status in [abierto,
   // en_proceso, esperando_repuesto], creados o tocados en las últimas 24h).
@@ -153,6 +180,7 @@ export async function POST(request: Request) {
       summary,
       alerts,
       pendingActions,
+      pendingItemsJson,
       openTicketsJson,
     },
   });
@@ -163,5 +191,14 @@ export async function POST(request: Request) {
     detail: `${shiftDate} · ${shift} · ${summary.slice(0, 60)}`,
   });
 
-  return NextResponse.json({ handover: created }, { status: 201 });
+  return NextResponse.json(
+    {
+      handover: {
+        ...created,
+        pendingItems,
+        openPendingCount: countOpenPendingItems(pendingItems),
+      },
+    },
+    { status: 201 },
+  );
 }

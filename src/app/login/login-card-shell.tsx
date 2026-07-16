@@ -6,6 +6,8 @@ import { type ReactNode } from "react";
 import { loginCopy } from "@/app/login/login-i18n";
 import { useLoginLocale } from "@/app/login/use-login-locale";
 
+const LOGIN_EASE = [0.22, 1, 0.36, 1] as const;
+
 export function LoginSkipLink() {
   const locale = useLoginLocale();
   const t = loginCopy(locale);
@@ -19,16 +21,37 @@ export function LoginSkipLink() {
   );
 }
 
+/** Entrada del plano de marca (antes que el form). */
+export function LoginBrandMotion({ children }: { children: ReactNode }) {
+  // Fail-closed: null (SSR/hydration) = sin motion hasta conocer preferencia.
+  const reduce = useReducedMotion() ?? true;
+  return (
+    <motion.div
+      className="login-brand-motion-root"
+      initial={reduce ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: reduce ? 0 : 0.36,
+        ease: LOGIN_EASE,
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/** Entrada del plano de acceso (ligeramente retardada respecto al brand). */
 export function LoginCardMotion({ children }: { children: ReactNode }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotion() ?? true;
   return (
     <motion.div
       className="login-card-motion-root"
       initial={reduce ? false : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{
-        duration: reduce ? 0 : 0.48,
-        ease: [0.22, 1, 0.36, 1],
+        duration: reduce ? 0 : 0.4,
+        delay: reduce ? 0 : 0.12,
+        ease: LOGIN_EASE,
       }}
     >
       {children}

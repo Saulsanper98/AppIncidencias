@@ -33,6 +33,7 @@ import {
   ticketsCsvFilename,
   type TicketCsvExportRow,
 } from "@/lib/tickets/ticket-export-csv";
+import { currentShiftFromHour, type ShiftKey, VALID_SHIFTS } from "@/lib/shift-utils";
 
 export function useTickets() {
   const router = useRouter();
@@ -52,6 +53,11 @@ export function useTickets() {
   const partCodeFromQuery = searchParams.get("partCode")?.trim() ?? "";
   const mineFromQuery = searchParams.get("mine");
   const completarFromQuery = searchParams.get("completar");
+  const slaOverdueOnly = searchParams.get("sla") === "overdue";
+  const operatorFromQuery = searchParams.get("operator");
+  const hourFromQuery = searchParams.get("hour");
+  const shiftFromQuery = searchParams.get("shift");
+  const qFromQuery = searchParams.get("q");
 
   const [users, setUsers] = useState<LocalUser[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>("");
@@ -175,6 +181,16 @@ export function useTickets() {
     if (!tipoFromQuery) return;
     setTipoFilter(tipoFromQuery === "todos" ? "todos" : tipoFromQuery);
   }, [tipoFromQuery]);
+
+  useEffect(() => {
+    if (!operatorFromQuery) return;
+    setOperatorFilter(operatorFromQuery === "todas" ? "todas" : operatorFromQuery);
+  }, [operatorFromQuery]);
+
+  useEffect(() => {
+    if (!qFromQuery) return;
+    setSearchQuery(qFromQuery);
+  }, [qFromQuery]);
 
   useEffect(() => {
     if (!completarFromQuery || loading) return;
@@ -349,6 +365,7 @@ export function useTickets() {
       const curBus = searchParams.get("busId") ?? "";
       const curTipo = searchParams.get("tipo") ?? "";
       const curPart = searchParams.get("partCode")?.trim() ?? "";
+      const curSla = searchParams.get("sla") ?? "";
       if (
         curStatus === desiredStatus &&
         curPri === desiredPri &&
@@ -364,11 +381,26 @@ export function useTickets() {
       if (desiredBus) q.set("busId", desiredBus);
       if (desiredTipo) q.set("tipo", desiredTipo);
       if (curPart) q.set("partCode", curPart);
+      if (onlyMine) q.set("mine", "1");
+      if (curSla === "overdue" || slaOverdueOnly) q.set("sla", "overdue");
       const qs = q.toString();
       router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
     }, 0);
     return () => window.clearTimeout(id);
-  }, [loading, pathname, inboxPath, statusFilter, priorityFilter, operatorFilter, busFilter, tipoFilter, router, searchParams]);
+  }, [
+    loading,
+    pathname,
+    inboxPath,
+    statusFilter,
+    priorityFilter,
+    operatorFilter,
+    busFilter,
+    tipoFilter,
+    onlyMine,
+    slaOverdueOnly,
+    router,
+    searchParams,
+  ]);
 
   const fetchCatalog = useCallback(async () => {
     const loadOnce = async () => {
@@ -1118,6 +1150,58 @@ export function useTickets() {
     await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
   }, [fetchTickets, statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, tipoFilter]);
 
+  const clearPartCodeFilter = useCallback(() => {
+    const q = new URLSearchParams();
+    if (statusFilter !== "todos") q.set("status", statusFilter);
+    if (priorityFilter !== "todos") q.set("priority", priorityFilter);
+    if (operatorFilter !== "todas") q.set("operator", operatorFilter);
+    if (busFilter !== "todas") q.set("busId", busFilter);
+    if (tipoFilter !== "todos") q.set("tipo", tipoFilter);
+    if (onlyMine) q.set("mine", "1");
+    if (slaOverdueOnly) q.set("sla", "overdue");
+    const qs = q.toString();
+    router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
+  }, [
+    statusFilter,
+    priorityFilter,
+    operatorFilter,
+    busFilter,
+    tipoFilter,
+    onlyMine,
+    slaOverdueOnly,
+    router,
+    inboxPath,
+  ]);
+
+  const setSlaOverdueOnly = useCallback(
+    (next: boolean | ((prev: boolean) => boolean)) => {
+      const value = typeof next === "function" ? next(slaOverdueOnly) : next;
+      const q = new URLSearchParams();
+      if (statusFilter !== "todos") q.set("status", statusFilter);
+      if (priorityFilter !== "todos") q.set("priority", priorityFilter);
+      if (operatorFilter !== "todas") q.set("operator", operatorFilter);
+      if (busFilter !== "todas") q.set("busId", busFilter);
+      if (tipoFilter !== "todos") q.set("tipo", tipoFilter);
+      if (partCodeFromQuery) q.set("partCode", partCodeFromQuery);
+      if (onlyMine) q.set("mine", "1");
+      if (value) q.set("sla", "overdue");
+      const qs = q.toString();
+      router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
+    },
+    [
+      slaOverdueOnly,
+      statusFilter,
+      priorityFilter,
+      operatorFilter,
+      busFilter,
+      tipoFilter,
+      partCodeFromQuery,
+      onlyMine,
+      router,
+      inboxPath,
+    ],
+  );
+
   const handleClearFilters = useCallback(() => {
     setStatusFilter("todos");
     setPriorityFilter("todos");
@@ -1176,21 +1260,33 @@ export function useTickets() {
     [router, inboxPath],
   );
 
-  const clearPartCodeFilter = useCallback(() => {
-    const q = new URLSearchParams();
-    if (statusFilter !== "todos") q.set("status", statusFilter);
-    if (priorityFilter !== "todos") q.set("priority", priorityFilter);
-    if (operatorFilter !== "todas") q.set("operator", operatorFilter);
-    if (busFilter !== "todas") q.set("busId", busFilter);
-    if (tipoFilter !== "todos") q.set("tipo", tipoFilter);
-    const qs = q.toString();
-    router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
-  }, [statusFilter, priorityFilter, operatorFilter, busFilter, tipoFilter, router, inboxPath]);
-
   const filteredTickets = useMemo(() => {
+    const now = Date.now();
+    let list = tickets;
+    if (slaOverdueOnly) {
+      list = list.filter(
+        (t) =>
+          t.status !== "resuelto" &&
+          Boolean(t.slaDeadline) &&
+          new Date(t.slaDeadline).getTime() < now,
+      );
+    }
+
+    const hourParam = hourFromQuery != null ? Number(hourFromQuery) : NaN;
+    if (Number.isInteger(hourParam) && hourParam >= 0 && hourParam <= 23) {
+      list = list.filter((t) => new Date(t.createdAt).getHours() === hourParam);
+    }
+
+    const shiftParam = (shiftFromQuery ?? "").toUpperCase();
+    if (VALID_SHIFTS.has(shiftParam as ShiftKey)) {
+      list = list.filter(
+        (t) => currentShiftFromHour(new Date(t.createdAt).getHours()) === shiftParam,
+      );
+    }
+
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return tickets;
-    return tickets.filter(
+    if (!q) return list;
+    return list.filter(
       (t) =>
         t.title.toLowerCase().includes(q) ||
         t.busId.toLowerCase().includes(q) ||
@@ -1202,7 +1298,7 @@ export function useTickets() {
         (t.assignedToUserName?.toLowerCase().includes(q) ?? false) ||
         t.id.toLowerCase().includes(q),
     );
-  }, [tickets, searchQuery]);
+  }, [tickets, searchQuery, slaOverdueOnly, hourFromQuery, shiftFromQuery]);
 
   const inboxScreenReaderSummary = useMemo(() => {
     const estado = statusFilter === "todos" ? "Todos los estados" : statusMap[statusFilter];
@@ -1217,9 +1313,10 @@ export function useTickets() {
     const operadora = operatorFilter === "todas" ? "Todas las operadoras" : operatorFilter;
     const busTxt = busFilter === "todas" ? "Todos los buses" : busFilter;
     const tipoTxt = tipoFilter === "todos" ? "Todos los tipos" : tipoFilter;
+    const slaTxt = slaOverdueOnly ? ", SLA vencido" : "";
     const pieza = partCodeFromQuery ? `, repuesto ${partCodeFromQuery}` : "";
-    return `Bandeja: ${tickets.length} ticket(s) visibles. Filtros activos: estado ${estado}, ${priTxt}, operadora ${operadora}, bus ${busTxt}, tipo ${tipoTxt}${pieza}.`;
-  }, [tickets.length, statusFilter, priorityFilter, operatorFilter, busFilter, tipoFilter, partCodeFromQuery]);
+    return `Bandeja: ${tickets.length} ticket(s) visibles. Filtros activos: estado ${estado}, ${priTxt}, operadora ${operadora}, bus ${busTxt}, tipo ${tipoTxt}${slaTxt}${pieza}.`;
+  }, [tickets.length, statusFilter, priorityFilter, operatorFilter, busFilter, tipoFilter, partCodeFromQuery, slaOverdueOnly]);
 
   const handleExportTicketsCsv = useCallback(() => {
     const rows: TicketCsvExportRow[] = filteredTickets.map((t) => ({
@@ -1301,6 +1398,8 @@ export function useTickets() {
     tipoFilterOptions,
     onlyMine,
     setOnlyMine,
+    slaOverdueOnly,
+    setSlaOverdueOnly,
     tickets,
     loading,
     saving,

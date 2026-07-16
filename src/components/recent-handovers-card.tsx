@@ -32,6 +32,7 @@ type Handover = {
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
   createdAt: string;
+  openPendingCount?: number;
 };
 
 const SHIFT_META: Record<Shift, { label: string; Icon: typeof Sunrise; ring: string; bg: string; text: string }> = {
@@ -132,10 +133,17 @@ export function RecentHandoversCard() {
           {items.map((h, index) => {
             const meta = SHIFT_META[h.shift];
             const isSigned = Boolean(h.acknowledgedAt);
+            const openCount = h.openPendingCount ?? 0;
+            const href =
+              openCount > 0
+                ? `/handover?tab=open_pending&focus=${encodeURIComponent(h.id)}`
+                : isSigned
+                  ? `/handover?focus=${encodeURIComponent(h.id)}`
+                  : `/handover?tab=unacked&focus=${encodeURIComponent(h.id)}`;
             return (
               <li key={h.id} className={`ccmgc-stagger-in ccmgc-stagger-in-${(index % 6) + 1}`}>
                 <Link
-                  href="/handover"
+                  href={href}
                   className="group flex items-center gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] px-2 py-1.5 transition-colors hover:border-white/15 hover:bg-white/[0.05]"
                 >
                   <div
@@ -156,15 +164,22 @@ export function RecentHandoversCard() {
                       {h.authorName}
                     </p>
                   </div>
-                  {isSigned ? (
-                    <span className="shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-emerald-300">
-                      Firmado
-                    </span>
-                  ) : (
-                    <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-amber-300">
-                      Sin firmar
-                    </span>
-                  )}
+                  <div className="flex shrink-0 flex-col items-end gap-0.5">
+                    {isSigned ? (
+                      <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-emerald-300">
+                        Firmado
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-amber-300">
+                        Sin firmar
+                      </span>
+                    )}
+                    {openCount > 0 ? (
+                      <span className="text-[9.5px] font-semibold text-amber-300/90">
+                        {openCount} pend.
+                      </span>
+                    ) : null}
+                  </div>
                 </Link>
               </li>
             );

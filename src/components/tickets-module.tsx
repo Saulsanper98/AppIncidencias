@@ -18,6 +18,7 @@ import {
   Plus,
   Search,
   Tags,
+  Sparkles,
   Ticket as TicketIcon,
   Timer,
   UserCheck,
@@ -41,10 +42,12 @@ import { TicketEditDialog } from "@/components/tickets/TicketEditDialog";
 import { ExcelExportMenu } from "@/components/tickets/ExcelExportMenu";
 import { QuickTicketDialog } from "@/components/tickets/QuickTicketDialog";
 import { SavedViewsBar } from "@/components/tickets/SavedViewsBar";
+import { BandejaHandoverBanner } from "@/components/tickets/BandejaHandoverBanner";
 import { ExpressTicketPanel } from "@/components/tickets/ExpressTicketPanel";
 import { isUiUnificationEnabled } from "@/ui-unification/feature";
 import { TicketsModuleHeroUnified } from "@/ui-unification/heroes/TicketsModuleHeroUnified";
 import { TicketCreateForm } from "@/components/tickets/TicketCreateForm";
+import { TicketTemplatesPanel } from "@/components/tickets/TicketTemplatesPanel";
 import { TicketsBandeja } from "@/components/tickets/TicketsBandeja";
 import type {
   AuditEventView,
@@ -341,6 +344,7 @@ function TicketBandejaKpiStrip({
   esperandoRepuesto,
   resueltosHoy,
   slaVencidos,
+  onSlaClick,
 }: {
   total: number;
   borradores: number;
@@ -349,15 +353,28 @@ function TicketBandejaKpiStrip({
   esperandoRepuesto: number;
   resueltosHoy: number;
   slaVencidos: number;
+  onSlaClick?: () => void;
 }) {
-  const items: { value: number; label: string; tone: KpiTone; pulse?: boolean }[] = [
+  const items: {
+    value: number;
+    label: string;
+    tone: KpiTone;
+    pulse?: boolean;
+    onClick?: () => void;
+  }[] = [
     { value: total, label: "Total", tone: "neutral" },
     { value: borradores, label: "Pend.", tone: "warning" },
     { value: abiertos, label: "Abiertos", tone: "info" },
     { value: enProceso, label: "Proceso", tone: "accent" },
     { value: esperandoRepuesto, label: "Espera", tone: "warning" },
     { value: resueltosHoy, label: "Hoy", tone: "success" },
-    { value: slaVencidos, label: "SLA", tone: "error", pulse: slaVencidos > 0 },
+    {
+      value: slaVencidos,
+      label: "SLA",
+      tone: "error",
+      pulse: slaVencidos > 0,
+      onClick: slaVencidos > 0 ? onSlaClick : undefined,
+    },
   ];
 
   return (
@@ -370,25 +387,49 @@ function TicketBandejaKpiStrip({
           {index > 0 ? (
             <span className="hidden h-3 w-px shrink-0 bg-[var(--color-border)]/50 sm:inline" aria-hidden />
           ) : null}
-          <span
-            className={cn(
-              "inline-flex items-baseline gap-1 whitespace-nowrap",
-              item.pulse && "animate-pulse",
-            )}
-            title={`${item.value} ${item.label}`}
-          >
+          {item.onClick ? (
+            <button
+              type="button"
+              onClick={item.onClick}
+              className={cn(
+                "inline-flex items-baseline gap-1 whitespace-nowrap rounded-md px-1 py-0.5 transition-colors hover:bg-[color-mix(in_oklab,var(--color-error)_12%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
+                item.pulse && "animate-pulse",
+              )}
+              title={`Filtrar ${item.value} SLA vencidos`}
+            >
+              <span
+                className={cn(
+                  "text-[13px] font-bold tabular-nums leading-none sm:text-sm",
+                  item.value === 0 ? "text-[var(--color-text-3)]" : kpiToneValueClass(item.tone),
+                )}
+              >
+                {item.value}
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
+                {item.label}
+              </span>
+            </button>
+          ) : (
             <span
               className={cn(
-                "text-[13px] font-bold tabular-nums leading-none sm:text-sm",
-                item.value === 0 ? "text-[var(--color-text-3)]" : kpiToneValueClass(item.tone),
+                "inline-flex items-baseline gap-1 whitespace-nowrap",
+                item.pulse && "animate-pulse",
               )}
+              title={`${item.value} ${item.label}`}
             >
-              {item.value}
+              <span
+                className={cn(
+                  "text-[13px] font-bold tabular-nums leading-none sm:text-sm",
+                  item.value === 0 ? "text-[var(--color-text-3)]" : kpiToneValueClass(item.tone),
+                )}
+              >
+                {item.value}
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
+                {item.label}
+              </span>
             </span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
-              {item.label}
-            </span>
-          </span>
+          )}
         </Fragment>
       ))}
     </div>
@@ -406,6 +447,7 @@ function TicketsHeroHeader({
   slaVencidos,
   maintenanceAlertsCount = 0,
   preventiveTasksCount = 0,
+  onSlaKpiClick,
 }: {
   view: TicketsModuleView;
   total: number;
@@ -417,6 +459,7 @@ function TicketsHeroHeader({
   slaVencidos: number;
   maintenanceAlertsCount?: number;
   preventiveTasksCount?: number;
+  onSlaKpiClick?: () => void;
 }) {
   if (isUiUnificationEnabled()) {
     return (
@@ -440,11 +483,12 @@ function TicketsHeroHeader({
       ? {
           title: "Gestión de tickets",
           subtitle:
-            "Apunte express en llamada. Despliega el formulario completo si necesitas tipología, adjuntos o ubicación.",
+            "Plantillas reutilizables arriba. Apunte express en llamada. Despliega el formulario completo si necesitas adjuntos o ubicación.",
           showKpis: false,
           showManageKpis: true,
           bandejaCta: true,
           nuevoTicketCta: false,
+          plantillasCta: true,
         }
       : view === "bandeja"
         ? {
@@ -552,6 +596,14 @@ function TicketsHeroHeader({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {"plantillasCta" in copy && copy.plantillasCta ? (
+            <TicketsModuleCta
+              href="#ticket-templates-panel"
+              icon={Sparkles}
+              label="Plantillas"
+              hint="Crear o gestionar"
+            />
+          ) : null}
           {copy.nuevoTicketCta ? (
             <TicketsModuleCta
               href="/tickets"
@@ -605,6 +657,7 @@ function TicketsHeroHeader({
             esperandoRepuesto={esperandoRepuesto}
             resueltosHoy={resueltosHoy}
             slaVencidos={slaVencidos}
+            onSlaClick={onSlaKpiClick}
           />
         ) : null}
       </div>
@@ -718,7 +771,9 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
         slaVencidos={heroKpis.slaVencidos}
         maintenanceAlertsCount={t.maintenanceAlerts.length}
         preventiveTasksCount={t.preventiveTasks.length}
+        onSlaKpiClick={() => t.setSlaOverdueOnly(true)}
       />
+      {view === "bandeja" ? <BandejaHandoverBanner /> : null}
       <section
         className={cn(
           "grid grid-cols-1 gap-4",
@@ -732,6 +787,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
         {showForm ? (
           view === "manage" ? (
             <div className="space-y-4">
+              <TicketTemplatesPanel sessionUser={t.sessionUser} tipologias={t.tipologias} />
               <ExpressTicketPanel
                 catalog={t.catalog}
                 tipologias={t.tipologias}
@@ -897,6 +953,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                   if (t.tipoFilter !== "todos") q.set("tipo", t.tipoFilter);
                   if (t.partCodeFromQuery) q.set("partCode", t.partCodeFromQuery);
                   if (t.onlyMine) q.set("mine", "1");
+                  if (t.slaOverdueOnly) q.set("sla", "overdue");
                   return q.toString();
                 })()}
                 onApply={t.applyView}
@@ -983,10 +1040,23 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                     <>
                       <FilterDivider className="hidden lg:block" />
                       <FilterLabeledGroup label="Atajos">
-                        <FilterPillToggle pressed={t.onlyMine} onClick={() => t.setOnlyMine((v) => !v)}>
-                          <UserCheck size={11} aria-hidden />
-                          Mis tickets
-                        </FilterPillToggle>
+                        <div className="flex flex-wrap gap-0.5">
+                          <FilterPillToggle pressed={t.onlyMine} onClick={() => t.setOnlyMine((v) => !v)}>
+                            <UserCheck size={11} aria-hidden />
+                            Mis tickets
+                          </FilterPillToggle>
+                          <FilterPillToggle
+                            pressed={t.slaOverdueOnly}
+                            accent="error"
+                            onClick={() => t.setSlaOverdueOnly((v) => !v)}
+                          >
+                            <Timer size={11} aria-hidden />
+                            SLA vencidos
+                            {heroKpis.slaVencidos > 0 ? (
+                              <span className="tabular-nums">({heroKpis.slaVencidos})</span>
+                            ) : null}
+                          </FilterPillToggle>
+                        </div>
                       </FilterLabeledGroup>
                     </>
                   ) : null}
@@ -1116,6 +1186,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                 t.busFilter !== "todas" ||
                 t.tipoFilter !== "todos" ||
                 t.onlyMine ||
+                t.slaOverdueOnly ||
                 t.searchQuery.trim() ||
                 t.partCodeFromQuery ? (
                   <div className="flex flex-wrap items-center gap-1.5" aria-label="Filtros activos">
@@ -1154,6 +1225,13 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                         label="Mis tickets"
                         icon={<UserCheck size={10} aria-hidden />}
                         onClear={() => t.setOnlyMine(false)}
+                      />
+                    ) : null}
+                    {t.slaOverdueOnly ? (
+                      <FilterActiveTag
+                        label="SLA vencidos"
+                        icon={<Timer size={10} aria-hidden />}
+                        onClear={() => t.setSlaOverdueOnly(false)}
                       />
                     ) : null}
                     {t.searchQuery.trim() ? (

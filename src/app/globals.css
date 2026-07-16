@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../styles/app-charts.css";
 
 :root {
   /* ── Paleta premium dark (iter. 3) ──
@@ -695,13 +696,13 @@ body {
 }
 
 .login-segmented-item {
-  min-width: 40px;
-  min-height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 10px;
 }
 
 .login-primary-cta {
-  min-height: 42px;
+  min-height: 44px;
   font-weight: 600;
   letter-spacing: 0.005em;
   box-shadow:
@@ -718,6 +719,16 @@ body {
   --color-text-2: #c4d3ea;
   --color-text-3: #d1def2;
   --color-border: rgba(186, 206, 236, 0.24);
+}
+
+/* Labels del form más legibles de noche (AA holgado sobre navy). */
+[data-login-chrono="night"] .login-access-plane .text-label {
+  color: color-mix(in oklab, var(--color-text-1) 78%, var(--color-text-2));
+}
+
+[data-login-chrono="night"] .login-access-plane .login-secondary-text,
+[data-login-chrono="night"] .login-access-plane #login-user-hint {
+  color: color-mix(in oklab, var(--color-text-2) 88%, white);
 }
 
 /* Login: sin anillo azul al hacer clic con ratón; foco visible solo con teclado (WCAG) */
@@ -776,13 +787,7 @@ body {
 }
 
 .login-card-motion-root {
-  will-change: transform, opacity;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .login-card-motion-root {
-    will-change: auto;
-  }
+  will-change: auto;
 }
 
 /* Retícula baseline 4px + columnas cada 16px (solo depuración) */
@@ -884,17 +889,17 @@ body {
   }
 }
 
-/* P7: matiz día/noche muy sutil en el fondo del login */
+/* P7: atmósfera navy/azul unificada (sin orbes verdes a la derecha). */
 .login-ambient-gradient-a {
-  background: radial-gradient(ellipse 85% 55% at 50% -15%, rgba(37, 99, 235, 0.36), transparent);
+  background: radial-gradient(ellipse 80% 55% at 32% -12%, rgba(37, 99, 235, 0.28), transparent);
 }
 
 .login-ambient-gradient-b {
-  background: radial-gradient(ellipse 55% 45% at 85% 85%, rgba(5, 150, 105, 0.12), transparent);
+  background: radial-gradient(ellipse 50% 42% at 18% 88%, rgba(37, 99, 235, 0.08), transparent);
 }
 
 .login-ambient-gradient-c {
-  background: radial-gradient(ellipse 65% 42% at 75% 100%, rgba(5, 150, 105, 0.14), transparent);
+  background: radial-gradient(ellipse 55% 40% at 42% 100%, rgba(15, 23, 42, 0.55), transparent);
 }
 
 .login-ambient-gradient-d {
@@ -902,26 +907,25 @@ body {
 }
 
 [data-login-chrono="night"] .login-ambient-gradient-a {
-  background: radial-gradient(ellipse 85% 55% at 50% -18%, rgba(37, 99, 235, 0.46), transparent);
+  background: radial-gradient(ellipse 80% 55% at 30% -14%, rgba(37, 99, 235, 0.36), transparent);
 }
 
 [data-login-chrono="night"] .login-ambient-gradient-b {
-  background: radial-gradient(ellipse 55% 45% at 85% 88%, rgba(5, 150, 105, 0.1), transparent);
+  background: radial-gradient(ellipse 50% 42% at 16% 90%, rgba(37, 99, 235, 0.1), transparent);
 }
 
 [data-login-chrono="night"] .login-ambient-gradient-c {
-  background: radial-gradient(ellipse 65% 42% at 78% 100%, rgba(5, 150, 105, 0.12), transparent);
+  background: radial-gradient(ellipse 55% 40% at 40% 100%, rgba(8, 12, 20, 0.65), transparent);
 }
 
 [data-login-chrono="night"] .login-ambient-gradient-d {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 38%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, transparent 38%);
 }
 
 @media (prefers-reduced-motion: reduce) {
   [data-login-chrono="night"] .login-ambient-gradient-a,
   [data-login-chrono="night"] .login-ambient-gradient-b,
   [data-login-chrono="night"] .login-ambient-gradient-c {
-    /* Sin animación: solo fijamos el estado “noche” estático */
     filter: none;
   }
 }
@@ -1122,7 +1126,7 @@ body {
   border-radius: 36px;
   background:
     radial-gradient(60% 50% at 50% 0%, rgba(56, 132, 255, 0.22), transparent 70%),
-    radial-gradient(45% 45% at 100% 100%, rgba(16, 185, 129, 0.14), transparent 70%),
+    radial-gradient(45% 45% at 100% 100%, rgba(37, 99, 235, 0.12), transparent 70%),
     radial-gradient(50% 45% at 0% 100%, rgba(56, 189, 248, 0.10), transparent 70%);
   filter: blur(28px);
   opacity: 0.85;
@@ -1132,7 +1136,7 @@ body {
 [data-login-chrono="night"] .login-card-glow::before {
   background:
     radial-gradient(60% 50% at 50% 0%, rgba(56, 132, 255, 0.30), transparent 70%),
-    radial-gradient(45% 45% at 100% 100%, rgba(16, 185, 129, 0.16), transparent 70%),
+    radial-gradient(45% 45% at 100% 100%, rgba(37, 99, 235, 0.14), transparent 70%),
     radial-gradient(50% 45% at 0% 100%, rgba(56, 189, 248, 0.12), transparent 70%);
 }
 
@@ -1355,6 +1359,20 @@ body {
     0 0 0 4px color-mix(in oklab, var(--color-accent) 22%, transparent),
     0 1px 0 rgba(255, 255, 255, 0.04) inset !important;
 }
+.login-input-premium[aria-invalid="true"] {
+  border-color: color-mix(in oklab, var(--color-error) 62%, var(--color-border)) !important;
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--color-error) 18%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset !important;
+}
+.login-password-toggle {
+  color: var(--color-text-2);
+}
+.login-password-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-accent) 45%, transparent);
+  color: var(--color-text-1);
+}
 
 /* Pill de estado del sistema en el footer */
 .login-status-pill {
@@ -1405,13 +1423,519 @@ body {
   50%      { transform: translate3d(-2rem, 1.5rem, 0); }
 }
 
-/* Vi�eta vertical sutil para profundidad */
+/* Viñeta uniforme (sin sesgo derecha) para profundidad */
 .login-ambient-vignette {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 65% at 50% 50%, transparent 50%, rgba(0, 0, 0, 0.35) 100%);
+    radial-gradient(ellipse 90% 70% at 40% 45%, transparent 48%, rgba(0, 0, 0, 0.32) 100%);
   pointer-events: none;
+}
+
+/* ── Login stage (split brand + access) ───────────────────────────────── */
+.login-stage-grid {
+  display: grid;
+  min-height: 100dvh;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+
+@media (min-width: 1024px) {
+  .login-stage-grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(22rem, 0.85fr);
+    grid-template-rows: 1fr;
+  }
+}
+
+.login-stage-ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Salida al dashboard: fade del stage (no del body). */
+.login-stage {
+  transition:
+    opacity 0.18s var(--login-ease-out),
+    transform 0.18s var(--login-ease-out);
+}
+.login-stage--exiting {
+  opacity: 0;
+  transform: scale(0.992);
+  pointer-events: none;
+}
+
+/* Highlight al aterrizar desde banner/dashboard con ?focus= */
+.handover-card--focus {
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, var(--color-accent) 55%, transparent),
+    0 12px 28px -16px color-mix(in oklab, var(--color-accent) 45%, transparent);
+}
+
+.login-brand-motion-root {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+@media (min-width: 1024px) {
+  .login-brand-motion-root {
+    min-height: 100dvh;
+  }
+}
+
+.login-brand-motion-root .login-brand-plane {
+  flex: 1;
+}
+
+/* Stagger de contenido (brand + form) */
+.login-enter {
+  animation: login-enter-up 0.44s var(--login-ease-out) both;
+}
+.login-enter--1 { animation-delay: 0.04s; }
+.login-enter--2 { animation-delay: 0.1s; }
+.login-enter--3 { animation-delay: 0.16s; }
+.login-enter--4 { animation-delay: 0.22s; }
+.login-enter--5 { animation-delay: 0.28s; }
+
+@keyframes login-enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-enter,
+  .login-enter--1,
+  .login-enter--2,
+  .login-enter--3,
+  .login-enter--4,
+  .login-enter--5 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .login-stage--exiting {
+    transition: none;
+    opacity: 0;
+    transform: none;
+  }
+}
+
+.login-brand-plane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: clamp(15rem, 38dvh, 22rem);
+  padding: 1.5rem 1.25rem 1.25rem;
+  overflow: hidden;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-border) 70%, transparent);
+}
+
+@media (min-width: 640px) {
+  .login-brand-plane {
+    padding: 2rem 2rem 1.75rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .login-brand-plane {
+    min-height: 100dvh;
+    justify-content: center;
+    padding: 3.5rem clamp(2rem, 4vw, 4.5rem);
+    border-bottom: 0;
+    border-right: 1px solid color-mix(in oklab, var(--color-border) 28%, transparent);
+  }
+}
+
+.login-brand-plane__mesh {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 75% 70% at 35% 45%, black 0%, transparent 78%);
+  opacity: 0.7;
+}
+
+.login-brand-plane__routes {
+  position: absolute;
+  inset: 6% 6% 22% 8%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+@media (min-width: 1024px) {
+  .login-brand-plane__routes {
+    inset: 10% 8% 12% 10%;
+  }
+}
+
+.login-routes-svg {
+  width: 100%;
+  height: 100%;
+  max-width: min(100%, 34rem);
+  max-height: 100%;
+  object-fit: contain;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .login-silhouette-path {
+    fill-opacity: 0;
+    stroke-dasharray: 2200;
+    stroke-dashoffset: 2200;
+    animation: login-silhouette-draw 0.72s var(--login-ease-out) 0.05s forwards;
+  }
+
+  .login-routes-line--a {
+    stroke-dasharray: 12 10;
+    opacity: 0;
+    animation:
+      login-routes-reveal 0.55s var(--login-ease-out) 0.55s forwards,
+      login-route-dash 22s linear 1.15s infinite;
+  }
+  .login-routes-line--b {
+    stroke-dasharray: 8 12;
+    opacity: 0;
+    animation:
+      login-routes-reveal 0.55s var(--login-ease-out) 0.62s forwards,
+      login-route-dash 28s linear 1.2s infinite reverse;
+  }
+  .login-routes-line--c {
+    opacity: 0;
+    animation: login-routes-reveal 0.55s var(--login-ease-out) 0.7s forwards;
+  }
+
+  .login-route-node--in {
+    opacity: 0;
+    animation: login-node-in 0.4s var(--login-ease-out) both;
+    animation-delay: calc(0.62s + (var(--login-node-i, 0) * 0.07s));
+  }
+
+  .login-route-node--in.login-route-node--pulse {
+    animation:
+      login-node-in 0.4s var(--login-ease-out) both,
+      login-node-pulse 2.8s ease-in-out infinite;
+    animation-delay:
+      calc(0.62s + (var(--login-node-i, 0) * 0.07s)),
+      calc(1.15s + (var(--login-node-i, 0) * 0.07s));
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .login-ambient-gradient-a {
+    animation: login-ambient-drift 12s ease-in-out infinite;
+  }
+
+  .login-brand-kicker__mark {
+    animation: login-kicker-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes login-silhouette-draw {
+  0% {
+    stroke-dashoffset: 2200;
+    fill-opacity: 0;
+  }
+  72% {
+    stroke-dashoffset: 0;
+    fill-opacity: 0;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    fill-opacity: 1;
+  }
+}
+
+@keyframes login-routes-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes login-route-dash {
+  to {
+    stroke-dashoffset: -220;
+  }
+}
+
+@keyframes login-node-in {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: var(--login-node-opacity, 0.4);
+    transform: scale(1);
+  }
+}
+
+@keyframes login-node-pulse {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes login-ambient-drift {
+  0%,
+  100% {
+    opacity: 0.92;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes login-kicker-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, transparent);
+    opacity: 0.9;
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-accent) 28%, transparent);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-silhouette-path {
+    fill-opacity: 1;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+  .login-routes-line--a,
+  .login-routes-line--b,
+  .login-routes-line--c {
+    animation: none !important;
+    opacity: 1;
+  }
+  .login-route-node--in,
+  .login-route-node--pulse {
+    animation: none !important;
+    opacity: var(--login-node-opacity, 0.4);
+    transform: none;
+  }
+  .login-ambient-gradient-a,
+  .login-brand-kicker__mark {
+    animation: none !important;
+  }
+}
+
+.login-brand-plane__fade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, transparent 35%, color-mix(in oklab, var(--color-bg) 88%, transparent) 100%),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-bg) 55%, transparent) 0%, transparent 42%);
+  pointer-events: none;
+}
+
+@media (min-width: 1024px) {
+  .login-brand-plane__fade {
+    /* Fundido suave hacia el plano de acceso, sin tinte cromático distinto. */
+    background:
+      linear-gradient(90deg, transparent 55%, color-mix(in oklab, var(--color-bg) 55%, transparent) 100%),
+      linear-gradient(180deg, transparent 55%, color-mix(in oklab, var(--color-bg) 50%, transparent) 100%);
+  }
+}
+
+.login-brand-plane__content {
+  position: relative;
+  z-index: 1;
+  max-width: 34rem;
+}
+
+.login-brand-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-text-3) 88%, white);
+}
+
+.login-brand-kicker__mark {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 1px;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 22%, transparent);
+}
+
+.login-brand-logo-wrap {
+  margin-bottom: 1rem;
+}
+
+.login-brand-lead {
+  margin: 0;
+  max-width: 32ch;
+  font-size: clamp(0.95rem, 1.6vw, 1.125rem);
+  line-height: 1.55;
+  color: var(--color-text-2);
+}
+
+.login-brand-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem 2rem;
+  margin: 1.5rem 0 0;
+}
+
+.login-brand-meta dt {
+  margin: 0 0 0.2rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+
+.login-brand-meta dd {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--color-text-1);
+}
+
+.login-brand-meta__muted {
+  font-weight: 450;
+  color: var(--color-text-3);
+}
+
+.login-access-plane {
+  display: flex;
+  min-height: 0;
+  align-items: stretch;
+  justify-content: center;
+  padding: 1.25rem 1.25rem 1.75rem;
+  background: transparent;
+}
+
+@media (min-width: 640px) {
+  .login-access-plane {
+    padding: 1.75rem 2rem 2.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .login-access-plane {
+    min-height: 100dvh;
+    align-items: center;
+    padding: 2.5rem clamp(1.5rem, 3vw, 3.25rem);
+    background: transparent;
+  }
+}
+
+.login-access-plane__inner {
+  width: 100%;
+  max-width: 26rem;
+}
+
+.login-access-kicker {
+  margin: 0;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+
+.login-access-title {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.2vw, 1.45rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--color-text-1);
+}
+
+.login-access-footer {
+  text-align: left;
+  border-top: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
+  padding-top: 0.85rem;
+}
+
+/* CTA en el plano de acceso: menos “glow product”, más sólido */
+.login-access-plane .login-primary-cta-premium {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 8px 20px -10px color-mix(in oklab, var(--color-accent) 55%, transparent) !important;
+  transition:
+    transform 0.15s var(--login-ease-out),
+    box-shadow 0.18s var(--login-ease-out),
+    opacity 0.18s var(--login-ease-out) !important;
+}
+
+.login-access-plane .login-primary-cta-premium::after {
+  display: none;
+}
+
+.login-access-plane .login-primary-cta-premium:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.16) inset,
+    0 4px 12px -8px color-mix(in oklab, var(--color-accent) 45%, transparent) !important;
+}
+
+.login-cta-loading__label {
+  opacity: 0.88;
+}
+
+.login-welcome-flash {
+  animation: login-welcome-in 0.35s var(--login-ease-out) both;
+}
+
+@keyframes login-welcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-welcome-flash {
+    animation: none;
+  }
+  .login-access-plane .login-primary-cta-premium:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+.login-card-motion-root {
+  display: flex;
+  min-height: 0;
+}
+
+@media (min-width: 1024px) {
+  .login-card-motion-root {
+    min-height: 100dvh;
+  }
 }
 
 /* Gradiente de texto sutil para "Centro de Control": holo blanco-azulado.
@@ -6145,6 +6669,103 @@ html[data-density="compact"] .tickets-kpi-pill {
   pointer-events: none;
 }
 .ccmgc-hero > *:not([aria-hidden]) { position: relative; z-index: 1; }
+
+.ccmgc-hero--conocimiento {
+  --hero-gradient-accent: color-mix(in oklab, var(--hero-accent-conocimiento) 10%, var(--color-surface));
+}
+.ccmgc-hero--conocimiento::before {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--hero-accent-conocimiento) 14%, transparent) 0%,
+    transparent 45%,
+    transparent 65%,
+    color-mix(in oklab, var(--hero-accent-conocimiento) 6%, transparent) 100%
+  );
+}
+
+.ccmgc-hero--flota {
+  --hero-gradient-accent: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface));
+}
+.ccmgc-hero--flota::before {
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--color-accent) 12%, transparent) 0%,
+    transparent 50%,
+    color-mix(in oklab, #34d399 8%, transparent) 100%
+  );
+}
+
+/* Admin subpáginas (operación, salud) */
+.admin-subpage-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl, 1rem);
+  border: 1px solid color-mix(in oklab, var(--color-border) 88%, var(--hero-accent-admin) 12%);
+  padding: 1.1rem 1.25rem;
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 5%, transparent),
+    0 16px 48px -28px color-mix(in oklab, var(--hero-accent-admin) 28%, transparent);
+}
+
+.admin-subpage-hero--operacion {
+  border-color: color-mix(in oklab, var(--color-border) 85%, #f59e0b 15%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 5%, transparent),
+    0 16px 48px -28px color-mix(in oklab, #f59e0b 30%, transparent);
+  background: linear-gradient(
+    145deg,
+    var(--color-surface) 0%,
+    color-mix(in oklab, var(--color-surface) 92%, #f59e0b 8%) 55%,
+    color-mix(in oklab, var(--color-surface) 85%, #f59e0b 15%) 100%
+  );
+}
+
+.admin-subpage-hero--salud {
+  border-color: color-mix(in oklab, var(--color-border) 85%, #22d3ee 15%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, white 5%, transparent),
+    0 16px 48px -28px color-mix(in oklab, #22d3ee 30%, transparent);
+  background: linear-gradient(
+    145deg,
+    var(--color-surface) 0%,
+    color-mix(in oklab, var(--color-surface) 92%, #22d3ee 8%) 55%,
+    color-mix(in oklab, var(--color-surface) 85%, #22d3ee 15%) 100%
+  );
+}
+
+.admin-subpage-hero--admin {
+  background: linear-gradient(
+    145deg,
+    var(--color-surface) 0%,
+    color-mix(in oklab, var(--color-surface) 92%, var(--hero-accent-admin) 8%) 55%,
+    color-mix(in oklab, var(--color-surface) 85%, var(--hero-accent-admin) 15%) 100%
+  );
+}
+
+.admin-subpage-hero__glow {
+  pointer-events: none;
+  position: absolute;
+  right: -4rem;
+  top: -4rem;
+  height: 12rem;
+  width: 12rem;
+  border-radius: 50%;
+  opacity: 0.55;
+  filter: blur(48px);
+}
+
+.admin-subpage-hero__glow--operacion {
+  background: radial-gradient(circle, color-mix(in oklab, #f59e0b 45%, transparent) 0%, transparent 70%);
+}
+
+.admin-subpage-hero__glow--salud {
+  background: radial-gradient(circle, color-mix(in oklab, #22d3ee 45%, transparent) 0%, transparent 70%);
+}
+
+.admin-subpage-hero__glow--admin {
+  background: radial-gradient(circle, color-mix(in oklab, var(--hero-accent-admin) 45%, transparent) 0%, transparent 70%);
+}
+
 
 /* Barra de progreso animada. */
 .ccmgc-bar-fill {
