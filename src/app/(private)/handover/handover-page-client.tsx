@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -25,11 +25,10 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { ShiftHeroCard } from "@/components/handover/ShiftHeroCard";
-import { isUiUnificationEnabled } from "@/ui-unification/feature";
-import { HandoverHeroUnified } from "@/ui-unification/heroes/HandoverHeroUnified";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -38,8 +37,11 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { HandoverPendingItem } from "@/lib/handover-pending-items";
+import { pendingTextFromTicket } from "@/lib/handover-pending-items";
 import { hapticMedium } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { isUiUnificationEnabled } from "@/ui-unification/feature";
+import { HandoverHeroUnified } from "@/ui-unification/heroes/HandoverHeroUnified";
 
 /**
  * Pase de turno (handover) M / T / N.
@@ -119,7 +121,7 @@ function newDraftLineId(): string {
   return `draft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-type PendingDraftRow = { key: string; text: string };
+type PendingDraftRow = { key: string; text: string; ticketId?: string | null };
 
 function formatRelativeShort(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));
@@ -158,6 +160,7 @@ export default function HandoverPage() {
   const [pendingInput, setPendingInput] = useState("");
   const [includeSnapshot, setIncludeSnapshot] = useState(true);
   const [itemBusyId, setItemBusyId] = useState<string | null>(null);
+  const [pendingSuggestBusy, setPendingSuggestBusy] = useState(false);
   const [confirm, setConfirm] = useState<
     | { kind: "ack"; handover: Handover }
     | { kind: "del"; handover: Handover }
@@ -329,16 +332,83 @@ export default function HandoverPage() {
     setPendingDraft((prev) => prev.filter((r) => r.key !== key));
   }, []);
 
+  /** Prefill checklist con tickets alta / SLA vencido (abiertos). */
+  const suggestUrgentPending = useCallback(async () => {
+    if (pendingSuggestBusy) return;
+    setPendingSuggestBusy(true);
+    setError(null);
+    try {
+      const [resOpen, resProc] = await Promise.all([
+        fetch("/api/tickets?status=abierto&priority=alta", {
+          cache: "no-store",
+          credentials: "include",
+        }),
+        fetch("/api/tickets?status=en_proceso&priority=alta", {
+          cache: "no-store",
+          credentials: "include",
+        }),
+      ]);
+      if (!resOpen.ok && !resProc.ok) {
+        setError("No se pudieron cargar tickets urgentes");
+        return;
+      }
+      type TicketLite = {
+        id: string;
+        title: string;
+        busId?: string;
+        priority?: string;
+        status?: string;
+        slaDeadline?: string;
+      };
+      const parse = async (res: Response) => {
+        if (!res.ok) return [] as TicketLite[];
+        const data = (await res.json()) as { tickets?: TicketLite[] };
+        return data.tickets ?? [];
+      };
+      const merged = [...(await parse(resOpen)), ...(await parse(resProc))];
+      const byId = new Map(merged.map((t) => [t.id, t]));
+      const candidates = [...byId.values()].slice(0, 8);
+
+      if (candidates.length === 0) {
+        setError("No hay tickets abiertos de prioridad alta para sugerir");
+        return;
+      }
+
+      setPendingDraft((prev) => {
+        const have = new Set(prev.map((r) => r.ticketId).filter(Boolean));
+        const next = [...prev];
+        for (const t of candidates) {
+          if (next.length >= 20) break;
+          if (have.has(t.id)) continue;
+          have.add(t.id);
+          next.push({
+            key: newDraftLineId(),
+            text: pendingTextFromTicket(t),
+            ticketId: t.id,
+          });
+        }
+        return next;
+      });
+    } catch {
+      setError("No se pudieron cargar tickets urgentes");
+    } finally {
+      setPendingSuggestBusy(false);
+    }
+  }, [pendingSuggestBusy]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!summary.trim()) {
       setError("El resumen es obligatorio");
       return;
     }
-    const pendingItems = [
-      ...pendingDraft.map((r) => r.text.trim()).filter(Boolean),
-      ...(pendingInput.trim() ? [pendingInput.trim()] : []),
-    ].slice(0, 20);
+    const fromDraft = pendingDraft
+      .filter((r) => r.text.trim())
+      .map((r) => ({ text: r.text.trim(), ticketId: r.ticketId ?? null }));
+    const fromInput = pendingInput.trim()
+      ? [{ text: pendingInput.trim(), ticketId: null as string | null }]
+      : [];
+    const pendingItems = [...fromDraft, ...fromInput].slice(0, 20);
     setSubmitting(true);
     setError(null);
     try {
@@ -423,9 +493,8 @@ export default function HandoverPage() {
     [load],
   );
 
-  const runToggleItem = useCallback(
-    async (h: Handover, item: HandoverPendingItem) => {
-      const action = item.status === "abierta" ? "complete_item" : "reopen_item";
+  const runItemAction = useCallback(
+    async (h: Handover, item: HandoverPendingItem, action: "complete_item" | "reopen_item" | "cancel_item") => {
       setItemBusyId(item.id);
       try {
         const res = await fetch(`/api/handover/${h.id}`, {
@@ -465,6 +534,22 @@ export default function HandoverPage() {
       }
     },
     [load],
+  );
+
+  const runToggleItem = useCallback(
+    async (h: Handover, item: HandoverPendingItem) => {
+      const action = item.status === "abierta" ? "complete_item" : "reopen_item";
+      await runItemAction(h, item, action);
+    },
+    [runItemAction],
+  );
+
+  const runCancelItem = useCallback(
+    async (h: Handover, item: HandoverPendingItem) => {
+      if (item.status !== "abierta") return;
+      await runItemAction(h, item, "cancel_item");
+    },
+    [runItemAction],
   );
 
   const unacked = useMemo(
@@ -698,7 +783,14 @@ export default function HandoverPage() {
                     <span className="mt-0.5 text-[10px] font-semibold tabular-nums text-[var(--color-text-3)]">
                       {idx + 1}.
                     </span>
-                    <span className="min-w-0 flex-1 text-[12.5px] text-[var(--color-text-1)]">{row.text}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[12.5px] text-[var(--color-text-1)]">{row.text}</span>
+                      {row.ticketId ? (
+                        <p className="mt-0.5 font-mono text-[10px] text-[var(--color-accent)]">
+                          {row.ticketId.slice(-6).toUpperCase()}
+                        </p>
+                      ) : null}
+                    </div>
                     <button
                       type="button"
                       onClick={() => removePendingDraftLine(row.key)}
@@ -735,9 +827,26 @@ export default function HandoverPage() {
                 <Plus size={12} className="mr-1" aria-hidden /> Añadir
               </Button>
             </div>
-            <p className="mt-1.5 text-[10.5px] text-[var(--color-text-3)]">
-              Enter para añadir · máx. 20 · {pendingDraft.length}/20
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void suggestUrgentPending()}
+                disabled={pendingSuggestBusy || pendingDraft.length >= 20}
+                className="!min-h-8 text-[11px]"
+              >
+                {pendingSuggestBusy ? (
+                  <Loader2 size={12} className="mr-1 animate-spin" aria-hidden />
+                ) : (
+                  <Sparkles size={12} className="mr-1" aria-hidden />
+                )}
+                Sugerir desde tickets alta
+              </Button>
+              <p className="text-[10.5px] text-[var(--color-text-3)]">
+                Enter para añadir · máx. 20 · {pendingDraft.length}/20
+              </p>
+            </div>
           </FormBlock>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-3">
@@ -869,6 +978,7 @@ export default function HandoverPage() {
                     isMine={actorId ? h.authorId === actorId : h.wasMine ?? false}
                     itemBusyId={itemBusyId}
                     onToggleItem={(item) => void runToggleItem(h, item)}
+                    onCancelItem={(item) => void runCancelItem(h, item)}
                     onAck={() => setConfirm({ kind: "ack", handover: h })}
                     onDelete={() => setConfirm({ kind: "del", handover: h })}
                   />
@@ -1009,6 +1119,7 @@ function HandoverTimelineCard({
   isMine,
   itemBusyId,
   onToggleItem,
+  onCancelItem,
   onAck,
   onDelete,
 }: {
@@ -1016,6 +1127,7 @@ function HandoverTimelineCard({
   isMine: boolean;
   itemBusyId: string | null;
   onToggleItem: (item: HandoverPendingItem) => void;
+  onCancelItem: (item: HandoverPendingItem) => void;
   onAck: () => void;
   onDelete: () => void;
 }) {
@@ -1143,20 +1255,42 @@ function HandoverTimelineCard({
                           >
                             {item.text}
                           </p>
-                          {done && item.doneByName ? (
-                            <p className="mt-0.5 text-[10px] text-[var(--color-text-3)]">
-                              {item.status === "cancelada" ? "Cancelada" : "Hecha"} por{" "}
-                              {item.doneByName}
-                              {item.doneAt ? ` · ${relativeShortEs(item.doneAt)}` : ""}
-                            </p>
-                          ) : null}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            {item.ticketId ? (
+                              <Link
+                                href={`/tickets/${item.ticketId}`}
+                                className="font-mono text-[10.5px] font-semibold text-[var(--color-accent)] hover:underline"
+                              >
+                                {item.ticketId.slice(-6).toUpperCase()}
+                              </Link>
+                            ) : null}
+                            {done && item.doneByName ? (
+                              <p className="text-[10px] text-[var(--color-text-3)]">
+                                {item.status === "cancelada" ? "Cancelada" : "Hecha"} por{" "}
+                                {item.doneByName}
+                                {item.doneAt ? ` · ${relativeShortEs(item.doneAt)}` : ""}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
+                        {item.status === "abierta" ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => onCancelItem(item)}
+                            className="mt-0.5 shrink-0 rounded p-0.5 text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-error)] disabled:opacity-50"
+                            title="Cancelar pendiente"
+                            aria-label="Cancelar pendiente"
+                          >
+                            <X size={12} aria-hidden />
+                          </button>
+                        ) : null}
                       </li>
                     );
                   })}
                 </ul>
                 <p className="mt-1.5 text-[10px] text-[var(--color-text-3)]">
-                  Clic en el círculo para marcar hecha. La firma del pase no cierra estas tareas.
+                  Círculo = hecha · X = cancelar. La firma del pase no cierra estas tareas.
                 </p>
               </div>
             ) : h.pendingActions ? (
