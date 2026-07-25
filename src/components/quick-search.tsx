@@ -28,15 +28,19 @@ import {
   Inbox,
   LayoutDashboard,
   MapPinned,
-  Package,
+  NotebookPen,
   Route,
   Search,
   Shield,
   UserCircle2,
+  Wrench,
 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { useFramerTransition } from "@/hooks/use-reduced-motion-framer";
+import { fadeScale } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { trackUxEvent } from "@/lib/ux-telemetry";
 
@@ -82,10 +86,11 @@ const ROUTES: StaticTarget[] = [
   { kind: "route", id: "dashboard", label: "Dashboard", hint: "Panel operativo", href: "/dashboard", Icon: LayoutDashboard, shortcut: "G D" },
   { kind: "route", id: "bandeja", label: "Bandeja", hint: "Listado de tickets", href: "/bandeja", Icon: Inbox, shortcut: "G B" },
   { kind: "route", id: "tickets", label: "Tickets", hint: "Nuevo ticket y mantenimiento preventivo", href: "/tickets", Icon: ClipboardList, shortcut: "G T" },
-  { kind: "route", id: "inventory", label: "Inventario", hint: "Repuestos y stock", href: "/inventory", Icon: Package, shortcut: "G I" },
+  { kind: "route", id: "preventivo", label: "Preventivo", hint: "Buses anómalos", href: "/preventivo", Icon: Wrench, shortcut: "G P" },
   { kind: "route", id: "mapa", label: "Mapa", hint: "Vista geográfica", href: "/mapa", Icon: MapPinned, shortcut: "G M" },
   { kind: "route", id: "novedades", label: "Novedades", hint: "Avisos y cambios de versión", href: "/novedades", Icon: Bell },
   { kind: "route", id: "kb", label: "Base de conocimiento", hint: "Manuales y FAQs", href: "/kb", Icon: BookOpen, shortcut: "G K" },
+  { kind: "route", id: "bitacora", label: "Bitácora", hint: "Notas entre turnos M/T/N", href: "/bitacora", Icon: NotebookPen },
   { kind: "route", id: "desvios", label: "Desvíos", hint: "Listado y nuevo desvío", href: "/desvios", Icon: AlertTriangle },
   { kind: "route", id: "account", label: "Mi cuenta", hint: "Perfil y contraseña", href: "/account", Icon: UserCircle2, shortcut: "G A" },
   { kind: "route", id: "admin", label: "Administración", hint: "Usuarios, catálogo, feedback", href: "/admin", Icon: Shield },
@@ -107,6 +112,27 @@ const KIND_META: Record<GlobalSearchKind, { title: string; Icon: typeof LayoutDa
 
 const KIND_ORDER: GlobalSearchKind[] = ["ticket", "kb", "desvio", "bus", "linea", "announcement"];
 
+function staggerClass(index: number): string {
+  return `ccmgc-stagger-in ccmgc-stagger-in-${(index % 6) + 1}`;
+}
+
+function highlightMatch(text: string, query: string): ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(q.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="quick-search-mark rounded-sm bg-[var(--color-accent-light)] px-0.5 text-[var(--color-accent)]">
+        {text.slice(idx, idx + q.length)}
+      </mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
+}
+
 export function QuickSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -123,6 +149,9 @@ export function QuickSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const fetchAbortRef = useRef<AbortController | null>(null);
+  const transition = useFramerTransition();
+  const trimmedQuery = query.trim();
+  const hasHighlight = trimmedQuery.length >= 2;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -256,9 +285,8 @@ export function QuickSearch() {
     }
   };
 
-  if (!open) return null;
-
   let cursor = filteredRoutes.length;
+  let staggerCursor = 0;
   const remoteSections = KIND_ORDER.map((kind) => {
     const items = remote[kind];
     if (items.length === 0) return null;
@@ -270,19 +298,32 @@ export function QuickSearch() {
   const hasAnyResult = flatList.length > 0;
 
   return (
-    <div
+    <AnimatePresence>
+      {open ? (
+    <motion.div
       className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-[18vh]"
       role="dialog"
       aria-modal="true"
       aria-label="Búsqueda rápida"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={transition}
     >
       <button
         type="button"
         aria-label="Cerrar"
         onClick={() => setOpen(false)}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-[var(--modal-overlay)] backdrop-blur-[var(--modal-backdrop-blur,6px)]"
       />
-      <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
+      <motion.div
+        className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
+        variants={fadeScale}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={transition}
+      >
         <div className="flex items-center gap-3 border-b border-[var(--color-border)] px-4 py-3">
           <Search size={16} className="text-[var(--color-text-3)]" strokeWidth={1.5} />
           <input
@@ -304,21 +345,31 @@ export function QuickSearch() {
         <div className="max-h-[60vh] overflow-y-auto py-2">
           {filteredRoutes.length > 0 ? (
             <Section title="Ir a">
-              {filteredRoutes.map((r, idx) => (
+              {filteredRoutes.map((r, idx) => {
+                const staggerIndex = staggerCursor++;
+                return (
                 <Item
                   key={r.id}
                   active={idx === active}
+                  staggerClassName={staggerClass(staggerIndex)}
                   onMouseEnter={() => setActive(idx)}
                   onClick={() => handleSelect(r)}
                 >
                   <r.Icon size={16} strokeWidth={1.5} className="text-[var(--color-text-3)]" />
                   <span className="flex-1 min-w-0">
-                    <span className="text-[14px] text-[var(--color-text-1)]">{r.label}</span>
-                    <span className="ml-2 text-[12px] text-[var(--color-text-3)]">{r.hint}</span>
+                    <span
+                      className={cn("text-[14px] text-[var(--color-text-1)]", hasHighlight && "search-mark-flash")}
+                    >
+                      {hasHighlight ? highlightMatch(r.label, trimmedQuery) : r.label}
+                    </span>
+                    <span className="ml-2 text-[12px] text-[var(--color-text-3)]">
+                      {hasHighlight ? highlightMatch(r.hint, trimmedQuery) : r.hint}
+                    </span>
                   </span>
                   {r.shortcut ? <span className="kbd shrink-0">{r.shortcut}</span> : null}
                 </Item>
-              ))}
+                );
+              })}
             </Section>
           ) : null}
 
@@ -328,23 +379,45 @@ export function QuickSearch() {
               <Section key={kind} title={meta.title}>
                 {items.map((item, idx) => {
                   const realIdx = start + idx;
+                  const staggerIndex = staggerCursor++;
                   return (
                     <Item
                       key={`${kind}-${item.id}`}
                       active={realIdx === active}
+                      staggerClassName={staggerClass(staggerIndex)}
                       onMouseEnter={() => setActive(realIdx)}
                       onClick={() => handleSelect({ kind: "remote", data: item, href: item.href })}
                     >
                       <meta.Icon size={16} strokeWidth={1.5} className="text-[var(--color-text-3)]" />
                       <span className="flex-1 min-w-0">
-                        <span className="block truncate text-[14px] text-[var(--color-text-1)]">
-                          {item.title}
+                        <span
+                          className={cn(
+                            "block truncate text-[14px] text-[var(--color-text-1)]",
+                            hasHighlight && "search-mark-flash",
+                          )}
+                        >
+                          {hasHighlight ? highlightMatch(item.title, trimmedQuery) : item.title}
                         </span>
                         {item.subtitle ? (
-                          <span className="block truncate text-[12px] text-[var(--color-text-3)]">
-                            {item.subtitle}
+                          <span
+                            className={cn(
+                              "block truncate text-[12px] text-[var(--color-text-3)]",
+                              hasHighlight && "search-mark-flash",
+                            )}
+                          >
+                            {hasHighlight ? highlightMatch(item.subtitle, trimmedQuery) : item.subtitle}
                           </span>
                         ) : null}
+                        <span className="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--color-text-3)]">
+                          <span className="rounded-full border border-[var(--color-border)] px-1.5 py-px uppercase tracking-wider">
+                            {meta.title}
+                          </span>
+                          {item.badge ? (
+                            <span className="rounded-full bg-[var(--color-accent-light)] px-1.5 py-px text-[var(--color-accent)]">
+                              {item.badge}
+                            </span>
+                          ) : null}
+                        </span>
                       </span>
                       <ArrowRight size={14} className="text-[var(--color-text-3)]" />
                     </Item>
@@ -372,8 +445,10 @@ export function QuickSearch() {
             <span className="kbd">K</span> abrir / cerrar
           </span>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 
@@ -392,11 +467,13 @@ function Item({
   active,
   onClick,
   onMouseEnter,
+  staggerClassName,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   onMouseEnter: () => void;
+  staggerClassName?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -408,7 +485,10 @@ function Item({
         onClick={onClick}
         className={cn(
           "group flex w-full items-center gap-3 px-4 py-2 text-left transition-colors",
-          active ? "bg-[var(--color-surface-2)]" : "hover:bg-[var(--color-surface-2)]/70",
+          staggerClassName,
+          active
+            ? "bg-[var(--color-accent-light)]/55 ring-1 ring-inset ring-[var(--color-accent)]/25"
+            : "hover:bg-[var(--color-surface-2)]/70",
         )}
       >
         {children}

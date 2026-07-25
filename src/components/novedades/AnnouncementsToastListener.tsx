@@ -10,10 +10,9 @@ import { useSseEvent } from "@/hooks/use-sse-event";
  * `announcement_new`. Se monta una sola vez en el layout privado.
  *
  * Reglas:
- *   - `critical`: NO disparamos toast porque ya hay un banner sticky muy
- *     prominente; saturar con toast es ruido.
- *   - `warning`: `toast.warning(...)` (amarillo) con duración larga.
- *   - `info` (novedades / avisos rutinarios): `toast.info(...)` corto.
+ *   - Solo se notifica por toast cuando es un `aviso` de severidad `warning`.
+ *   - `critical` ya se muestra con banner sticky y evita ruido duplicado.
+ *   - `novedad` y severidad `info` no muestran toast.
  *   - Dedupe por id por si el navegador reentrega el evento al reconectar.
  *   - Reutiliza el `sseClient` compartido (no abre EventSource propio).
  */
@@ -39,17 +38,13 @@ export function AnnouncementsToastListener() {
 
       const severity = parsed.payload?.severity ?? "info";
       const title = parsed.payload?.title ?? "Nuevo aviso";
-      const kindLabel =
-        parsed.payload?.kind === "novedad" ? "Nueva novedad" : "Aviso en vivo";
+      const kind = parsed.payload?.kind ?? "aviso";
 
-      // Críticos ya van como banner sticky.
+      if (kind !== "aviso") return;
       if (severity === "critical") return;
+      if (severity !== "warning") return;
 
-      if (severity === "warning") {
-        toast.warning(title, { description: kindLabel, duration: 9000 });
-      } else {
-        toast.info(title, { description: kindLabel, duration: 6000 });
-      }
+      toast.warning(title, { description: "Aviso en vivo", duration: 9000 });
     } catch {
       /* ignore */
     }

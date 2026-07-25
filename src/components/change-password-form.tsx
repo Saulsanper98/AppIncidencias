@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Props = {
   userName: string;
@@ -22,6 +23,7 @@ export function ChangePasswordForm({ userName, userEmail, forced, nextPath }: Pr
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [shakeField, setShakeField] = useState<"current" | "new" | "confirm" | null>(null);
 
   const mismatch = useMemo(() => confirm.length > 0 && confirm !== next, [confirm, next]);
   const tooShort = next.length > 0 && next.length < 10;
@@ -31,7 +33,12 @@ export function ChangePasswordForm({ userName, userEmail, forced, nextPath }: Pr
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      const field = mismatch ? "confirm" : tooShort || missingClasses ? "new" : "current";
+      setShakeField(field);
+      window.setTimeout(() => setShakeField(null), 400);
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -84,7 +91,10 @@ export function ChangePasswordForm({ userName, userEmail, forced, nextPath }: Pr
           autoComplete="current-password"
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
-          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-body text-[var(--color-text-1)] focus:border-[color-mix(in_oklab,var(--color-accent)_60%,var(--color-border))] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+          className={cn(
+            "w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-body text-[var(--color-text-1)] focus:border-[color-mix(in_oklab,var(--color-accent)_60%,var(--color-border))] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]",
+            shakeField === "current" && "ccmgc-input-error",
+          )}
         />
       </div>
 
@@ -98,7 +108,10 @@ export function ChangePasswordForm({ userName, userEmail, forced, nextPath }: Pr
           autoComplete="new-password"
           value={next}
           onChange={(e) => setNext(e.target.value)}
-          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-body text-[var(--color-text-1)] focus:border-[color-mix(in_oklab,var(--color-accent)_60%,var(--color-border))] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+          className={cn(
+            "w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-body text-[var(--color-text-1)] focus:border-[color-mix(in_oklab,var(--color-accent)_60%,var(--color-border))] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]",
+            shakeField === "new" && "ccmgc-input-error",
+          )}
         />
         <p className="mt-1 text-caption text-[var(--color-text-3)]">
           Mínimo 10 caracteres, incluyendo letras y dígitos.
@@ -119,7 +132,10 @@ export function ChangePasswordForm({ userName, userEmail, forced, nextPath }: Pr
           autoComplete="new-password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
-          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-body text-[var(--color-text-1)] focus:border-[color-mix(in_oklab,var(--color-accent)_60%,var(--color-border))] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+          className={cn(
+            "w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5 text-body text-[var(--color-text-1)] focus:border-[color-mix(in_oklab,var(--color-accent)_60%,var(--color-border))] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]",
+            shakeField === "confirm" && "ccmgc-input-error",
+          )}
         />
         {mismatch ? (
           <p className="mt-1 text-caption text-[var(--color-error)]">Las contraseñas no coinciden.</p>

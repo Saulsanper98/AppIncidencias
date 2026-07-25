@@ -15,7 +15,7 @@ const DRY = process.argv.includes("--dry");
 const EXCLUDED_EMAILS = [
   "saul@movilidadgc.org",
   "jefedesala@movilidadgc.org",
-  "read@movilidadgc.org",
+  "etra@etramovilidad.org",
 ];
 
 async function main() {

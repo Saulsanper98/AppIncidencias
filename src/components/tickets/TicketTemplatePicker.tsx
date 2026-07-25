@@ -1,12 +1,15 @@
 "use client";
 
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookmarkPlus, Check, ChevronDown, Loader2, Sparkles, Trash2, X } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, Layers, Loader2, Sparkles, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
 import type { FormState } from "@/components/tickets/tickets-module-types";
 import type { SessionUser } from "@/lib/domain";
+import { canCreateGroupTicketTemplate, ticketTemplateScopeLabel } from "@/lib/ticket-templates";
 import { cn } from "@/lib/utils";
 
 /**
@@ -41,17 +44,34 @@ type Props = {
   form: FormState;
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
   sessionUser: SessionUser | null;
+  /** Sin cáscara colapsable: contenido directo (p. ej. dentro de «Más contexto»). */
+  embedded?: boolean;
+  /** Expandido al montar (recomendado en el formulario de nuevo ticket). */
+  defaultExpanded?: boolean;
 };
+
+function templateSubtitle(tpl: TicketTemplate): string {
+  const tipologia = [tpl.tipo, tpl.subtipo, tpl.subsubtipo].filter(Boolean).join(" · ");
+  if (tipologia) return tipologia;
+  if (tpl.description?.trim()) return tpl.description.trim().slice(0, 72);
+  return "Sin detalles";
+}
 
 /**
  * Selector de plantillas + acción "Guardar como plantilla".
  *
- * Diseño deliberadamente compacto (una sola fila colapsable) para no
- * añadir ruido al ya extenso formulario de alta. Solo se carga el listado
- * cuando el panel se expande por primera vez.
+ * Vive en la cabecera del formulario (fuera del acordeón de pasos) como
+ * franja colapsable premium. Solo carga el listado al expandir por primera vez.
  */
-export function TicketTemplatePicker({ form, setForm, sessionUser }: Props) {
-  const [expanded, setExpanded] = useState(false);
+export function TicketTemplatePicker({
+  form,
+  setForm,
+  sessionUser,
+  embedded = false,
+  defaultExpanded = false,
+}: Props) {
+  const reduceMotion = useReducedMotion();
+  const [expanded, setExpanded] = useState(embedded || defaultExpanded);
   const [templates, setTemplates] = useState<TicketTemplate[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,10 +98,17 @@ export function TicketTemplatePicker({ form, setForm, sessionUser }: Props) {
   }, []);
 
   useEffect(() => {
-    if (expanded && templates === null) {
+    if ((expanded || embedded) && templates === null) {
       void loadTemplates();
     }
-  }, [expanded, templates, loadTemplates]);
+  }, [expanded, embedded, templates, loadTemplates]);
+
+  useEffect(
+    () => () => {
+      if (appliedTimeoutRef.current) window.clearTimeout(appliedTimeoutRef.current);
+    },
+    [],
+  );
 
   const applyTemplate = useCallback(
     (tpl: TicketTemplate) => {
@@ -92,9 +119,6 @@ export function TicketTemplatePicker({ form, setForm, sessionUser }: Props) {
         tipo: tpl.tipo ?? prev.tipo,
         subtipo: tpl.subtipo ?? prev.subtipo,
         subsubtipo: tpl.subsubtipo ?? prev.subsubtipo,
-        // Sugerencia OP03 ("ticket rápido"): aplica también las variables que
-        // afectan a la prioridad y a las etiquetas libres si la plantilla las
-        // memoriza. Si la plantilla no las tiene (null), respetamos lo actual.
         impactedLines: tpl.impactedLines ?? prev.impactedLines,
         serviceStopped:
           tpl.serviceStopped === null || tpl.serviceStopped === undefined
@@ -106,154 +130,210 @@ export function TicketTemplatePicker({ form, setForm, sessionUser }: Props) {
       }));
       setAppliedId(tpl.id);
       if (appliedTimeoutRef.current) window.clearTimeout(appliedTimeoutRef.current);
-      appliedTimeoutRef.current = window.setTimeout(() => setAppliedId(null), 2000);
+      appliedTimeoutRef.current = window.setTimeout(() => setAppliedId(null), 2200);
     },
     [setForm],
   );
 
-  const deleteTemplate = useCallback(
-    async (tpl: TicketTemplate) => {
-      if (!tpl.canEdit) return;
-      const ok = window.confirm(`¿Eliminar la plantilla "${tpl.name}"?`);
-      if (!ok) return;
-      const res = await fetch(`/api/tickets/templates/${tpl.id}`, { method: "DELETE" });
-      if (res.ok) {
-        setTemplates((prev) => (prev ?? []).filter((t) => t.id !== tpl.id));
-      }
-    },
-    [],
-  );
+  const deleteTemplate = useCallback(async (tpl: TicketTemplate) => {
+    if (!tpl.canEdit) return;
+    const ok = window.confirm(`¿Eliminar la plantilla "${tpl.name}"?`);
+    if (!ok) return;
+    const res = await fetch(`/api/tickets/templates/${tpl.id}`, { method: "DELETE" });
+    if (res.ok) {
+      setTemplates((prev) => (prev ?? []).filter((t) => t.id !== tpl.id));
+    }
+  }, []);
 
   const grouped = useMemo(() => {
     if (!templates) return [] as { key: string; label: string; items: TicketTemplate[] }[];
     const byKey = new Map<string, { key: string; label: string; items: TicketTemplate[] }>();
     for (const t of templates) {
+      const scopeLabel = ticketTemplateScopeLabel(t.scope);
       const key = `${t.scope}::${t.category ?? "—"}`;
-      const label =
-        (t.scope === "global" ? "Plantillas compartidas" : "Mis plantillas") +
-        (t.category ? ` · ${t.category}` : "");
+      const label = `${scopeLabel}${t.category ? ` · ${t.category}` : ""}`;
       if (!byKey.has(key)) byKey.set(key, { key, label, items: [] });
       byKey.get(key)!.items.push(t);
     }
-    return Array.from(byKey.values());
+    const order = (scope: string) => (scope === "personal" ? 1 : 0);
+    return Array.from(byKey.values()).sort((a, b) => {
+      const scopeA = a.key.split("::")[0] ?? "";
+      const scopeB = b.key.split("::")[0] ?? "";
+      return order(scopeA) - order(scopeB) || a.label.localeCompare(b.label, "es");
+    });
   }, [templates]);
 
-  return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/40">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--color-text-1)] transition-colors hover:bg-[var(--color-surface-2)]"
-      >
-        <span className="flex items-center gap-2">
-          <Sparkles size={14} className="text-[var(--color-accent)]" aria-hidden />
-          Plantillas de ticket
-          {templates ? (
-            <span className="rounded-full bg-[var(--color-surface-3)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-text-3)]">
-              {templates.length}
-            </span>
-          ) : null}
-        </span>
-        <ChevronDown
-          size={14}
-          className={cn("text-[var(--color-text-3)] transition-transform", expanded && "rotate-180")}
-          aria-hidden
-        />
-      </button>
-      {expanded ? (
-        <div className="border-t border-[var(--color-border)] p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-[var(--color-text-3)]">
-              Aplica una plantilla para rellenar título, descripción y tipología. Luego puedes
-              ajustar lo que necesites.
-            </p>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowSaveDialog(true)}
-              disabled={!form.title && !form.description && !form.tipo}
-              title="Guardar los valores actuales como plantilla"
-            >
-              <BookmarkPlus size={12} className="mr-1" aria-hidden />
-              Guardar como plantilla
-            </Button>
-          </div>
-          {loading ? (
-            <div className="flex items-center gap-2 text-xs text-[var(--color-text-3)]">
-              <Loader2 size={12} className="animate-spin" aria-hidden /> Cargando plantillas…
-            </div>
-          ) : error ? (
-            <p className="text-xs text-[var(--color-error)]">{error}</p>
-          ) : templates && templates.length === 0 ? (
-            <p className="text-xs text-[var(--color-text-3)]">
-              Aún no hay plantillas. Crea la primera con el botón de arriba.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {grouped.map((group) => (
-                <div key={group.key}>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
-                    {group.label}
-                  </p>
-                  <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                    {group.items.map((tpl) => (
-                      <li
-                        key={tpl.id}
-                        className="group flex items-center justify-between gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5"
+  const canSaveTemplate = Boolean(form.title || form.description || form.tipo);
+
+  const panelBody = (
+    <div className={cn("ccmgc-template-panel", embedded && "!border-0 !bg-transparent !p-0")}>
+      <div className="ccmgc-template-panel__toolbar">
+        <p className="ccmgc-template-panel__intro">
+          Elige una plantilla para rellenar el formulario al instante, o guarda la configuración actual como plantilla
+          personal o de equipo.
+        </p>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="ccmgc-template-save-btn shrink-0"
+          onClick={() => setShowSaveDialog(true)}
+          disabled={!canSaveTemplate}
+          title="Guardar los valores actuales como plantilla"
+        >
+          <BookmarkPlus size={13} className="mr-1.5" aria-hidden />
+          Guardar como plantilla
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="ccmgc-template-panel__state">
+          <Loader2 size={14} className="animate-spin text-[var(--color-accent)]" aria-hidden />
+          <span>Cargando plantillas…</span>
+        </div>
+      ) : error ? (
+        <div className="ccmgc-template-panel__state ccmgc-template-panel__state--error">
+          <span>{error}</span>
+          <button type="button" className="ccmgc-template-retry" onClick={() => void loadTemplates()}>
+            Reintentar
+          </button>
+        </div>
+      ) : templates && templates.length === 0 ? (
+        <div className="ccmgc-template-panel__empty">
+          <Layers size={18} className="text-[var(--color-text-3)]" aria-hidden />
+          <p>Aún no hay plantillas guardadas.</p>
+          <p className="text-[11px] text-[var(--color-text-3)]">
+            Rellena título, tipología o descripción y pulsa «Guardar como plantilla» para crear la tuya.
+          </p>
+        </div>
+      ) : (
+        <div className="ccmgc-template-panel__groups">
+          {grouped.map((group) => (
+            <section key={group.key} className="ccmgc-template-group">
+              <h4 className="ccmgc-template-group__title">{group.label}</h4>
+              <ul className="ccmgc-template-grid">
+                {group.items.map((tpl) => {
+                  const applied = appliedId === tpl.id;
+                  return (
+                    <li key={tpl.id}>
+                      <div
+                        className={cn(
+                          "ccmgc-template-card group",
+                          applied && "ccmgc-template-card--applied",
+                        )}
                       >
                         <button
                           type="button"
                           onClick={() => applyTemplate(tpl)}
-                          className="min-w-0 flex-1 text-left"
+                          className="ccmgc-template-card__main"
                           title={tpl.title ?? tpl.description ?? "Aplicar plantilla"}
                         >
-                          <span className="block truncate text-sm font-medium text-[var(--color-text-1)]">
-                            {tpl.name}
-                          </span>
-                          <span className="block truncate text-[11px] text-[var(--color-text-3)]">
-                            {[tpl.tipo, tpl.subtipo].filter(Boolean).join(" · ") ||
-                              tpl.description?.slice(0, 60) ||
-                              "Sin detalles"}
-                          </span>
+                          <span className="ccmgc-template-card__name">{tpl.name}</span>
+                          <span className="ccmgc-template-card__meta">{templateSubtitle(tpl)}</span>
                         </button>
-                        <div className="flex shrink-0 items-center gap-1">
-                          {appliedId === tpl.id ? (
-                            <Check size={14} className="text-[var(--color-success)]" aria-hidden />
+                        <div className="ccmgc-template-card__actions">
+                          {applied ? (
+                            <span className="ccmgc-template-card__applied" aria-live="polite">
+                              <Check size={13} strokeWidth={2.5} aria-hidden />
+                              <span className="sr-only">Aplicada</span>
+                            </span>
                           ) : null}
                           {tpl.canEdit ? (
                             <button
                               type="button"
                               onClick={() => deleteTemplate(tpl)}
-                              className="rounded p-1 text-[var(--color-text-3)] opacity-60 transition-opacity hover:bg-[var(--color-surface-2)] hover:text-[var(--color-error)] focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                              className="ccmgc-template-card__delete"
                               title="Eliminar plantilla"
-                              aria-label="Eliminar plantilla"
+                              aria-label={`Eliminar plantilla ${tpl.name}`}
                             >
-                              <Trash2 size={11} aria-hidden />
+                              <Trash2 size={12} aria-hidden />
                             </button>
                           ) : null}
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
         </div>
-      ) : null}
-      {showSaveDialog ? (
-        <SaveTemplateDialog
-          form={form}
-          sessionUser={sessionUser}
-          onClose={() => setShowSaveDialog(false)}
-          onSaved={(tpl) => {
-            setTemplates((prev) => [...(prev ?? []), tpl]);
-            setShowSaveDialog(false);
-          }}
-        />
-      ) : null}
+      )}
+    </div>
+  );
+
+  const saveDialog = showSaveDialog ? (
+    <SaveTemplateDialog
+      form={form}
+      sessionUser={sessionUser}
+      onClose={() => setShowSaveDialog(false)}
+      onSaved={(tpl) => {
+        setTemplates((prev) => [...(prev ?? []), tpl]);
+        setShowSaveDialog(false);
+      }}
+    />
+  ) : null;
+
+  if (embedded) {
+    return (
+      <div className="space-y-2">
+        <h4 className="flex items-center gap-1.5 text-eyebrow">
+          <Sparkles size={13} strokeWidth={1.75} aria-hidden />
+          Plantillas de ticket
+        </h4>
+        {panelBody}
+        {saveDialog}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("ccmgc-template-shell", expanded && "ccmgc-template-shell--open")}>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="ccmgc-template-trigger"
+      >
+        <span className="ccmgc-template-trigger__lead">
+          <span className="ccmgc-template-trigger__icon" aria-hidden>
+            <Sparkles size={15} strokeWidth={1.75} />
+          </span>
+          <span className="ccmgc-template-trigger__copy">
+            <span className="ccmgc-template-trigger__title">Plantillas de ticket</span>
+            <span className="ccmgc-template-trigger__hint">Personal o de equipo · aplicar o guardar con un clic</span>
+          </span>
+        </span>
+        <span className="ccmgc-template-trigger__meta">
+          {templates ? (
+            <span className="ccmgc-template-trigger__count" aria-label={`${templates.length} plantillas`}>
+              {templates.length}
+            </span>
+          ) : expanded ? (
+            <Loader2 size={12} className="animate-spin text-[var(--color-text-3)]" aria-hidden />
+          ) : null}
+          <span className={cn("ccmgc-template-trigger__chevron", expanded && "ccmgc-template-trigger__chevron--open")}>
+            <ChevronDown size={14} strokeWidth={2.25} aria-hidden />
+          </span>
+        </span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            key="template-panel"
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden"
+          >
+            {panelBody}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {saveDialog}
     </div>
   );
 }
@@ -269,16 +349,13 @@ function SaveTemplateDialog({
   onClose: () => void;
   onSaved: (tpl: TicketTemplate) => void;
 }) {
-  const canShare = sessionUser?.role === "gestor_centro_control";
+  const canShare = canCreateGroupTicketTemplate(sessionUser?.role ?? "conductor");
   const [name, setName] = useState(() => {
     const base = form.title?.trim();
     return base && base.length > 0 ? base.slice(0, 80) : "";
   });
   const [scope, setScope] = useState<"personal" | "global">("personal");
   const [category, setCategory] = useState("");
-  // Sugerencia OP03 "ticket rápido": opción de guardar también las variables
-  // operativas (líneas, servicio detenido, línea, servicio y comentario).
-  // Activado por defecto para fomentar plantillas "completas".
   const [includeOperationalFields, setIncludeOperationalFields] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -328,93 +405,23 @@ function SaveTemplateDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="save-template-title"
-    >
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-2xl"
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <h3
-            id="save-template-title"
-            className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-1)]"
-          >
-            <BookmarkPlus size={16} className="text-[var(--color-accent)]" aria-hidden />
-            Guardar plantilla
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)]"
-            aria-label="Cerrar"
-          >
-            <X size={14} aria-hidden />
-          </button>
-        </div>
-        <div className="space-y-3">
-          <label className="block text-xs font-medium text-[var(--color-text-2)]">
-            Nombre
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ej. Climatización trasera averiada"
-              maxLength={80}
-              autoFocus
-              className="mt-1"
-            />
-          </label>
-          <label className="block text-xs font-medium text-[var(--color-text-2)]">
-            Categoría <span className="text-[var(--color-text-3)]">(opcional)</span>
-            <Input
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Ej. Aire acondicionado"
-              maxLength={80}
-              className="mt-1"
-            />
-          </label>
-          <label className="block text-xs font-medium text-[var(--color-text-2)]">
-            Visibilidad
-            <Select
-              value={scope}
-              onChange={(e) => setScope(e.target.value as "personal" | "global")}
-              disabled={!canShare}
-              className="mt-1"
-            >
-              <option value="personal">Solo para mí</option>
-              <option value="global" disabled={!canShare}>
-                Compartida con todo el centro de control{canShare ? "" : " (requiere gestor)"}
-              </option>
-            </Select>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-2.5">
-            <input
-              type="checkbox"
-              checked={includeOperationalFields}
-              onChange={(e) => setIncludeOperationalFields(e.target.checked)}
-              className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]/40"
-            />
-            <span>
-              <span className="block text-[12.5px] font-medium text-[var(--color-text-1)]">
-                Incluir variables operativas
-              </span>
-              <span className="block text-[11px] text-[var(--color-text-3)]">
-                Líneas afectadas, servicio detenido, línea/servicio y comentario inicial. Recomendado
-                para plantillas tipo "Salto de viaje".
-              </span>
-            </span>
-          </label>
-          {error ? <p className="text-xs text-[var(--color-error)]">{error}</p> : null}
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
+    <ModalShell
+      open
+      onClose={onClose}
+      size="md"
+      shake={Boolean(error)}
+      title={
+        <span className="flex items-center gap-2 text-base font-semibold">
+          <BookmarkPlus size={16} className="text-[var(--color-accent)]" aria-hidden />
+          Guardar plantilla
+        </span>
+      }
+      footer={
+        <>
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={saving}>
             Cancelar
           </Button>
-          <Button type="submit" variant="primary" size="sm" disabled={saving}>
+          <Button type="submit" form="save-template-form" variant="primary" size="sm" disabled={saving}>
             {saving ? (
               <span className="flex items-center gap-1">
                 <Loader2 size={12} className="animate-spin" aria-hidden /> Guardando…
@@ -423,8 +430,64 @@ function SaveTemplateDialog({
               "Guardar"
             )}
           </Button>
-        </div>
+        </>
+      }
+    >
+      <form id="save-template-form" onSubmit={handleSubmit} className="space-y-3">
+        <label className="block text-xs font-medium text-[var(--color-text-2)]">
+          Nombre
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ej. Climatización trasera averiada"
+            maxLength={80}
+            autoFocus
+            className="mt-1"
+          />
+        </label>
+        <label className="block text-xs font-medium text-[var(--color-text-2)]">
+          Categoría <span className="text-[var(--color-text-3)]">(opcional)</span>
+          <Input
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="Ej. Aire acondicionado"
+            maxLength={80}
+            className="mt-1"
+          />
+        </label>
+        <label className="block text-xs font-medium text-[var(--color-text-2)]">
+          Visibilidad
+          <Select
+            value={scope}
+            onChange={(e) => setScope(e.target.value as "personal" | "global")}
+            disabled={!canShare}
+            className="mt-1"
+          >
+            <option value="personal">Personal — solo yo</option>
+            <option value="global" disabled={!canShare}>
+              Del equipo — compartida con técnicos y gestores{canShare ? "" : " (requiere rol operativo)"}
+            </option>
+          </Select>
+        </label>
+        <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-2.5">
+          <input
+            type="checkbox"
+            checked={includeOperationalFields}
+            onChange={(e) => setIncludeOperationalFields(e.target.checked)}
+            className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]/40"
+          />
+          <span>
+            <span className="block text-[12.5px] font-medium text-[var(--color-text-1)]">
+              Incluir variables operativas
+            </span>
+            <span className="block text-[11px] text-[var(--color-text-3)]">
+              Líneas afectadas, servicio detenido, línea/servicio y comentario inicial. Recomendado para plantillas
+              tipo «Salto de viaje».
+            </span>
+          </span>
+        </label>
+        {error ? <p className="text-xs text-[var(--color-error)]">{error}</p> : null}
       </form>
-    </div>
+    </ModalShell>
   );
 }

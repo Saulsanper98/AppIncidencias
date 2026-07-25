@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   BookOpenCheck,
+  Bus,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -13,18 +14,19 @@ import {
   MapPinned,
   Megaphone,
   Menu,
-  MessageSquarePlus,
+  NotebookPen,
   Vote,
   Shield,
   UserCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CcmgcLogo } from "@/components/ccmgc-logo";
 import { useSseEvent } from "@/hooks/use-sse-event";
 import { resolveAccountImageUrl } from "@/lib/account-media";
+import { CENTRAL_VIEWER_LABEL } from "@/lib/central-viewer";
 import type { SessionUser, UserRole } from "@/lib/domain";
 import {
   canManageCatalog,
@@ -35,7 +37,7 @@ import {
 } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
-type MenuBadgeKey = "desvios" | "announcements";
+type MenuBadgeKey = "desvios" | "announcements" | "ticket_drafts";
 
 type MenuItem = {
   label: string;
@@ -64,12 +66,7 @@ type MenuSection = {
 //   Dashboard       → tabs: Operación · Reportes · Cuadros (`/reportes`, `/dashboards`)
 //   Tickets         → tabs: Bandeja · Pase de turno         (`/handover`)
 //   Preventivo      → calendario + buses anómalos           (`/preventivo`)
-//   Mi cuenta       → tab interna: Cuenta · Feedback        (`/feedback`)
-//
-// Mayo 2026 (continuación): "Feedback" promovido a ítem PROPIO del sidebar
-// dentro de "Mi espacio". Antes solo se accedía como pestaña interna de
-// "Mi cuenta", lo que lo escondía. La pestaña interna se mantiene para
-// continuidad, pero el ítem directo le da al usuario un atajo de 1 click.
+//   Mi cuenta       → tab interna: Cuenta                    (`/account`)
 //
 // Junio 2026: "Bandeja" promovida a su propia entrada del sidebar — antes
 // vivia como sub-bloque de la pagina /tickets junto al formulario de
@@ -80,8 +77,6 @@ type MenuSection = {
 // dedicado (TicketsModule view="bandeja").
 //
 // La barra de pestañas la pinta el componente `SectionTabs` en cada página.
-// "Inventario" se ocultó del menú (mayo 2026, decisión del centro: no se usa
-// de momento). La ruta /inventory sigue accesible por URL si hace falta.
 const menuSections: MenuSection[] = [
   {
     title: "Operación",
@@ -89,13 +84,14 @@ const menuSections: MenuSection[] = [
       { label: "Dashboard", icon: ChartNoAxesCombined, href: "/dashboard" },
       // Bandeja PRIMERO dentro de Tickets/Gestion: es la vista mas usada
       // del centro y queremos que sea el target visual mas grande.
-      { label: "Bandeja", icon: Inbox, href: "/bandeja" },
+      { label: "Bandeja", icon: Inbox, href: "/bandeja", badge: "ticket_drafts" },
       { label: "Tickets", icon: ClipboardList, href: "/tickets" },
       // "Desvios" tiene su propio badge: cuenta de PENDIENTE + ACTIVO. Se
       // refresca por SSE en `desvio_nuevo` / `desvio_actualizado` y con un
       // fetch inicial de `/api/desvios/badge`.
       { label: "Desvíos", icon: AlertTriangle, href: "/desvios", badge: "desvios" },
       { label: "Preventivo", icon: CalendarDays, href: "/preventivo" },
+      { label: "Flota", icon: Bus, href: "/flota" },
       { label: "Mapa", icon: MapPinned, href: "/mapa" },
     ],
   },
@@ -103,6 +99,7 @@ const menuSections: MenuSection[] = [
     title: "Conocimiento",
     items: [
       { label: "Base de Conocimiento", icon: BookOpenCheck, href: "/kb" },
+      { label: "Bitácora", icon: NotebookPen, href: "/bitacora" },
       // "Novedades" agrupa el changelog público + los avisos en vivo. Tiene
       // badge con el total de items publicados que el usuario aún no ha leído
       // (incluye avisos criticos sin descartar). Se refresca por SSE.
@@ -113,10 +110,6 @@ const menuSections: MenuSection[] = [
     title: "Mi espacio",
     items: [
       { label: "Mi cuenta", icon: UserCircle2, href: "/account" },
-      // Feedback como ítem propio para que sea de fácil acceso (1 click
-      // desde cualquier página). Antes solo era una pestaña interna de
-      // "Mi cuenta", lo que lo escondía.
-      { label: "Feedback", icon: MessageSquarePlus, href: "/feedback" },
       // Tablón comunitario de sugerencias votables (Fase 5 del feedback).
       // No reemplaza a Feedback: este se usa para ENVIAR; Sugerencias para
       // VER y PRIORIZAR las propuestas del resto del equipo.
@@ -142,11 +135,13 @@ type AppSidebarProps = {
   expanded?: boolean;
   onToggleExpanded?: () => void;
   onExpandedChange?: (expanded: boolean) => void;
+  /** Oculta el chrome con fade (modo muro del mapa). */
+  chromeFadeHidden?: boolean;
 };
 
 type ConnectionStatus = "ok" | "slow" | "offline";
 
-export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpandedChange }: AppSidebarProps) {
+export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpandedChange, chromeFadeHidden = false }: AppSidebarProps) {
   const [open, setOpen] = useState(false);
   const [internalExpanded, setInternalExpanded] = useState(true);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
@@ -200,7 +195,24 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
   const [badgeCounts, setBadgeCounts] = useState<Record<MenuBadgeKey, number>>({
     desvios: 0,
     announcements: 0,
+    ticket_drafts: 0,
   });
+  const prevBadgeCountsRef = useRef(badgeCounts);
+  const [poppingBadges, setPoppingBadges] = useState<Set<MenuBadgeKey>>(new Set());
+
+  useEffect(() => {
+    const popped = new Set<MenuBadgeKey>();
+    for (const key of Object.keys(badgeCounts) as MenuBadgeKey[]) {
+      if (badgeCounts[key] > prevBadgeCountsRef.current[key]) {
+        popped.add(key);
+      }
+    }
+    prevBadgeCountsRef.current = badgeCounts;
+    if (popped.size === 0) return;
+    setPoppingBadges(popped);
+    const id = window.setTimeout(() => setPoppingBadges(new Set()), 350);
+    return () => window.clearTimeout(id);
+  }, [badgeCounts]);
 
   const refreshDesviosBadge = useCallback(async () => {
     try {
@@ -231,17 +243,34 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
     }
   }, []);
 
+  const refreshTicketDraftsBadge = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tickets/drafts-badge", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { count?: number };
+      setBadgeCounts((prev) => ({ ...prev, ticket_drafts: Math.max(0, data.count ?? 0) }));
+    } catch {
+      /* mantener último valor */
+    }
+  }, []);
+
   useEffect(() => {
     if (!sessionUser) return;
     void refreshDesviosBadge();
     void refreshAnnouncementsBadge();
-  }, [sessionUser, refreshDesviosBadge, refreshAnnouncementsBadge]);
+    void refreshTicketDraftsBadge();
+  }, [sessionUser, refreshDesviosBadge, refreshAnnouncementsBadge, refreshTicketDraftsBadge]);
 
   // Refrescos de los badges sobre el stream SSE compartido. El hook
   // `useSseEvent` se conecta al singleton (`sseClient`), por lo que TODOS los
   // componentes del layout comparten una única conexión HTTP al servidor.
   useSseEvent("desvio_nuevo", () => {
-    if (sessionUser) void refreshDesviosBadge();
+    if (!sessionUser) return;
+    setBadgeCounts((prev) => ({ ...prev, desvios: prev.desvios + 1 }));
+    void refreshDesviosBadge();
   });
   useSseEvent("desvio_actualizado", () => {
     if (sessionUser) void refreshDesviosBadge();
@@ -255,6 +284,34 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
   useSseEvent("announcement_deleted", () => {
     if (sessionUser) void refreshAnnouncementsBadge();
   });
+  useSseEvent("ticket_created", () => {
+    if (sessionUser) void refreshTicketDraftsBadge();
+  });
+  useSseEvent("ticket_updated", () => {
+    if (sessionUser) void refreshTicketDraftsBadge();
+  });
+  useSseEvent("ticket_status_changed", () => {
+    if (sessionUser) void refreshTicketDraftsBadge();
+  });
+  useSseEvent("ticket_deleted", () => {
+    if (sessionUser) void refreshTicketDraftsBadge();
+  });
+
+  useEffect(() => {
+    if (!sessionUser) return;
+    const handler = () => {
+      void refreshTicketDraftsBadge();
+    };
+    window.addEventListener("ccmgc-ticket-drafts-changed", handler);
+    return () => window.removeEventListener("ccmgc-ticket-drafts-changed", handler);
+  }, [sessionUser, refreshTicketDraftsBadge]);
+
+  useEffect(() => {
+    if (!sessionUser) return;
+    if (pathname.startsWith("/bandeja") || pathname.startsWith("/tickets")) {
+      void refreshTicketDraftsBadge();
+    }
+  }, [sessionUser, pathname, refreshTicketDraftsBadge]);
 
   // Cuando el usuario entra en /novedades o regresa desde ella, refrescamos
   // por si marcó algo como leído desde la propia página.
@@ -353,18 +410,13 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
     if (href === "/tickets") {
       return pathname === "/tickets" || pathname.startsWith("/handover");
     }
-    // "Preventivo" agrupa el calendario preventivo y el banner de buses
-    // anómalos. El antiguo /inventory ya no tiene entrada en el menú.
+    // "Preventivo" agrupa el calendario preventivo y el banner de buses anómalos.
     if (href === "/preventivo") {
-      return pathname.startsWith("/preventivo") || pathname.startsWith("/inventory");
+      return pathname.startsWith("/preventivo");
     }
-    // "Mi cuenta" cubre solo /account. "Feedback" tiene ahora su propio
-    // ítem en el sidebar y se activa con pathname.startsWith("/feedback").
+    // "Mi cuenta" cubre solo /account.
     if (href === "/account") {
       return pathname.startsWith("/account");
-    }
-    if (href === "/feedback") {
-      return pathname.startsWith("/feedback");
     }
     if (href === "/admin") return pathname.startsWith("/admin");
     if (href === "/mapa") return pathname.startsWith("/mapa");
@@ -374,8 +426,8 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
   // Filtramos por sección según el rol. Mientras carga la sesión ocultamos
   // los items con `visibleTo` para evitar parpadeos.
   //
-  // Caso especial: usuarios `isReadOnly` (p.ej. read@movilidadgc.org) tienen
-  // un menú MUY reducido — solo la "Lectura de incidencias" y "Mi cuenta"
+  // Caso especial: usuarios `isReadOnly` (p. ej. ETRA / etra@etramovilidad.org) tienen
+  // un menú reducido — lectura, mapa y "Mi cuenta"
   // (para cambio de contraseña / logout). Esto refuerza visualmente que la
   // cuenta es de consulta y evita que el usuario pulse en sitios donde luego
   // no podría editar nada (el backend lo bloquearía igualmente, ver
@@ -387,6 +439,7 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
           title: "Consulta",
           items: [
             { label: "Lectura de incidencias", icon: ClipboardList, href: "/lectura" },
+            { label: "Mapa", icon: MapPinned, href: "/mapa" },
           ],
         },
         {
@@ -454,7 +507,7 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
+            className="ccmgc-drawer-overlay fixed inset-0 z-30 md:hidden"
             aria-label="Cerrar menú"
           />
         )}
@@ -462,7 +515,8 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
 
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 flex h-full min-h-screen flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl shadow-black/40 transition-all duration-200 ease-in-out md:shadow-none",
+          "app-sidebar-shell app-chrome-fade-out fixed left-0 top-0 z-40 flex h-[100dvh] max-h-[100dvh] flex-col border-r border-[var(--color-border)] shadow-2xl shadow-black/40 transition-all duration-200 ease-in-out md:sticky md:top-0 md:shadow-none",
+          chromeFadeHidden && "app-chrome-fade-out--hidden",
           open ? "translate-x-0" : "-translate-x-full",
           "md:sticky md:translate-x-0",
           expanded ? "overflow-hidden" : "overflow-visible",
@@ -524,9 +578,7 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
           {visibleSections.map((section, sectionIdx) => (
             <div key={section.title ?? `section-${sectionIdx}`} className={sectionIdx > 0 ? "mt-4" : undefined}>
               {expanded && section.title ? (
-                <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-3)]/60">
-                  {section.title}
-                </p>
+                <p className="sidebar-section-label">{section.title}</p>
               ) : null}
               {sectionIdx > 0 && !expanded ? (
                 <div className="mx-auto mb-1.5 mt-1.5 h-px w-5 bg-[var(--color-border)]/50" aria-hidden />
@@ -536,15 +588,11 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
                   const active = isActive(href);
                   const badgeCount = badge ? badgeCounts[badge] : 0;
                   return (
-                    <li key={label} className="group relative">
-                      {/* Indicador vertical "activo" expandido: barra fina a la
-                       *  izquierda. Mucho más premium que pintar fondo entero. */}
-                      {expanded && active ? (
-                        <span
-                          aria-hidden
-                          className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--color-accent)]"
-                        />
-                      ) : null}
+                    <li
+                      key={label}
+                      className={cn("group relative", active && "sidebar-nav-item--active")}
+                    >
+                      <div aria-hidden className="sidebar-nav-indicator" />
                       <Link
                         href={href}
                         onClick={() => setOpen(false)}
@@ -563,18 +611,15 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
                           setTooltip(null);
                         }}
                         className={cn(
-                          "text-sm transition-all duration-150",
+                          "sidebar-nav-link text-sm",
                           expanded
                             ? "flex min-h-[36px] items-center gap-3 rounded-lg pl-3.5 pr-3 py-1.5"
                             : "group relative mx-auto mb-0.5 flex h-10 w-10 items-center justify-center rounded-xl",
                           active
                             ? expanded
-                              // Estilo "premium" del activo: sin fondo, solo
-                              // tipografía bold + texto strong. La barra
-                              // lateral marca posición.
-                              ? "font-semibold text-[var(--color-text-1)]"
-                              : "bg-[var(--color-accent-light)] text-[var(--color-accent)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_30%,transparent)]"
-                            : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+                              ? "sidebar-nav-link--active sidebar-nav-link--expanded font-semibold text-[var(--color-text-1)]"
+                              : "sidebar-nav-link--active bg-[var(--color-accent-light)] text-[var(--color-accent)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_30%,transparent)]"
+                            : "text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
                         )}
                       >
                         <span className={cn("relative inline-flex items-center", !expanded && "h-5 w-5 justify-center")}>
@@ -582,15 +627,20 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
                             size={expanded ? 16 : 18}
                             strokeWidth={1.5}
                             className={cn(
+                              "sidebar-nav-icon",
                               active
-                                ? "text-[var(--color-accent)]"
+                                ? "text-[var(--color-accent)] sidebar-nav-icon--active"
                                 : "text-[var(--color-text-3)] group-hover:text-[var(--color-text-1)]",
                             )}
                           />
                           {!expanded && badge && badgeCount > 0 ? (
                             <span
                               aria-hidden
-                              className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-[var(--color-error)] px-1 text-[9px] font-semibold leading-none text-white shadow-[0_0_0_2px_var(--color-surface)]"
+                              className={cn(
+                                "absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[9px] font-semibold leading-none text-white shadow-[0_0_0_2px_var(--color-surface)]",
+                                badge === "ticket_drafts" ? "bg-amber-500" : "bg-[var(--color-error)]",
+                                badge && poppingBadges.has(badge) && "ccmgc-badge-pop",
+                              )}
                             >
                               {badgeCount > 9 ? "9+" : badgeCount}
                             </span>
@@ -608,8 +658,13 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
                                   // no, usamos rojo para que se vea desde
                                   // lejos en la sala.
                                   active
-                                    ? "bg-[var(--color-accent)] text-white"
-                                    : "bg-[var(--color-error)] text-white",
+                                    ? badge === "ticket_drafts"
+                                      ? "bg-amber-500 text-white"
+                                      : "bg-[var(--color-accent)] text-white"
+                                    : badge === "ticket_drafts"
+                                      ? "bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/35"
+                                      : "bg-[var(--color-surface-2)] text-[var(--color-error)] ring-1 ring-[var(--color-error)]/30",
+                                  badge && poppingBadges.has(badge) && "ccmgc-badge-pop",
                                 )}
                               >
                                 {badgeCount > 99 ? "99+" : badgeCount}
@@ -631,7 +686,7 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
             <Link
               href="/account"
               onClick={() => setOpen(false)}
-              className="group relative block overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80 transition-colors hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-3)]"
+              className="sidebar-user-card group relative block overflow-hidden transition-colors"
               aria-label="Abrir Mi cuenta"
             >
               {/*
@@ -680,7 +735,7 @@ export function AppSidebar({ expanded: expandedProp, onToggleExpanded, onExpande
                       ? "font-semibold text-[var(--color-accent)]"
                       : "text-[var(--color-text-3)]",
                   )}>
-                    {sessionUser?.isReadOnly ? "Solo lectura" : humanRole(sessionUser?.role)}
+                    {sessionUser?.isReadOnly ? CENTRAL_VIEWER_LABEL : humanRole(sessionUser?.role)}
                   </p>
                 </div>
               </div>
@@ -731,14 +786,19 @@ function ConnectionLed({ status }: { status: ConnectionStatus }) {
         ? "bg-[var(--color-warning)]"
         : "bg-[var(--color-error)]";
   return (
-    <span
-      className={cn(
-        "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[var(--color-surface)]",
-        color,
-      )}
-      aria-label={`Conexión: ${connectionLabel(status)}`}
-      title={`Conexión: ${connectionLabel(status)}`}
-    />
+    <span className="group absolute -bottom-0.5 -right-0.5">
+      <span
+        className={cn(
+          "block h-2.5 w-2.5 rounded-full ring-2 ring-[var(--color-surface)] transition-colors duration-300",
+          color,
+        )}
+        aria-label={`Conexión: ${connectionLabel(status)}`}
+        title={`Conexión: ${connectionLabel(status)}`}
+      />
+      <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 hidden whitespace-nowrap rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2 py-1 text-[10px] text-[var(--color-text-1)] shadow-lg group-hover:block">
+        Conexión {connectionLabel(status)}
+      </span>
+    </span>
   );
 }
 

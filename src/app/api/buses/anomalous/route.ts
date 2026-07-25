@@ -3,8 +3,7 @@
  * tickets en los últimos N días que excede la media + zscore·stddev de la
  * flota.
  *
- * Pensado para alimentar un chip de "Atención" en `/inventory` y un widget
- * eventual del dashboard.
+ * Pensado para alimentar el banner de atención en Preventivo y widgets del dashboard.
  *
  * Estrategia (sin ML):
  *  1. Lee tickets en la ventana (default 12 d, configurable desde
@@ -24,7 +23,7 @@ import { NextResponse } from "next/server";
 
 import { resolveRequestActor } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { ANOMALOUS_DEFAULTS } from "@/app/api/anomalous-config/route";
+import { ANOMALOUS_DEFAULTS } from "@/lib/anomalous-config";
 import {
   APP_SETTING_KEYS,
   getAppSettingJson,

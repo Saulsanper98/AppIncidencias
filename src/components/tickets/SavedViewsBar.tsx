@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookmarkPlus, Loader2, Star, Trash2, X } from "lucide-react";
+import { BookmarkPlus, Loader2, Star, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { trackUxEvent } from "@/lib/ux-telemetry";
 import { cn } from "@/lib/utils";
 
@@ -139,10 +140,8 @@ export function SavedViewsBar({ currentQuery, onApply }: Props) {
         <span
           key={v.id}
           className={cn(
-            "group inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors",
-            activeViewId === v.id
-              ? "border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)]"
-              : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)]",
+            "filter-chip group",
+            activeViewId === v.id && "filter-chip--active",
           )}
         >
           <button
@@ -186,71 +185,56 @@ export function SavedViewsBar({ currentQuery, onApply }: Props) {
       </button>
       {error ? <span className="text-xs text-[var(--color-error)]">{error}</span> : null}
 
-      {showSaveDialog ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="save-view-title"
-        >
-          <form
-            onSubmit={handleSave}
-            className="w-full max-w-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-2xl"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h3
-                id="save-view-title"
-                className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-1)]"
-              >
-                <BookmarkPlus size={14} className="text-[var(--color-accent)]" aria-hidden />
-                Guardar vista
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowSaveDialog(false)}
-                className="rounded p-1 text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)]"
-                aria-label="Cerrar"
-              >
-                <X size={14} aria-hidden />
-              </button>
-            </div>
-            <label className="block text-xs font-medium text-[var(--color-text-2)]">
-              Nombre
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ej. Tickets altos sin asignar"
-                maxLength={80}
-                autoFocus
-                className="mt-1"
-              />
-            </label>
-            <p className="mt-2 text-[11px] text-[var(--color-text-3)]">
-              Se guardarán los filtros actuales: <span className="font-mono">{currentQuery || "—"}</span>
-            </p>
-            <div className="mt-3 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowSaveDialog(false)}
-                disabled={saving}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" variant="primary" size="sm" disabled={saving || !name.trim()}>
-                {saving ? (
-                  <span className="flex items-center gap-1">
-                    <Loader2 size={12} className="animate-spin" aria-hidden /> Guardando…
-                  </span>
-                ) : (
-                  "Guardar"
-                )}
-              </Button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <ModalShell
+        open={showSaveDialog}
+        onClose={() => setShowSaveDialog(false)}
+        size="sm"
+        title={
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            <BookmarkPlus size={14} className="text-[var(--color-accent)]" aria-hidden />
+            Guardar vista
+          </span>
+        }
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSaveDialog(false)}
+              disabled={saving}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" form="save-view-form" variant="primary" size="sm" disabled={saving || !name.trim()}>
+              {saving ? (
+                <span className="flex items-center gap-1">
+                  <Loader2 size={12} className="animate-spin" aria-hidden /> Guardando…
+                </span>
+              ) : (
+                "Guardar"
+              )}
+            </Button>
+          </>
+        }
+      >
+        <form id="save-view-form" onSubmit={handleSave}>
+          <label className="block text-xs font-medium text-[var(--color-text-2)]">
+            Nombre
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ej. Tickets altos sin asignar"
+              maxLength={80}
+              autoFocus
+              className="mt-1"
+            />
+          </label>
+          <p className="mt-2 text-[11px] text-[var(--color-text-3)]">
+            Se guardarán los filtros actuales: <span className="font-mono">{currentQuery || "—"}</span>
+          </p>
+        </form>
+      </ModalShell>
     </div>
   );
 }

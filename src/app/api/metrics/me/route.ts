@@ -17,6 +17,7 @@ import { NextResponse } from "next/server";
 
 import { resolveRequestActor } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { countResolutionsByUser, getTopTechniciansByResolutions } from "@/lib/ticket-resolution-metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,9 +35,8 @@ export async function GET(request: Request) {
     const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const d90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-    // Para "resueltos por mí" usamos el AuditEvent `ticket.status_changed`
-    // donde el actor sea el usuario y el destino sea `resuelto`. Esto es
-    // más fiable que asumir que el asignado actual es quien lo resolvió.
+    // Resueltos por mí: `TicketStatusChange` captura todos los flujos
+    // (cambio de estado, alta ya resuelta, express, borrador promovido).
     const [
       resolvedByMe7,
       resolvedByMe30,
@@ -44,32 +44,11 @@ export async function GET(request: Request) {
       myAssignedCount,
       myResolvedTickets30,
       myTickets30,
-      othersResolvedByUser30,
+      rankingRows30,
     ] = await Promise.all([
-      prisma.auditEvent.count({
-        where: {
-          userId,
-          action: "ticket.status_changed",
-          detail: { contains: "-> resuelto" },
-          createdAt: { gte: d7 },
-        },
-      }),
-      prisma.auditEvent.count({
-        where: {
-          userId,
-          action: "ticket.status_changed",
-          detail: { contains: "-> resuelto" },
-          createdAt: { gte: d30 },
-        },
-      }),
-      prisma.auditEvent.count({
-        where: {
-          userId,
-          action: "ticket.status_changed",
-          detail: { contains: "-> resuelto" },
-          createdAt: { gte: d90 },
-        },
-      }),
+      countResolutionsByUser(userId, d7),
+      countResolutionsByUser(userId, d30),
+      countResolutionsByUser(userId, d90),
       prisma.ticket.count({
         where: { assignedToUserId: userId, status: { not: "resuelto" } },
       }),
@@ -93,17 +72,7 @@ export async function GET(request: Request) {
         where: { assignedToUserId: userId, createdAt: { gte: d30 } },
         select: { tipo: true, subtipo: true, nivelImpacto: true },
       }),
-      // Ranking por resueltos: agrupamos eventos por userId.
-      prisma.auditEvent.groupBy({
-        by: ["userId"],
-        where: {
-          userId: { not: null },
-          action: "ticket.status_changed",
-          detail: { contains: "-> resuelto" },
-          createdAt: { gte: d30 },
-        },
-        _count: { _all: true },
-      }),
+      getTopTechniciansByResolutions(d30, now, 0),
     ]);
 
     const mttrMs =
@@ -138,9 +107,7 @@ export async function GET(request: Request) {
       .slice(0, 5);
 
     // Ranking: ordenar grupos descendentemente y encontrar mi posición.
-    const ranking = othersResolvedByUser30
-      .map((g) => ({ userId: g.userId, count: g._count._all }))
-      .sort((a, b) => b.count - a.count);
+    const ranking = rankingRows30.map((r) => ({ userId: r.userId, count: r.resolved }));
     const myRankIndex = ranking.findIndex((r) => r.userId === userId);
     const myRank = myRankIndex === -1 ? null : myRankIndex + 1;
     const rankTotal = ranking.length;

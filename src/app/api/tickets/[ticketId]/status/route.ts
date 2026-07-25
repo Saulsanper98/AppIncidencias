@@ -8,7 +8,10 @@ import { renderTicketEmail, sendUserEmail } from "@/lib/email-notifications";
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { canUpdateTicketStatus, getAllowedTransitions } from "@/lib/rbac";
+import { recordTicketStatusChange } from "@/lib/ticket-status-history";
+import { notifyTicketWatchers } from "@/lib/ticket-watchers";
 import { publishTicketEvent } from "@/lib/tickets-events";
+import { trackTicketResolvedTelemetry } from "@/lib/ticket-resolution-telemetry";
 import { trackServerUxEvent } from "@/lib/ux-server";
 
 const statusUpdateSchema = z.object({
@@ -25,7 +28,7 @@ export async function PATCH(
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para cambiar estados" }, { status: 401 });
     }
-    if (!canUpdateTicketStatus(actor.role)) {
+    if (!canUpdateTicketStatus(actor.role, actor.isReadOnly)) {
       return NextResponse.json({ message: "Rol sin permisos para actualizar estado" }, { status: 403 });
     }
 
@@ -54,7 +57,7 @@ export async function PATCH(
       return NextResponse.json({ message: "Ticket no encontrado" }, { status: 404 });
     }
 
-    const allowed = getAllowedTransitions(actor.role, ticket.status as TicketStatus);
+    const allowed = getAllowedTransitions(actor.role, ticket.status as TicketStatus, actor.isReadOnly);
     if (!allowed.includes(parsed.data.nextStatus)) {
       return NextResponse.json(
         { message: "Transicion no permitida para el rol actual", allowedTransitions: allowed },
@@ -64,7 +67,19 @@ export async function PATCH(
 
     await prisma.ticket.update({
       where: { id: ticket.id },
-      data: { status: parsed.data.nextStatus },
+      data: {
+        status: parsed.data.nextStatus,
+        ...(parsed.data.nextStatus === "resuelto" ? { resolvedAt: new Date() } : { resolvedAt: null }),
+      },
+    });
+
+    await recordTicketStatusChange({
+      ticketId: ticket.id,
+      fromStatus: ticket.status as TicketStatus,
+      toStatus: parsed.data.nextStatus,
+      changedByUserId: actor.userId,
+      changedByName: actor.displayName,
+      comment: parsed.data.comment,
     });
 
     let consumedCount = 0;
@@ -108,6 +123,18 @@ export async function PATCH(
       by: actor.displayName,
     });
 
+    void notifyTicketWatchers({
+      ticketId: ticket.id,
+      busId: ticket.busId,
+      title: ticket.title,
+      priority: ticket.priority,
+      status: parsed.data.nextStatus,
+      headline: `Estado → ${parsed.data.nextStatus}`,
+      bodyHtml: `${actor.displayName} actualizó el ticket.<br/><em>${parsed.data.comment.replace(/[<>]/g, "")}</em>`,
+      actorUserId: actor.userId,
+      dedupeKey: `watch-status:${ticket.id}:${parsed.data.nextStatus}:${actor.userId}`,
+    });
+
     // Aviso por email al asignado cuando alguien distinto cambia el estado.
     // Si el ticket no está asignado o lo cambia el propio asignado, no
     // mandamos nada para no hacer spam.
@@ -134,26 +161,22 @@ export async function PATCH(
     }
 
     // ── Telemetría UX (servidor) ─────────────────────────────────────────
-    // Cada cambio de estado lo registramos. Para `resuelto`, además calculamos
-    // el MTTR (tiempo desde apertura hasta resolución) y el cumplimiento SLA.
     const now = new Date();
     if (parsed.data.nextStatus === "resuelto") {
-      const mttrMs = now.getTime() - ticket.createdAt.getTime();
-      const slaMet = now.getTime() <= ticket.slaDeadline.getTime();
-      void trackServerUxEvent({
-        eventName: "ticket_resolved",
+      trackTicketResolvedTelemetry({
         actor: { userId: actor.userId, role: actor.role },
         request,
-        path: `/tickets/${ticket.id}`,
-        durationMs: mttrMs,
-        props: {
-          priority: ticket.priority,
-          tipo: ticket.tipo ?? null,
-          previous_status: ticket.status,
-          sla_met: slaMet,
-          assigned: !!ticket.assignedToUserId,
-          consumed_reservations: consumedCount,
-        },
+        ticketId: ticket.id,
+        busId: ticket.busId,
+        fromStatus: ticket.status as TicketStatus,
+        createdAt: ticket.createdAt,
+        resolvedAt: now,
+        slaDeadline: ticket.slaDeadline,
+        priority: ticket.priority,
+        tipo: ticket.tipo,
+        assignedToUserId: ticket.assignedToUserId,
+        resolutionChannel: "status_change",
+        consumedReservations: consumedCount,
       });
     } else {
       void trackServerUxEvent({

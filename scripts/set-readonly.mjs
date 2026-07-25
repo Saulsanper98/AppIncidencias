@@ -8,8 +8,8 @@
  *   node scripts/set-readonly.mjs <email> [on|off]
  *
  * Ejemplos:
- *   node scripts/set-readonly.mjs read@movilidadgc.org on
- *   node scripts/set-readonly.mjs read@movilidadgc.org off
+ *   node scripts/set-readonly.mjs etra@etramovilidad.org on
+ *   node scripts/set-readonly.mjs etra@etramovilidad.org off
  *
  * Si el usuario no existe, se crea con rol "conductor" y password vacío
  * (no podrá entrar hasta que un admin le ponga una desde Admin → Usuarios).

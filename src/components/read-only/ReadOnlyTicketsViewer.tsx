@@ -25,15 +25,19 @@
  *   - Cero botones de mutación.
  */
 
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
   AlertTriangle,
   ArrowUp,
+  Building2,
   Bus as BusIcon,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Clock,
+  ExternalLink,
   Eye,
   Filter,
   Layers,
@@ -55,6 +59,26 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { EmptyState as UiEmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { Input } from "@/components/ui/input";
+import { KpiPill, type KpiTone } from "@/components/ui/kpi-pill";
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  FilterActiveTag,
+  FilterDivider,
+  FilterLabeledGroup,
+  FilterPillToggle,
+  FilterPills,
+  FilterSelect,
+} from "@/components/ui/ticket-filter-bar";
+
+function ticketStaggerClass(index: number) {
+  return `ccmgc-stagger-in ccmgc-stagger-in-${(index % 6) + 1}`;
+}
 
 // ─── Tipos (subset de /api/tickets) ──────────────────────────────────────────
 
@@ -108,61 +132,34 @@ type ApiResponse = { tickets: Ticket[] };
 
 const STATUS_META: Record<
   TicketStatus,
-  { label: string; color: string; bg: string; ring: string; Icon: typeof CheckCircle2 }
+  { label: string; badge: "warning" | "info" | "neutral" | "success"; Icon: typeof CheckCircle2 }
 > = {
-  abierto: {
-    label: "Abierto",
-    color: "text-amber-300",
-    bg: "bg-amber-500/15",
-    ring: "ring-amber-500/40",
-    Icon: AlertCircle,
-  },
-  en_proceso: {
-    label: "En proceso",
-    color: "text-sky-300",
-    bg: "bg-sky-500/15",
-    ring: "ring-sky-500/40",
-    Icon: Loader2,
-  },
-  esperando_repuesto: {
-    label: "Esperando repuesto",
-    color: "text-violet-300",
-    bg: "bg-violet-500/15",
-    ring: "ring-violet-500/40",
-    Icon: Clock,
-  },
-  resuelto: {
-    label: "Resuelto",
-    color: "text-emerald-300",
-    bg: "bg-emerald-500/15",
-    ring: "ring-emerald-500/40",
-    Icon: CheckCircle2,
-  },
+  abierto: { label: "Abierto", badge: "warning", Icon: AlertCircle },
+  en_proceso: { label: "En proceso", badge: "info", Icon: Loader2 },
+  esperando_repuesto: { label: "Esperando repuesto", badge: "neutral", Icon: Clock },
+  resuelto: { label: "Resuelto", badge: "success", Icon: CheckCircle2 },
 };
 
 const PRIORITY_META: Record<
   TicketPriority,
-  { label: string; color: string; bg: string; bar: string; Icon: typeof AlertTriangle }
+  { label: string; badge: "error" | "warning" | "success"; bar: string; Icon: typeof AlertTriangle }
 > = {
   alta: {
     label: "Alta",
-    color: "text-[var(--color-error)]",
-    bg: "bg-[var(--color-error-light)]",
-    bar: "bg-gradient-to-b from-[var(--color-error)] to-[var(--color-error)]/60",
+    badge: "error",
+    bar: "bg-gradient-to-b from-[var(--color-error)] to-[color-mix(in_oklab,var(--color-error)_60%,transparent)]",
     Icon: AlertTriangle,
   },
   media: {
     label: "Media",
-    color: "text-amber-300",
-    bg: "bg-amber-500/12",
-    bar: "bg-gradient-to-b from-amber-400 to-amber-500/60",
+    badge: "warning",
+    bar: "bg-gradient-to-b from-[var(--color-warning)] to-[color-mix(in_oklab,var(--color-warning)_60%,transparent)]",
     Icon: AlertCircle,
   },
   baja: {
     label: "Baja",
-    color: "text-emerald-300",
-    bg: "bg-emerald-500/12",
-    bar: "bg-gradient-to-b from-emerald-400 to-emerald-500/50",
+    badge: "success",
+    bar: "bg-gradient-to-b from-[var(--color-success)] to-[color-mix(in_oklab,var(--color-success)_50%,transparent)]",
     Icon: CheckCircle2,
   },
 };
@@ -178,6 +175,7 @@ export function ReadOnlyTicketsViewer() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [lastFetchAt, setLastFetchAt] = useState<number | null>(null);
   const [connOk, setConnOk] = useState(true);
 
@@ -291,9 +289,11 @@ export function ReadOnlyTicketsViewer() {
         setTickets(data.tickets);
         setLastFetchAt(Date.now());
         setConnOk(true);
+        setLoadError(null);
       } catch (err) {
         console.warn("ReadOnlyTicketsViewer:", err);
         setConnOk(false);
+        if (!silent) setLoadError("No se pudieron cargar las incidencias");
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -529,58 +529,66 @@ export function ReadOnlyTicketsViewer() {
     <div className={cn("space-y-4", wallboard && "space-y-5")}>
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard
-          label="Abiertas"
-          value={kpis.abiertas}
-          tone="amber"
-          Icon={AlertCircle}
-          wallboard={wallboard}
-        />
-        <KpiCard
-          label="En proceso"
-          value={kpis.enProceso}
-          tone="sky"
-          Icon={Loader2}
-          spin={kpis.enProceso > 0}
-          wallboard={wallboard}
-        />
-        <KpiCard
-          label="Prioridad alta"
-          value={kpis.altas}
-          tone="red"
-          Icon={AlertTriangle}
-          pulse={kpis.altas > 0}
-          wallboard={wallboard}
-        />
-        <KpiCard
-          label="Últimas 24 h"
-          value={kpis.last24h}
-          tone="violet"
-          Icon={Clock}
-          delta={kpis.last24h - kpis.prev24h}
-          deltaLabel="vs día anterior"
-          wallboard={wallboard}
-        />
-        <KpiCard
-          label="Total histórico"
-          value={kpis.total}
-          tone="slate"
-          Icon={Filter}
-          wallboard={wallboard}
-        />
+        <LecturaKpi label="Abiertas" value={kpis.abiertas} tone="warning" icon={<AlertCircle size={12} aria-hidden />} wallboard={wallboard} animateValue={!loading} />
+        <LecturaKpi label="En proceso" value={kpis.enProceso} tone="info" icon={<Loader2 size={12} aria-hidden className={kpis.enProceso > 0 ? "animate-spin" : ""} />} wallboard={wallboard} animateValue={!loading} />
+        <LecturaKpi label="Prioridad alta" value={kpis.altas} tone="error" icon={<AlertTriangle size={12} aria-hidden />} pulse={kpis.altas > 0} wallboard={wallboard} animateValue={!loading} />
+        <LecturaKpi label="Últimas 24 h" value={kpis.last24h} tone="violet" icon={<Clock size={12} aria-hidden />} delta={kpis.last24h - kpis.prev24h} deltaLabel="vs día anterior" wallboard={wallboard} animateValue={!loading} />
+        <LecturaKpi label="Total histórico" value={kpis.total} tone="neutral" icon={<Filter size={12} aria-hidden />} wallboard={wallboard} animateValue={!loading} />
       </div>
 
-      {/* Controles */}
+      {/* Controles — barra plana sin cajas anidadas */}
       {!wallboard ? (
-        <div className="space-y-2.5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
-          {/* Fila 1: Estado + prioridad + chips rápidos + búsqueda + acciones */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <Segmented
+        <div className="sticky top-0 z-20 space-y-3 rounded-xl bg-[color-mix(in_oklab,var(--color-bg)_88%,transparent)] py-2 backdrop-blur-md supports-[backdrop-filter]:bg-[color-mix(in_oklab,var(--color-bg)_78%,transparent)]">
+          {/* Búsqueda + acciones */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[12rem] flex-1">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-[var(--color-text-3)]"
+                aria-hidden
+              />
+              <Input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar título, bus, descripción…"
+                className="h-9 w-full rounded-lg border-[var(--color-border)] bg-[var(--color-surface)] py-1 pl-9 pr-3 text-[12.5px] shadow-sm"
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <ConnIndicator connOk={connOk} ts={lastFetchAt} />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void load(true)}
+                disabled={refreshing}
+                title="Refrescar ahora"
+                aria-label="Refrescar ahora"
+                className="!h-8 !w-8 !min-h-0 !rounded-lg !p-0"
+              >
+                <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setWallboard(true)}
+                title="Modo Wallboard (pantalla grande)"
+                className="!h-8 gap-1.5 !rounded-lg !px-2.5 text-[10.5px] font-semibold"
+                startIcon={<Maximize2 size={11} />}
+              >
+                Wallboard
+              </Button>
+            </div>
+          </div>
+
+          {/* Estado + prioridad + atajos */}
+          <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-2">
+            <FilterLabeledGroup label="Estado">
+              <FilterPills
                 value={statusFilter}
-                onChange={(v) =>
-                  setStatusFilter(v as TicketStatus | "todos" | "activos")
-                }
+                onChange={(v) => setStatusFilter(v as TicketStatus | "todos" | "activos")}
                 options={[
                   { v: "activos", label: "Activas" },
                   { v: "abierto", label: "Abiertas" },
@@ -590,7 +598,12 @@ export function ReadOnlyTicketsViewer() {
                   { v: "todos", label: "Todas" },
                 ]}
               />
-              <Segmented
+            </FilterLabeledGroup>
+
+            <FilterDivider className="hidden lg:block" />
+
+            <FilterLabeledGroup label="Prioridad">
+              <FilterPills
                 value={priorityFilter}
                 onChange={(v) => setPriorityFilter(v as TicketPriority | "todos")}
                 options={[
@@ -600,74 +613,30 @@ export function ReadOnlyTicketsViewer() {
                   { v: "baja", label: "Baja" },
                 ]}
               />
-              <button
-                type="button"
-                onClick={() => setOnlyCritical((v) => !v)}
-                aria-pressed={onlyCritical}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                  onlyCritical
-                    ? "border-[var(--color-error)]/60 bg-[var(--color-error-light)] text-[var(--color-error)]"
-                    : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
-                )}
-              >
-                <AlertTriangle size={12} />
-                Solo críticas
-              </button>
-              <button
-                type="button"
-                onClick={() => setOnlyLast24h((v) => !v)}
-                aria-pressed={onlyLast24h}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                  onlyLast24h
-                    ? "border-violet-500/60 bg-violet-500/15 text-violet-300"
-                    : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
-                )}
-              >
-                <Clock size={12} />
-                Últimas 24 h
-              </button>
-            </div>
+            </FilterLabeledGroup>
 
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search
-                  size={13}
-                  className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]"
-                />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar título, bus, descripción…"
-                  className="w-60 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] py-1.5 pl-7 pr-3 text-[12px] text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:border-[var(--color-accent)] focus:outline-none"
-                />
+            <FilterDivider className="hidden lg:block" />
+
+            <FilterLabeledGroup label="Atajos">
+              <div className="flex flex-wrap gap-0.5">
+                <FilterPillToggle
+                  pressed={onlyCritical}
+                  onClick={() => setOnlyCritical((v) => !v)}
+                  accent="error"
+                >
+                  <AlertTriangle size={11} aria-hidden />
+                  Solo críticas
+                </FilterPillToggle>
+                <FilterPillToggle pressed={onlyLast24h} onClick={() => setOnlyLast24h((v) => !v)}>
+                  <Clock size={11} aria-hidden />
+                  Últimas 24 h
+                </FilterPillToggle>
               </div>
-              <ConnIndicator connOk={connOk} ts={lastFetchAt} />
-              <button
-                type="button"
-                onClick={() => void load(true)}
-                disabled={refreshing}
-                title="Refrescar ahora"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)] hover:text-[var(--color-text-1)] disabled:opacity-50"
-              >
-                <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setWallboard(true)}
-                title="Modo Wallboard (pantalla grande)"
-                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] px-2.5 text-[10.5px] font-semibold text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-white"
-              >
-                <Maximize2 size={11} />
-                Wallboard
-              </button>
-            </div>
+            </FilterLabeledGroup>
           </div>
 
-          {/* Fila 2: filtros granulares por tipo / operadora / bus / técnico */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-2.5">
+          {/* Refinamiento: selects en una sola franja */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-[var(--color-surface-2)]/40 px-3 py-2">
             <FilterSelect
               Icon={Layers}
               label="Tipo"
@@ -682,7 +651,7 @@ export function ReadOnlyTicketsViewer() {
               ]}
             />
             <FilterSelect
-              Icon={BusIcon}
+              Icon={Building2}
               label="Operadora"
               value={operatorFilter}
               onChange={setOperatorFilter}
@@ -725,50 +694,34 @@ export function ReadOnlyTicketsViewer() {
               ]}
             />
 
-            {/* Resumen y limpieza */}
-            <div className="ml-auto inline-flex items-center gap-2 text-[11px] text-[var(--color-text-3)]">
+            <div className="ml-auto inline-flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-3)]">
               <span>
                 Mostrando{" "}
                 <strong className="font-semibold tabular-nums text-[var(--color-text-1)]">
                   {filtered.length}
                 </strong>{" "}
                 de{" "}
-                <span className="tabular-nums text-[var(--color-text-2)]">
-                  {tickets.length}
-                </span>
+                <span className="tabular-nums text-[var(--color-text-2)]">{tickets.length}</span>
               </span>
               {activeFilters.length > 0 ? (
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="inline-flex items-center gap-1 rounded-full border border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] px-2.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)] hover:text-white"
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10.5px] font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/10"
                   title="Quitar todos los filtros activos"
                 >
-                  <X size={11} />
-                  Limpiar {activeFilters.length} filtro
-                  {activeFilters.length === 1 ? "" : "s"}
+                  <X size={11} aria-hidden />
+                  Limpiar
                 </button>
               ) : null}
             </div>
           </div>
 
-          {/* Chips de filtros activos (quitables uno a uno) */}
+          {/* Tags activos — solo cuando hay filtros extra */}
           {activeFilters.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--color-border)] pt-2.5">
-              <span className="text-[10.5px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
-                Filtros activos
-              </span>
+            <div className="flex flex-wrap items-center gap-1.5">
               {activeFilters.map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={f.clear}
-                  className="group inline-flex items-center gap-1 rounded-full border border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] px-2 py-0.5 text-[10.5px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-white"
-                  title="Quitar este filtro"
-                >
-                  {f.label}
-                  <X size={10} className="opacity-70 group-hover:opacity-100" />
-                </button>
+                <FilterActiveTag key={f.key} label={f.label} onClear={f.clear} />
               ))}
             </div>
           ) : null}
@@ -788,21 +741,36 @@ export function ReadOnlyTicketsViewer() {
 
       {/* Lista (con cabeceras de grupo) */}
       {loading ? (
-        <div className="space-y-3">
+        <div className="space-y-3" aria-busy="true">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-28 animate-pulse rounded-2xl bg-white/[0.03]" />
+            <Skeleton key={i} className="h-28 rounded-2xl" />
           ))}
         </div>
+      ) : loadError && tickets.length === 0 ? (
+        <ErrorState
+          icon={WifiOff}
+          title="Sin conexión con el servidor"
+          hint={loadError}
+          onRetry={() => void load(false)}
+        />
       ) : filtered.length === 0 ? (
-        <EmptyState />
+        <UiEmptyState
+          icon={CheckCircle2}
+          title="Sin incidencias con esos filtros"
+          hint="Cambia los filtros o quítalos para ver el listado completo."
+          actionLabel={activeFilters.length > 0 ? "Limpiar filtros" : undefined}
+          onAction={activeFilters.length > 0 ? clearAllFilters : undefined}
+        />
       ) : (
         <div className={cn("space-y-5", wallboard && "space-y-6")}>
-          {grouped.map((group) => (
+          {grouped.map((group, groupIdx) => {
+            const ticketsBefore = grouped.slice(0, groupIdx).reduce((n, g) => n + g.tickets.length, 0);
+            return (
             <section key={group.key}>
               <GroupHeader label={group.label} count={group.tickets.length} />
               <ul className={cn("mt-2.5 space-y-3", wallboard && "space-y-4")}>
                 <AnimatePresence initial={false}>
-                  {group.tickets.map((t) => (
+                  {group.tickets.map((t, ticketIdx) => (
                     <motion.li
                       key={t.id}
                       layout
@@ -810,6 +778,7 @@ export function ReadOnlyTicketsViewer() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.18 }}
+                      className={ticketStaggerClass(ticketsBefore + ticketIdx)}
                     >
                       <TicketRow
                         ticket={t}
@@ -825,7 +794,8 @@ export function ReadOnlyTicketsViewer() {
                 </AnimatePresence>
               </ul>
             </section>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -857,128 +827,80 @@ export function ReadOnlyTicketsViewer() {
 function GroupHeader({ label, count }: { label: string; count: number }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="inline-flex items-center gap-2">
-        <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--color-text-2)]">
-          {label}
-        </h2>
-        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--color-surface-3)] px-1.5 text-[10.5px] font-bold tabular-nums text-[var(--color-text-2)]">
+      <SectionEyebrow className="!mb-0 shrink-0">
+        {label}
+        <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--color-surface-3)] px-1.5 text-[10.5px] font-bold tabular-nums text-[var(--color-text-2)]">
           {count}
         </span>
-      </div>
+      </SectionEyebrow>
       <span aria-hidden className="h-px flex-1 bg-gradient-to-r from-[var(--color-border)] to-transparent" />
     </div>
   );
 }
 
-function KpiCard({
+function LecturaKpi({
   label,
   value,
   tone,
-  Icon,
-  spin,
+  icon,
   pulse,
   delta,
   deltaLabel,
   wallboard,
+  animateValue,
 }: {
   label: string;
   value: number;
-  tone: "amber" | "sky" | "red" | "violet" | "slate";
-  Icon: typeof Clock;
-  spin?: boolean;
+  tone: KpiTone;
+  icon: React.ReactNode;
   pulse?: boolean;
   delta?: number;
   deltaLabel?: string;
   wallboard?: boolean;
+  animateValue?: boolean;
 }) {
-  const tones = {
-    amber: {
-      border: "border-amber-500/30",
-      bg: "bg-amber-500/[0.06]",
-      ring: "ring-amber-500/20",
-      icon: "text-amber-300 bg-amber-500/15",
-      glow: "bg-amber-500/20",
-    },
-    sky: {
-      border: "border-sky-500/30",
-      bg: "bg-sky-500/[0.06]",
-      ring: "ring-sky-500/20",
-      icon: "text-sky-300 bg-sky-500/15",
-      glow: "bg-sky-500/20",
-    },
-    red: {
-      border: "border-[var(--color-error)]/40",
-      bg: "bg-[var(--color-error)]/[0.08]",
-      ring: "ring-[var(--color-error)]/25",
-      icon: "text-[var(--color-error)] bg-[var(--color-error-light)]",
-      glow: "bg-[var(--color-error)]/25",
-    },
-    violet: {
-      border: "border-violet-500/30",
-      bg: "bg-violet-500/[0.06]",
-      ring: "ring-violet-500/20",
-      icon: "text-violet-300 bg-violet-500/15",
-      glow: "bg-violet-500/20",
-    },
-    slate: {
-      border: "border-[var(--color-border)]",
-      bg: "bg-[var(--color-surface-2)]/40",
-      ring: "ring-[var(--color-border)]",
-      icon: "text-[var(--color-text-2)] bg-[var(--color-surface-2)]",
-      glow: "bg-white/5",
-    },
-  }[tone];
+  if (!wallboard) {
+    return (
+      <KpiPill
+        layout="stacked"
+        label={label}
+        value={value}
+        tone={tone}
+        icon={icon}
+        pulse={pulse}
+        animateValue={animateValue}
+        className="min-h-[88px]"
+      />
+    );
+  }
 
   const showDelta = typeof delta === "number" && delta !== 0;
   const deltaUp = typeof delta === "number" && delta > 0;
+  const toneRing =
+    tone === "error"
+      ? "ring-[var(--color-error)]/25 border-[color-mix(in_oklab,var(--color-error)_30%,transparent)] bg-[color-mix(in_oklab,var(--color-error)_8%,var(--color-surface))]"
+      : tone === "warning"
+        ? "ring-[var(--color-warning)]/25 border-[color-mix(in_oklab,var(--color-warning)_30%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_8%,var(--color-surface))]"
+        : tone === "success"
+          ? "ring-[var(--color-success)]/25 border-[color-mix(in_oklab,var(--color-success)_30%,transparent)] bg-[color-mix(in_oklab,var(--color-success)_8%,var(--color-surface))]"
+          : tone === "info" || tone === "accent"
+            ? "ring-[var(--color-accent)]/25 border-[color-mix(in_oklab,var(--color-accent)_30%,transparent)] bg-[color-mix(in_oklab,var(--color-accent)_8%,var(--color-surface))]"
+            : tone === "violet"
+              ? "ring-[#a855f7]/25 border-[color-mix(in_oklab,#a855f7_30%,transparent)] bg-[color-mix(in_oklab,#a855f7_8%,var(--color-surface))]"
+              : "ring-[var(--color-border)] border-[var(--color-border)] bg-[var(--color-surface-2)]/40";
 
   return (
-    <div
-      className={cn(
-        "relative flex items-center gap-3 overflow-hidden rounded-2xl border px-4 ring-1 ring-inset",
-        tones.border,
-        tones.bg,
-        tones.ring,
-        wallboard ? "py-5 sm:gap-4 sm:px-5" : "py-4",
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute -right-8 -top-8 h-20 w-20 rounded-full blur-2xl opacity-50",
-          tones.glow,
-          pulse && "animate-pulse",
-        )}
-      />
-      <div
-        className={cn(
-          "relative flex shrink-0 items-center justify-center rounded-2xl",
-          tones.icon,
-          wallboard ? "h-12 w-12" : "h-11 w-11",
-        )}
-      >
-        <Icon
-          size={wallboard ? 24 : 22}
-          strokeWidth={2.2}
-          className={spin ? "animate-spin" : ""}
-        />
+    <div className={cn("relative flex items-center gap-4 overflow-hidden rounded-2xl border px-5 py-5 ring-1 ring-inset", toneRing)}>
+      {pulse ? (
+        <span aria-hidden className="ccmgc-pulse-dot pointer-events-none absolute -right-8 -top-8 h-20 w-20 rounded-full bg-[var(--color-error)]/20 blur-2xl opacity-50" />
+      ) : null}
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-surface-2)] text-[var(--color-text-2)]">
+        {icon}
       </div>
       <div className="min-w-0">
-        <p
-          className={cn(
-            "font-semibold uppercase tracking-[0.14em] opacity-75",
-            wallboard ? "text-[11px]" : "text-[10.5px]",
-          )}
-        >
-          {label}
-        </p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-3)]">{label}</p>
         <div className="mt-0.5 flex items-baseline gap-1.5">
-          <p
-            className={cn(
-              "font-bold leading-none tabular-nums tracking-tight text-[var(--color-text-1)]",
-              wallboard ? "text-5xl sm:text-6xl" : "text-3xl sm:text-[2rem]",
-            )}
-          >
+          <p className="text-5xl font-bold leading-none tabular-nums tracking-tight text-[var(--color-text-1)] sm:text-6xl">
             {value}
           </p>
           {showDelta ? (
@@ -986,109 +908,18 @@ function KpiCard({
               className={cn(
                 "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                 deltaUp
-                  ? "bg-rose-500/15 text-rose-300"
-                  : "bg-emerald-500/15 text-emerald-300",
+                  ? "bg-[var(--color-error-light)] text-[var(--color-error)]"
+                  : "bg-[var(--color-success-light)] text-[var(--color-success)]",
               )}
               title={deltaLabel}
             >
               {deltaUp ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-              {Math.abs(delta)}
+              {Math.abs(delta!)}
             </span>
           ) : null}
         </div>
       </div>
     </div>
-  );
-}
-
-function Segmented<V extends string>({
-  value,
-  onChange,
-  options,
-}: {
-  value: V;
-  onChange: (v: V) => void;
-  options: { v: V; label: string }[];
-}) {
-  return (
-    <div className="inline-flex rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] p-0.5">
-      {options.map((opt) => {
-        const active = value === opt.v;
-        return (
-          <button
-            key={opt.v}
-            type="button"
-            onClick={() => onChange(opt.v)}
-            className={cn(
-              "rounded-full px-3 py-1 text-[11.5px] font-medium transition-colors",
-              active
-                ? "bg-[var(--color-surface)] text-[var(--color-text-1)] shadow-sm"
-                : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
-            )}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/**
- * Select estilizado con icono y label inline.
- * Reutilizado para los filtros granulares (tipo, operadora, bus, técnico).
- * Cambia de aspecto cuando el valor NO es "todos" para que el usuario vea
- * de un vistazo que ese filtro está activo.
- */
-function FilterSelect({
-  Icon,
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  Icon: typeof Clock;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  const active = value !== "todos";
-  return (
-    <label
-      className={cn(
-        "group relative inline-flex items-center gap-1.5 rounded-full border py-1 pl-2 pr-1 text-[11.5px] font-medium transition-colors cursor-pointer",
-        active
-          ? "border-[var(--color-accent)]/50 bg-[var(--color-accent-light)] text-[var(--color-accent)]"
-          : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
-      )}
-      title={label}
-    >
-      <Icon size={12} strokeWidth={2.2} className="shrink-0 opacity-90" />
-      <span className="hidden sm:inline">{label}:</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={cn(
-          "max-w-[160px] cursor-pointer appearance-none rounded-full bg-transparent py-0.5 pl-1 pr-5 text-[11.5px] font-semibold focus:outline-none",
-          active ? "text-[var(--color-accent)]" : "text-[var(--color-text-1)]",
-        )}
-        style={{
-          // Caret en SVG con el color actual (sigue el color del texto del select).
-          backgroundImage:
-            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "right 0.45rem center",
-          backgroundSize: "0.7rem",
-        }}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value} className="bg-[var(--color-surface)] text-[var(--color-text-1)]">
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
@@ -1098,12 +929,12 @@ function ConnIndicator({ connOk, ts }: { connOk: boolean; ts: number | null }) {
       className={cn(
         "inline-flex h-7 items-center gap-1 rounded-full px-2 text-[10.5px] font-medium",
         connOk
-          ? "bg-emerald-500/10 text-emerald-300"
+          ? "bg-[var(--color-success-light)] text-[var(--color-success)]"
           : "bg-[var(--color-error-light)] text-[var(--color-error)]",
       )}
       title={connOk ? "Conectado al servidor" : "Sin conexión: mostrando última copia"}
     >
-      {connOk ? <Wifi size={11} /> : <WifiOff size={11} />}
+      {connOk ? <Wifi size={11} aria-hidden /> : <WifiOff size={11} aria-hidden />}
       <LastFetchLabel ts={ts} />
     </div>
   );
@@ -1144,23 +975,28 @@ function WallboardStatusBar({
       </div>
       <div className="flex items-center gap-2">
         <ConnIndicator connOk={connOk} ts={ts} />
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={onRefresh}
           disabled={refreshing}
           title="Refrescar"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-[var(--color-text-1)] hover:bg-white/20 disabled:opacity-50"
+          className="!h-8 !w-8 !min-h-0 !rounded-full !p-0"
+          aria-label="Refrescar"
         >
           <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={onExit}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/10 px-3 text-[11px] font-semibold text-[var(--color-text-1)] hover:bg-white/20"
+          className="!h-8 !rounded-full !px-3 text-[11px] font-semibold"
+          startIcon={<Minimize2 size={12} />}
         >
-          <Minimize2 size={12} />
           Salir
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1207,7 +1043,7 @@ function TicketRow({
           : "border-[var(--color-border)]",
         expanded &&
           "border-[var(--color-accent)]/40 shadow-[0_10px_30px_-12px_rgba(37,99,235,0.35)]",
-        highlight && "ring-2 ring-amber-400/50 ring-offset-0",
+        highlight && "ring-2 ring-[color-mix(in_oklab,var(--color-warning)_50%,transparent)] ring-offset-0",
       )}
     >
       {/* Glow rojo sutil para alta */}
@@ -1220,9 +1056,9 @@ function TicketRow({
 
       {/* Badge "Nueva" flotante */}
       {highlight ? (
-        <span className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-950 shadow-md shadow-amber-400/30">
+        <Badge variant="warning" className="absolute right-3 top-3 z-10 uppercase tracking-widest shadow-md">
           Nueva
-        </span>
+        </Badge>
       ) : null}
 
       <button
@@ -1247,46 +1083,44 @@ function TicketRow({
         {/* Avatar del bus + badges apilados */}
         <div className={cn("flex shrink-0 flex-col items-center gap-2", wallboard ? "w-20" : "w-16")}>
           <BusAvatar busId={ticket.busId} operator={ticket.operator} wallboard={wallboard} />
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-semibold ring-1 ring-inset",
-              status.bg,
-              status.color,
-              status.ring,
-              wallboard ? "text-[10.5px]" : "text-[9.5px]",
-            )}
+          <Badge
+            variant={status.badge}
+            className={cn("inline-flex items-center gap-1", wallboard ? "text-[10.5px]" : "text-[9.5px]")}
           >
             <status.Icon
               size={wallboard ? 10 : 9}
               strokeWidth={2.4}
               className={ticket.status === "en_proceso" ? "animate-spin" : ""}
+              aria-hidden
             />
             {shortStatusLabel(ticket.status)}
-          </span>
+          </Badge>
         </div>
 
         {/* Contenido principal */}
         <div className="min-w-0 flex-1">
           <header className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             {/* Tag de prioridad pequeño antes del título */}
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-bold uppercase tracking-wider",
-                priority.bg,
-                priority.color,
-                wallboard ? "text-[10.5px]" : "text-[9.5px]",
-              )}
+            <Badge
+              variant={priority.badge}
+              className={cn("inline-flex items-center gap-1 uppercase tracking-wider", wallboard ? "text-[10.5px]" : "text-[9.5px]")}
             >
-              <priority.Icon size={wallboard ? 11 : 10} strokeWidth={2.6} />
+              <priority.Icon size={wallboard ? 11 : 10} strokeWidth={2.6} aria-hidden />
               {priority.label}
-            </span>
+            </Badge>
             <h3
               className={cn(
                 "font-semibold leading-tight text-[var(--color-text-1)]",
                 wallboard ? "text-lg sm:text-xl" : "text-[15.5px] sm:text-base",
               )}
             >
-              {ticket.title}
+              <Link
+                href={`/tickets/${ticket.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="rounded-sm transition-colors hover:text-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+              >
+                {ticket.title}
+              </Link>
             </h3>
             <span
               className={cn(
@@ -1294,7 +1128,14 @@ function TicketRow({
                 wallboard ? "text-[11.5px]" : "text-[10.5px]",
               )}
             >
-              {shortId(ticket.id)}
+              <Link
+                href={`/tickets/${ticket.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="rounded px-0.5 transition-colors hover:text-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+                title="Abrir detalle completo del ticket"
+              >
+                {shortId(ticket.id)}
+              </Link>
             </span>
           </header>
 
@@ -1341,13 +1182,24 @@ function TicketRow({
           </div>
         </div>
 
-        <ChevronDown
-          size={wallboard ? 20 : 16}
-          className={cn(
-            "mt-1 shrink-0 self-start text-[var(--color-text-3)] transition-transform",
-            expanded && "rotate-180",
-          )}
-        />
+        <div className="flex shrink-0 flex-col items-end gap-2 self-start pt-0.5">
+          <Link
+            href={`/tickets/${ticket.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-accent)]/35 bg-[var(--color-accent-light)]/50 px-2 py-1 text-[10px] font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent-light)]"
+          >
+            <ExternalLink size={10} aria-hidden />
+            Detalle
+          </Link>
+          <ChevronDown
+            size={wallboard ? 20 : 16}
+            className={cn(
+              "text-[var(--color-text-3)] transition-transform",
+              expanded && "rotate-180",
+            )}
+            aria-hidden
+          />
+        </div>
       </button>
 
       {/* Cuerpo expandido */}
@@ -1362,6 +1214,14 @@ function TicketRow({
             className="overflow-hidden border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40"
           >
             <div className="space-y-4 px-4 py-4 sm:px-6 sm:py-5">
+              <Link
+                href={`/tickets/${ticket.id}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/35 bg-[var(--color-accent-light)]/40 px-3 py-1.5 text-xs font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent-light)]"
+              >
+                <ExternalLink size={12} aria-hidden />
+                Ver detalle completo
+              </Link>
+
               {ticket.attachments.length > 0 ? (
                 <div>
                   <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
@@ -1525,11 +1385,11 @@ function AgePill({
 }) {
   const cls =
     tone === "hot"
-      ? "bg-[var(--color-error-light)] text-[var(--color-error)] border-[var(--color-error)]/40"
+      ? "bg-[var(--color-error-light)] text-[var(--color-error)] border-[color-mix(in_oklab,var(--color-error)_40%,transparent)]"
       : tone === "warm"
-        ? "bg-amber-500/12 text-amber-300 border-amber-500/40"
+        ? "bg-[var(--color-warning-light)] text-[var(--color-warning)] border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)]"
         : tone === "fresh"
-          ? "bg-emerald-500/12 text-emerald-300 border-emerald-500/40"
+          ? "bg-[var(--color-success-light)] text-[var(--color-success)] border-[color-mix(in_oklab,var(--color-success)_40%,transparent)]"
           : "bg-transparent text-[var(--color-text-3)] border-transparent";
   return (
     <span
@@ -1557,22 +1417,6 @@ function MetaPill({
       {Icon ? <Icon size={11} strokeWidth={2} className="opacity-80" /> : null}
       {children}
     </span>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/30 px-6 py-14 text-center">
-      <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15">
-        <CheckCircle2 size={20} className="text-emerald-300" />
-      </span>
-      <p className="text-sm font-medium text-[var(--color-text-1)]">
-        Sin incidencias con esos filtros
-      </p>
-      <p className="mt-1 max-w-sm text-[12px] text-[var(--color-text-3)]">
-        Cambia los filtros o quítalos para ver el listado completo.
-      </p>
-    </div>
   );
 }
 

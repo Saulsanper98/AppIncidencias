@@ -2,26 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
-import { CHART_TYPES } from "@/lib/dashboard/chart-types";
 import { prisma } from "@/lib/prisma";
-
-const createWidgetSchema = z.object({
-  title: z.string().trim().min(2),
-  chartType: z.enum(CHART_TYPES),
-  dataSource: z.enum([
-    "tickets_by_status",
-    "tickets_by_operator",
-    "tickets_by_priority",
-    "sla_compliance",
-    "manual",
-    "operation_links",
-    "embed_tickets",
-    "embed_inventory",
-    "embed_preventive",
-  ]),
-  size: z.enum(["small", "medium", "large"]),
-  config: z.string().default("{}"),
-});
+import { canManageDashboards } from "@/lib/rbac";
+import {
+  assertWidgetBelongsToDashboard,
+  createWidgetSchema,
+  updateWidgetSchema,
+} from "@/lib/dashboard/widget-api-schemas";
 
 const reorderWidgetsSchema = z.object({
   widgetOrders: z.array(
@@ -35,27 +22,6 @@ const reorderWidgetsSchema = z.object({
 const resizeWidgetSchema = z.object({
   widgetId: z.string().min(1),
   size: z.enum(["small", "medium", "large"]),
-});
-
-const updateWidgetSchema = z.object({
-  widgetId: z.string().min(1),
-  title: z.string().trim().min(2).optional(),
-  chartType: z.enum(CHART_TYPES).optional(),
-  dataSource: z
-    .enum([
-      "tickets_by_status",
-      "tickets_by_operator",
-      "tickets_by_priority",
-      "sla_compliance",
-      "manual",
-      "operation_links",
-      "embed_tickets",
-      "embed_inventory",
-      "embed_preventive",
-    ])
-    .optional(),
-  size: z.enum(["small", "medium", "large"]).optional(),
-  config: z.string().optional(),
 });
 
 const deleteWidgetSchema = z.object({
@@ -83,7 +49,7 @@ export async function POST(request: Request, context: ParamsContext) {
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para añadir widgets" }, { status: 401 });
     }
-    if (actor.role !== "gestor_centro_control") {
+    if (!canManageDashboards(actor.role)) {
       return NextResponse.json({ message: "Rol sin permisos para añadir widgets" }, { status: 403 });
     }
 
@@ -152,7 +118,7 @@ export async function POST(request: Request, context: ParamsContext) {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH(request: Request, context: ParamsContext) {
   const startedAt = Date.now();
   try {
     const actor = await resolveRequestActor(request);
@@ -160,14 +126,19 @@ export async function PATCH(request: Request) {
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para ordenar widgets" }, { status: 401 });
     }
-    if (actor.role !== "gestor_centro_control") {
+    if (!canManageDashboards(actor.role)) {
       return NextResponse.json({ message: "Rol sin permisos para ordenar widgets" }, { status: 403 });
     }
 
+    const { dashboardId } = await context.params;
     const payload = await request.json();
     const updateParsed = updateWidgetSchema.safeParse(payload);
     if (updateParsed.success) {
       const { widgetId, ...rest } = updateParsed.data;
+      const belongs = await assertWidgetBelongsToDashboard(widgetId, dashboardId);
+      if (!belongs) {
+        return NextResponse.json({ message: "Widget no pertenece a este dashboard" }, { status: 404 });
+      }
       const dataToUpdate: Record<string, string> = {};
       if (rest.title !== undefined) dataToUpdate.title = rest.title;
       if (rest.chartType !== undefined) dataToUpdate.chartType = rest.chartType;
@@ -201,6 +172,10 @@ export async function PATCH(request: Request) {
     const resizeParsed = resizeWidgetSchema.safeParse(payload);
     logWidgetsRouteTiming("PATCH", "payload-parsed", startedAt);
     if (resizeParsed.success) {
+      const belongs = await assertWidgetBelongsToDashboard(resizeParsed.data.widgetId, dashboardId);
+      if (!belongs) {
+        return NextResponse.json({ message: "Widget no pertenece a este dashboard" }, { status: 404 });
+      }
       await prisma.dashboardWidget.update({
         where: { id: resizeParsed.data.widgetId },
         data: { size: resizeParsed.data.size },
@@ -216,8 +191,8 @@ export async function PATCH(request: Request) {
 
     await prisma.$transaction(
       reorderParsed.data.widgetOrders.map((item) =>
-        prisma.dashboardWidget.update({
-          where: { id: item.id },
+        prisma.dashboardWidget.updateMany({
+          where: { id: item.id, dashboardId },
           data: { order: item.order },
         }),
       ),
@@ -233,7 +208,7 @@ export async function PATCH(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: Request, context: ParamsContext) {
   const startedAt = Date.now();
   try {
     const actor = await resolveRequestActor(request);
@@ -241,15 +216,21 @@ export async function DELETE(request: Request) {
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para eliminar widgets" }, { status: 401 });
     }
-    if (actor.role !== "gestor_centro_control") {
+    if (!canManageDashboards(actor.role)) {
       return NextResponse.json({ message: "Rol sin permisos para eliminar widgets" }, { status: 403 });
     }
 
+    const { dashboardId } = await context.params;
     const payload = await request.json();
     const parsed = deleteWidgetSchema.safeParse(payload);
     logWidgetsRouteTiming("DELETE", "payload-parsed", startedAt);
     if (!parsed.success) {
       return NextResponse.json({ message: "Widget invalido" }, { status: 400 });
+    }
+
+    const belongs = await assertWidgetBelongsToDashboard(parsed.data.widgetId, dashboardId);
+    if (!belongs) {
+      return NextResponse.json({ message: "Widget no pertenece a este dashboard" }, { status: 404 });
     }
 
     const deleted = await prisma.dashboardWidget.delete({

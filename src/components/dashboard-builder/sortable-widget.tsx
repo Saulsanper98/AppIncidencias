@@ -174,6 +174,7 @@ export function SortableWidget({
         // permitir 100 columnas sin que los gaps se coman el ancho útil.
         "group/widget relative min-w-0 p-2",
         isEditing && "cursor-grab active:cursor-grabbing",
+        isDragging && "widget-dragging",
         (isResizing || isWidthResizing) && "select-none",
       )}
     >

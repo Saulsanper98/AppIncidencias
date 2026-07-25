@@ -30,6 +30,7 @@
  *    marque como procesado y un humano lo revise.
  */
 
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { writeAuditEvent } from "@/lib/auth-context";
@@ -37,11 +38,19 @@ import type { TicketPriority } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
 import { addMinutesIso } from "@/lib/ticketing";
 import { publishTicketEvent } from "@/lib/tickets-events";
+import { tryAutoAssignTicket } from "@/lib/ticket-auto-assign";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const VALID_PRIORITIES: TicketPriority[] = ["alta", "media", "baja"];
+
+function secretsEqual(provided: string, required: string): boolean {
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(required, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 function getProvidedSecret(request: Request): string | null {
   const auth = request.headers.get("authorization");
@@ -87,7 +96,7 @@ export async function POST(request: Request) {
       );
     }
     const provided = getProvidedSecret(request);
-    if (provided !== requiredSecret) {
+    if (!provided || !secretsEqual(provided, requiredSecret)) {
       return NextResponse.json({ message: "No autorizado" }, { status: 401 });
     }
 
@@ -170,12 +179,18 @@ export async function POST(request: Request) {
       detail: `Creado desde correo (${from ?? "remitente desconocido"})`,
     });
 
+    const auto = await tryAutoAssignTicket(created.id);
+    const assignedToUserId = auto.assigned ? auto.userId : null;
+    const assignedToUserName = auto.assigned ? auto.userName : null;
+
     publishTicketEvent("ticket_created", {
       id: created.id,
       busId: created.busId,
       status: created.status,
       priority: created.priority,
       title: created.title,
+      assignedToUserId,
+      assignedToUserName,
       by: from ?? "email-poller",
     });
 

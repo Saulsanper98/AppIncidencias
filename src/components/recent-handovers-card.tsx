@@ -20,6 +20,7 @@
 import { ArrowRight, ClipboardList, Moon, Sun, Sunrise } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Shift = "M" | "T" | "N";
 
@@ -31,6 +32,7 @@ type Handover = {
   acknowledgedAt: string | null;
   acknowledgedByName: string | null;
   createdAt: string;
+  openPendingCount?: number;
 };
 
 const SHIFT_META: Record<Shift, { label: string; Icon: typeof Sunrise; ring: string; bg: string; text: string }> = {
@@ -87,17 +89,21 @@ export function RecentHandoversCard() {
   const loading = items === null;
 
   return (
-    <article className="ccmgc-card flex min-h-[220px] flex-col p-4 sm:p-5">
-      <header className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
-            <ClipboardList size={14} strokeWidth={1.6} className="text-[var(--color-text-3)]" />
-          </div>
-          <h3 className="text-sm font-semibold text-[var(--color-text-1)]">Pases de turno</h3>
+    <article className="account-section flex min-h-[200px] flex-col transition-shadow hover:shadow-md">
+      <header className="account-section-head !mb-3">
+        <span className="account-section-icon shrink-0">
+          <ClipboardList size={14} strokeWidth={1.6} className="text-[var(--color-text-3)]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="account-section-pretitle">
+            <span className="account-section-pretitle-dot" aria-hidden />
+            Turnos M / T / N
+          </p>
+          <h3 className="account-section-title !mt-0">Pases de turno</h3>
         </div>
         <Link
           href="/handover"
-          className="text-[11px] text-[var(--color-text-3)] transition-colors hover:text-[var(--color-accent)]"
+          className="shrink-0 text-[11px] text-[var(--color-text-3)] transition-colors hover:text-[var(--color-accent)]"
         >
           Ver todos
         </Link>
@@ -106,7 +112,7 @@ export function RecentHandoversCard() {
       {loading ? (
         <div className="flex flex-col gap-2">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-12 animate-pulse rounded-lg bg-white/[0.04]" />
+            <Skeleton key={i} className="h-12 rounded-lg" />
           ))}
         </div>
       ) : error && items.length === 0 ? (
@@ -124,13 +130,20 @@ export function RecentHandoversCard() {
         </div>
       ) : (
         <ul className="flex flex-1 flex-col gap-1.5">
-          {items.map((h) => {
+          {items.map((h, index) => {
             const meta = SHIFT_META[h.shift];
             const isSigned = Boolean(h.acknowledgedAt);
+            const openCount = h.openPendingCount ?? 0;
+            const href =
+              openCount > 0
+                ? `/handover?tab=open_pending&focus=${encodeURIComponent(h.id)}`
+                : isSigned
+                  ? `/handover?focus=${encodeURIComponent(h.id)}`
+                  : `/handover?tab=unacked&focus=${encodeURIComponent(h.id)}`;
             return (
-              <li key={h.id}>
+              <li key={h.id} className={`ccmgc-stagger-in ccmgc-stagger-in-${(index % 6) + 1}`}>
                 <Link
-                  href="/handover"
+                  href={href}
                   className="group flex items-center gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] px-2 py-1.5 transition-colors hover:border-white/15 hover:bg-white/[0.05]"
                 >
                   <div
@@ -151,15 +164,22 @@ export function RecentHandoversCard() {
                       {h.authorName}
                     </p>
                   </div>
-                  {isSigned ? (
-                    <span className="shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-emerald-300">
-                      Firmado
-                    </span>
-                  ) : (
-                    <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-amber-300">
-                      Sin firmar
-                    </span>
-                  )}
+                  <div className="flex shrink-0 flex-col items-end gap-0.5">
+                    {isSigned ? (
+                      <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-emerald-300">
+                        Firmado
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-amber-300">
+                        Sin firmar
+                      </span>
+                    )}
+                    {openCount > 0 ? (
+                      <span className="text-[9.5px] font-semibold text-amber-300/90">
+                        {openCount} pend.
+                      </span>
+                    ) : null}
+                  </div>
                 </Link>
               </li>
             );

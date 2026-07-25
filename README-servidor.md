@@ -1,5 +1,7 @@
 # Servidor de Incidencias – Despliegue en el PC `192.168.12.67`
 
+> **Migración a Linux (Debian):** ver [`docs/DEPLOY-DEBIAN.md`](docs/DEPLOY-DEBIAN.md) y [`AGENTS-LINUX.md`](AGENTS-LINUX.md). En la VM: `sudo bash scripts/linux/bootstrap.sh`.
+
 Esta guía explica cómo dejar la **App de Incidencias** (CCMGC Ticketing, Next.js 15) corriendo de forma **persistente** en el PC con IP `192.168.12.67`, de modo que:
 
 - Arranque **automáticamente** al encender Windows.

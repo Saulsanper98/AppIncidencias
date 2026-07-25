@@ -19,7 +19,6 @@
 
 import {
   AlertCircle,
-  Archive,
   CheckCircle2,
   ChevronDown,
   Image as ImageIcon,
@@ -29,10 +28,13 @@ import {
   TrendingUp,
   XCircle,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import type { FeedbackType } from "@/lib/domain";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type FeedbackAttachmentDto = {
   id: string;
@@ -130,6 +132,13 @@ function relativeShort(iso: string): string {
   return d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
 }
 
+const FLOW_STEPS = ["en_revision", "planificado", "implementado"] as const;
+
+function flowIndex(status: FeedbackStatus): number {
+  const idx = FLOW_STEPS.indexOf(status as (typeof FLOW_STEPS)[number]);
+  return idx >= 0 ? idx : -1;
+}
+
 export function MyFeedbackList({ refreshKey }: { refreshKey?: number }) {
   const [items, setItems] = useState<MyFeedback[] | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -158,7 +167,7 @@ export function MyFeedbackList({ refreshKey }: { refreshKey?: number }) {
     return (
       <div className="space-y-2">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-16 animate-pulse rounded-xl bg-white/[0.04]" />
+          <Skeleton key={i} className="h-16 rounded-xl" />
         ))}
       </div>
     );
@@ -166,31 +175,37 @@ export function MyFeedbackList({ refreshKey }: { refreshKey?: number }) {
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/30 px-4 py-10 text-center">
-        <Archive size={22} className="mb-2 text-[var(--color-text-3)]" strokeWidth={1.4} />
-        <p className="text-[13px] text-[var(--color-text-2)]">Aún no has enviado feedback.</p>
-        <p className="mt-1 max-w-[220px] text-[11px] text-[var(--color-text-3)]">
-          Cuando envíes algo, aparecerá aquí con su estado.
-        </p>
-      </div>
+      <EmptyState
+        icon={MessageSquare}
+        title="Aún no has enviado feedback"
+        hint="Cuando envíes algo, aparecerá aquí con su estado."
+        compact
+        className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/30"
+      />
     );
   }
 
   return (
     <ul className="space-y-2">
-      {items.map((f) => {
+      {items.map((f, idx) => {
         const t = TYPE_META[f.type];
         const s = STATUS_META[f.status];
         const expanded = expandedId === f.id;
+        const statusIdx = flowIndex(f.status);
+        const canLinkSuggestion =
+          f.type !== "error" && (f.status === "en_revision" || f.status === "planificado");
         return (
           <li
             key={f.id}
-            className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/50"
+            className={cn(
+              "overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/50",
+              `ccmgc-stagger-in ccmgc-stagger-in-${(idx % 6) + 1}`,
+            )}
           >
             <button
               type="button"
               onClick={() => setExpandedId(expanded ? null : f.id)}
-              className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.03]"
+              className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.03] ccmgc-card-clickable"
               aria-expanded={expanded}
             >
               <div
@@ -239,6 +254,40 @@ export function MyFeedbackList({ refreshKey }: { refreshKey?: number }) {
                       Respuesta
                     </span>
                   ) : null}
+                </div>
+                <div className="mt-2 flex items-center gap-1.5">
+                  {FLOW_STEPS.map((step, stepIdx) => {
+                    const active = statusIdx >= stepIdx;
+                    const label =
+                      step === "en_revision"
+                        ? "En revisión"
+                        : step === "planificado"
+                          ? "Planificado"
+                          : "Hecho";
+                    return (
+                      <div key={step} className="flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "inline-flex h-1.5 w-1.5 rounded-full border",
+                            active
+                              ? "border-[var(--color-accent)] bg-[var(--color-accent)]"
+                              : "border-[var(--color-border)] bg-transparent",
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "text-[9.5px]",
+                            active ? "text-[var(--color-text-2)]" : "text-[var(--color-text-3)]",
+                          )}
+                        >
+                          {label}
+                        </span>
+                        {stepIdx < FLOW_STEPS.length - 1 ? (
+                          <span className="h-px w-2 bg-[var(--color-border)]" aria-hidden />
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </button>
@@ -289,6 +338,17 @@ export function MyFeedbackList({ refreshKey }: { refreshKey?: number }) {
                     <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--color-text-1)]">
                       {f.adminNotes}
                     </p>
+                  </div>
+                ) : null}
+                {canLinkSuggestion ? (
+                  <div className="mt-3">
+                    <Link
+                      href="/sugerencias"
+                      className="inline-flex items-center gap-1 rounded-full border border-violet-400/35 bg-violet-500/10 px-2 py-1 text-[10.5px] font-medium text-violet-200 hover:bg-violet-500/20"
+                    >
+                      <TrendingUp size={11} strokeWidth={1.9} />
+                      Ver sugerencia en el tablero
+                    </Link>
                   </div>
                 ) : null}
               </div>

@@ -26,11 +26,28 @@ export type LoginUserListboxOption = {
   avatarUrl?: string | null;
 };
 
+export type LoginUserListboxLabels = {
+  accounts: (n: number) => string;
+  select: string;
+  searchPlaceholder: string;
+  clearSearch: string;
+  noMatches: string;
+};
+
+const DEFAULT_LISTBOX_LABELS: LoginUserListboxLabels = {
+  accounts: (n) => (n === 1 ? "1 cuenta" : `${n} cuentas`),
+  select: "Selecciona",
+  searchPlaceholder: "Buscar usuario…",
+  clearSearch: "Limpiar búsqueda",
+  noMatches: "No hay coincidencias",
+};
+
 type LoginUserListboxProps = {
   id: string;
   value: string;
   onChange: (value: string) => void;
   options: LoginUserListboxOption[];
+  labels?: LoginUserListboxLabels;
   className?: string;
   "aria-describedby"?: string;
 };
@@ -76,7 +93,7 @@ function OptionAvatar({ avatarUrl, label, size = 28 }: { avatarUrl?: string | nu
 }
 
 const triggerBase =
-  "login-focusable login-listbox-trigger-premium flex w-full min-h-[52px] items-center justify-between gap-2 rounded-xl border border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[var(--color-surface-2)] px-3 py-2.5 text-left text-[13px] leading-5 text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,background-color,box-shadow] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--color-accent)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]";
+  "login-focusable login-listbox-trigger-premium flex w-full min-h-[44px] items-center justify-between gap-2 rounded-lg border border-[color-mix(in_oklab,var(--color-border)_88%,transparent)] bg-[var(--color-surface-2)] px-3 py-2 text-left text-[13px] leading-5 text-[var(--color-text-1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-[border-color,background-color,box-shadow] duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--color-accent)_45%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]";
 
 const listSurface =
   "login-user-listbox-panel login-listbox-panel-premium absolute left-0 right-0 top-full z-50 mt-1.5 flex max-h-[min(340px,55vh)] flex-col overflow-hidden rounded-xl border border-[color-mix(in_oklab,var(--color-border)_85%,transparent)] bg-[color-mix(in_oklab,var(--color-surface-2)_96%,var(--color-surface))] p-1.5 shadow-[0_18px_48px_-14px_rgba(0,0,0,0.55)]";
@@ -101,7 +118,11 @@ function matchesQuery(opt: LoginUserListboxOption, q: string): boolean {
 }
 
 export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxProps>(
-  function LoginUserListbox({ id, value, onChange, options, className, "aria-describedby": ariaDescribedBy }, ref) {
+  function LoginUserListbox(
+    { id, value, onChange, options, labels: labelsProp, className, "aria-describedby": ariaDescribedBy },
+    ref,
+  ) {
+    const labels = labelsProp ?? DEFAULT_LISTBOX_LABELS;
     const listId = useId();
     const searchId = useId();
     const [open, setOpen] = useState(false);
@@ -229,12 +250,12 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
             <div className="login-listbox-header">
               <span className="login-listbox-header-count">
                 <span className="login-listbox-header-count-dot" aria-hidden />
-                {options.length} {options.length === 1 ? "cuenta" : "cuentas"}
+                {labels.accounts(options.length)}
               </span>
-              <span className="opacity-70">Selecciona</span>
+              <span className="opacity-70">{labels.select}</span>
             </div>
 
-            {/* Buscador solo si hay un n�mero razonable de usuarios. */}
+            {/* Buscador solo si hay un número razonable de usuarios. */}
             {showSearch ? (
               <div className="login-listbox-search">
                 <Search size={14} aria-hidden className="login-listbox-search-icon" strokeWidth={1.8} />
@@ -245,7 +266,7 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
                   inputMode="search"
                   autoComplete="off"
                   spellCheck={false}
-                  placeholder="Buscar usuario..."
+                  placeholder={labels.searchPlaceholder}
                   className="login-listbox-search-input"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -284,7 +305,7 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
                       setQuery("");
                       searchInputRef.current?.focus();
                     }}
-                    aria-label="Limpiar busqueda"
+                    aria-label={labels.clearSearch}
                   >
                     <X size={13} aria-hidden strokeWidth={2} />
                   </button>
@@ -293,7 +314,7 @@ export const LoginUserListbox = forwardRef<HTMLButtonElement, LoginUserListboxPr
             ) : null}
 
             {filteredOptions.length === 0 ? (
-              <div className="login-listbox-empty">No hay coincidencias</div>
+              <div className="login-listbox-empty">{labels.noMatches}</div>
             ) : (
               <ul
                 id={listId}

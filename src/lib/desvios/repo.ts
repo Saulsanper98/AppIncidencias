@@ -17,6 +17,13 @@ import {
   serializeLineas,
   serializeParadas,
 } from "@/lib/desvios/serializers";
+import {
+  DESVIO_REMINDER_MS,
+  needsDesvioEndReminder,
+  needsDesvioStartReminder,
+  type DesvioReminderItem,
+  type DesvioRemindersSnapshot,
+} from "@/lib/desvios/reminder-logic";
 import type {
   DesvioDetalle,
   DesvioEstado,
@@ -208,6 +215,84 @@ export async function countActiveDesvios(): Promise<{ pendientes: number; activo
     desvioRepo.count({ where: { estado: "ACTIVO" } }),
   ]);
   return { pendientes, activos };
+}
+
+/**
+ * Desvios que entran en la ventana de aviso (10 min antes de inicio/fin) y el
+ * proximo instante en que otro desvio entrara en esa ventana. Consulta directa
+ * sin paginacion para que el popup no dependa del listado truncado.
+ */
+export async function getDesvioRemindersSnapshot(now = new Date()): Promise<DesvioRemindersSnapshot> {
+  const desvioRepo = (prisma as unknown as { desvio: PrismaDesvioModel }).desvio;
+  const nowMs = now.getTime();
+  const horizon = new Date(nowMs + DESVIO_REMINDER_MS);
+
+  const [pendingRows, activeRows, nextPending, nextActive] = await Promise.all([
+    desvioRepo.findMany({
+      where: { estado: "PENDIENTE", fecha_inicio: { lte: horizon } },
+      orderBy: { fecha_inicio: "asc" },
+    }),
+    desvioRepo.findMany({
+      where: {
+        estado: "ACTIVO",
+        sin_fecha_fin: false,
+        fecha_fin: { lte: horizon },
+      },
+      orderBy: { fecha_fin: "asc" },
+    }),
+    desvioRepo.findMany({
+      where: { estado: "PENDIENTE", fecha_inicio: { gt: horizon } },
+      orderBy: { fecha_inicio: "asc" },
+      take: 1,
+    }),
+    desvioRepo.findMany({
+      where: {
+        estado: "ACTIVO",
+        sin_fecha_fin: false,
+        fecha_fin: { gt: horizon },
+      },
+      orderBy: { fecha_fin: "asc" },
+      take: 1,
+    }),
+  ]);
+
+  const due: DesvioReminderItem[] = [];
+  for (const row of pendingRows) {
+    const desvio = toResumen(row);
+    if (needsDesvioStartReminder(desvio, nowMs)) {
+      due.push({ kind: "start", desvio });
+    }
+  }
+  for (const row of activeRows) {
+    const desvio = toResumen(row);
+    if (needsDesvioEndReminder(desvio, nowMs)) {
+      due.push({ kind: "end", desvio });
+    }
+  }
+
+  due.sort((a, b) => {
+    const aMs = a.kind === "start" ? a.desvio.fecha_inicio : a.desvio.fecha_fin;
+    const bMs = b.kind === "start" ? b.desvio.fecha_inicio : b.desvio.fecha_fin;
+    return new Date(aMs).getTime() - new Date(bMs).getTime();
+  });
+
+  const wakeCandidates: number[] = [];
+  if (nextPending[0]?.fecha_inicio) {
+    wakeCandidates.push(nextPending[0].fecha_inicio.getTime() - DESVIO_REMINDER_MS);
+  }
+  if (nextActive[0]?.fecha_fin) {
+    wakeCandidates.push(nextActive[0].fecha_fin.getTime() - DESVIO_REMINDER_MS);
+  }
+
+  const futureWakeTimes = wakeCandidates.filter((ms) => ms > nowMs);
+  const nextWakeMs = futureWakeTimes.length > 0 ? Math.min(...futureWakeTimes) : null;
+
+  return {
+    due,
+    nextWakeAt: nextWakeMs != null && Number.isFinite(nextWakeMs)
+      ? new Date(nextWakeMs).toISOString()
+      : null,
+  };
 }
 
 export async function getDesvioById(id: string): Promise<DesvioDetalle | null> {

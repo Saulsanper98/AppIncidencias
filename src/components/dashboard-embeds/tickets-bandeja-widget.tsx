@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Ticket, TicketStatus } from "@/lib/domain";
 
 type Row = Ticket & { operator: string; municipio?: string };
 
-const statusVariant: Record<TicketStatus, "error" | "warning" | "info" | "success"> = {
+const statusVariant: Record<TicketStatus, "error" | "warning" | "info" | "success" | "neutral"> = {
+  borrador: "neutral",
   abierto: "error",
   en_proceso: "warning",
   esperando_repuesto: "info",
@@ -48,7 +50,7 @@ export function TicketsBandejaWidget() {
   }, [load]);
 
   if (loading) {
-    return <div className="h-24 animate-pulse rounded-lg bg-[var(--color-surface-2)]" />;
+    return <Skeleton className="h-24 rounded-lg" />;
   }
 
   if (err) {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CloudOff, RefreshCw } from "lucide-react";
 
 import { flush, list, subscribe } from "@/lib/offline-ticket-queue";
+import { cn } from "@/lib/utils";
 
 /**
  * Indicador flotante que aparece SOLO cuando hay borradores pendientes
@@ -16,10 +17,11 @@ import { flush, list, subscribe } from "@/lib/offline-ticket-queue";
  */
 export function OfflineQueueIndicator() {
   const [count, setCount] = useState(0);
-  const [online, setOnline] = useState<boolean>(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [online, setOnline] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    setOnline(navigator.onLine);
     setCount(list().length);
     const unsub = subscribe(() => setCount(list().length));
     const onOnline = () => {
@@ -40,11 +42,21 @@ export function OfflineQueueIndicator() {
     if (busy) return;
     setBusy(true);
     try {
-      await flush(async (payload) => {
+      await flush(async (draft) => {
+        if (draft.hasAttachments) {
+          const { loadAttachments } = await import("@/lib/offline-attachments");
+          const files = await loadAttachments(draft.id);
+          const fd = new FormData();
+          fd.append("ticket", JSON.stringify(draft.payload));
+          for (const file of files) fd.append("files", file);
+          const res = await fetch("/api/tickets", { method: "POST", body: fd });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return;
+        }
         const res = await fetch("/api/tickets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(draft.payload),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       });
@@ -59,11 +71,20 @@ export function OfflineQueueIndicator() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-auto fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-[var(--color-warning)]/40 bg-[var(--color-warning-light)] px-3 py-1.5 text-xs font-medium text-[var(--color-warning)] shadow-lg backdrop-blur"
+      className={cn(
+        "pointer-events-auto fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-[var(--color-warning)]/40 bg-[var(--color-warning-light)] px-3 py-1.5 text-xs font-medium text-[var(--color-warning)] shadow-lg backdrop-blur",
+        (!online || count > 0) && "offline-indicator-pulse",
+      )}
     >
       <CloudOff size={13} aria-hidden />
-      {count === 0 ? (
-        <span>Sin conexión</span>
+      {!online ? (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="offline-indicator-dot relative inline-flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-warning)]/70 opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--color-warning)]" />
+          </span>
+          Sin conexión
+        </span>
       ) : (
         <span>
           {count} ticket{count === 1 ? "" : "s"} pendiente{count === 1 ? "" : "s"} de enviar

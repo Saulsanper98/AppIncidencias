@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import type { ReadableStream as NodeReadable } from "node:stream/web";
 import { Readable } from "stream";
 
+import { isMediaAuthError, requireMediaSession } from "@/lib/api-auth";
+
 /**
  * Sirve avatars/banners almacenados en `public/uploads/{kind}/{name}` mediante
  * un route handler dinamico.
@@ -38,9 +40,12 @@ const EXT_MIME: Record<string, string> = {
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: { params: Promise<{ kind: string; name: string }> },
 ) {
+  const session = requireMediaSession(request);
+  if (isMediaAuthError(session)) return session;
+
   const { kind, name } = await ctx.params;
 
   if (!ALLOWED_KINDS.has(kind)) {

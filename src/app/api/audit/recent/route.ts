@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 
+import { isApiAuthError, requireActor } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const actor = await requireActor(request);
+    if (isApiAuthError(actor)) return actor;
+
     const events = await prisma.auditEvent.findMany({
       include: {
         user: {

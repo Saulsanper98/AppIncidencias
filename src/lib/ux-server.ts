@@ -13,6 +13,8 @@
  *   - NUNCA lanza: telemetría no puede romper el flujo principal.
  *   - El `path` lo derivamos de la URL del request si se proporciona;
  *     si no, se queda null.
+ *   - Resoluciones de ticket: `trackTicketResolvedTelemetry` en
+ *     `lib/ticket-resolution-telemetry.ts` (evento `ticket_resolved`).
  */
 
 import { randomUUID } from "node:crypto";

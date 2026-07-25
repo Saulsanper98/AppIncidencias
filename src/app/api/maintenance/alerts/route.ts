@@ -13,7 +13,8 @@
 
 import { NextResponse } from "next/server";
 
-import { ANOMALOUS_DEFAULTS } from "@/app/api/anomalous-config/route";
+import { ANOMALOUS_DEFAULTS } from "@/lib/anomalous-config";
+import { isApiAuthError, requireActor } from "@/lib/api-auth";
 import { APP_SETTING_KEYS, getAppSettingNumber } from "@/lib/app-settings";
 import { ensureCatalogSeeded } from "@/lib/catalog";
 import { prisma } from "@/lib/prisma";
@@ -21,8 +22,11 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const actor = await requireActor(request);
+    if (isApiAuthError(actor)) return actor;
+
     await ensureCatalogSeeded();
 
     // Ventana configurable (default 12 d, rango 7-180). Coincide con

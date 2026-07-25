@@ -175,6 +175,8 @@ export function buildMapTicketFeatures(tickets: MapTicketInput[]): MapTicketFeat
 /** Colores hex para Leaflet (no resuelve `var(--css)` en canvas). Alineados con el tema oscuro CCMGC. */
 export function statusMapMarkerColorHex(status: TicketStatus): string {
   switch (status) {
+    case "borrador":
+      return "#fbbf24";
     case "abierto":
       return "#f87171";
     case "en_proceso":

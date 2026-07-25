@@ -1,17 +1,15 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   CheckCircle2,
   FileText,
   Loader2,
   UploadCloud,
-  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
+import { ModalShell } from "@/components/ui/modal-shell";
 import { canaryParts, formatCanaryHHMM } from "@/lib/datetime/canary";
 import { cn } from "@/lib/utils";
 
@@ -64,16 +62,6 @@ export function DesvioImportPdfDialog({ open, onClose, onImported }: Props) {
       return () => clearTimeout(t);
     }
   }, [open]);
-
-  // Cerrar con Escape (no durante upload).
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && phase.kind !== "uploading") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, phase.kind, onClose]);
 
   const validateFile = useCallback((file: File): string | null => {
     if (file.size <= 0) return "El archivo esta vacio.";
@@ -150,69 +138,90 @@ export function DesvioImportPdfDialog({ open, onClose, onImported }: Props) {
     [phase.kind, handleSelect],
   );
 
-  if (typeof document === "undefined") return null;
+  const handleClose = useCallback(() => {
+    if (phase.kind !== "uploading") onClose();
+  }, [phase.kind, onClose]);
 
-  return createPortal(
-    <AnimatePresence>
-      {open ? (
-        <motion.div
-          key="overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="import-pdf-title"
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-          onClick={(event) => {
-            if (
-              event.target === event.currentTarget &&
-              phase.kind !== "uploading"
-            ) {
-              onClose();
-            }
-          }}
-        >
-          <motion.div
-            initial={{ y: 10, opacity: 0, scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 6, opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[0_24px_64px_-20px_rgba(0,0,0,0.6)]"
+  return (
+    <ModalShell
+      open={open}
+      onClose={handleClose}
+      shake={phase.kind === "error"}
+      maxWidth="36rem"
+      title={
+        <span className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)]/15 text-[var(--color-accent)]">
+            <UploadCloud size={18} aria-hidden />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">Importar Circular Informativa</span>
+            <span className="mt-0.5 block text-[12px] font-normal text-[var(--color-text-3)]">
+              Sube el PDF o una captura (PNG/JPG). La app extraera el contenido y, si el PDF es una
+              imagen, aplicara OCR. El desvio quedara como{" "}
+              <strong className="font-semibold">PENDIENTE</strong> hasta que alguien lo confirme.
+            </span>
+          </span>
+        </span>
+      }
+      footer={
+        phase.kind === "done" ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-[var(--color-accent)]/85"
           >
-            <header className="flex items-start gap-3 border-b border-[var(--color-border)] bg-[var(--color-accent-light)] px-5 py-4">
-              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)]/15 text-[var(--color-accent)]">
-                <UploadCloud size={18} aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <h2
-                  id="import-pdf-title"
-                  className="text-sm font-semibold text-[var(--color-text-1)]"
-                >
-                  Importar Circular Informativa
-                </h2>
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-3)]">
-                  Sube el PDF o una captura (PNG/JPG). La app extraera el
-                  contenido y, si el PDF es una imagen, aplicara OCR. El
-                  desvio quedara como{" "}
-                  <strong className="font-semibold">PENDIENTE</strong> hasta
-                  que alguien lo confirme.
-                </p>
-              </div>
+            Cerrar
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={phase.kind === "uploading"}
+              className="rounded-md border border-[var(--color-border)] bg-transparent px-3 py-1.5 text-[12.5px] font-medium text-[var(--color-text-2)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)] disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            {phase.kind === "error" ? (
               <button
                 type="button"
-                onClick={() => phase.kind !== "uploading" && onClose()}
-                aria-label="Cerrar"
-                disabled={phase.kind === "uploading"}
-                className="-mr-1 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)] disabled:opacity-40"
+                onClick={() => {
+                  if (phase.file) {
+                    setPhase({ kind: "selected", file: phase.file });
+                  } else {
+                    setPhase({ kind: "idle" });
+                    inputRef.current?.click();
+                  }
+                }}
+                className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-[var(--color-accent)]/85"
               >
-                <X size={16} aria-hidden />
+                {phase.file ? "Reintentar" : "Elegir otro"}
               </button>
-            </header>
-
-            <div className="px-5 py-5">
-              {/* Estados idle / selected / uploading */}
+            ) : (
+              <button
+                type="button"
+                onClick={handleUpload}
+                disabled={phase.kind !== "selected"}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-[var(--color-accent)]/85 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {phase.kind === "uploading" ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" aria-hidden />
+                    Procesando...
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud size={14} aria-hidden />
+                    Importar
+                  </>
+                )}
+              </button>
+            )}
+          </>
+        )
+      }
+    >
+      {/* Estados idle / selected / uploading */}
               {(phase.kind === "idle" ||
                 phase.kind === "selected" ||
                 phase.kind === "uploading") && (
@@ -335,70 +344,7 @@ export function DesvioImportPdfDialog({ open, onClose, onImported }: Props) {
                   </div>
                 </div>
               )}
-            </div>
-
-            <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-5 py-3">
-              {phase.kind === "done" ? (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-[var(--color-accent)]/85"
-                >
-                  Cerrar
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => phase.kind !== "uploading" && onClose()}
-                    disabled={phase.kind === "uploading"}
-                    className="rounded-md border border-[var(--color-border)] bg-transparent px-3 py-1.5 text-[12.5px] font-medium text-[var(--color-text-2)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)] disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  {phase.kind === "error" ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (phase.file) {
-                          setPhase({ kind: "selected", file: phase.file });
-                        } else {
-                          setPhase({ kind: "idle" });
-                          inputRef.current?.click();
-                        }
-                      }}
-                      className="rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-[var(--color-accent)]/85"
-                    >
-                      {phase.file ? "Reintentar" : "Elegir otro"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleUpload}
-                      disabled={phase.kind !== "selected"}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent)] px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-[var(--color-accent)]/85 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {phase.kind === "uploading" ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" aria-hidden />
-                          Procesando...
-                        </>
-                      ) : (
-                        <>
-                          <UploadCloud size={14} aria-hidden />
-                          Importar
-                        </>
-                      )}
-                    </button>
-                  )}
-                </>
-              )}
-            </footer>
-          </motion.div>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>,
-    document.body,
+    </ModalShell>
   );
 }
 

@@ -6,7 +6,7 @@
  *   g d -> /dashboard
  *   g b -> /bandeja        (listado de tickets — vista mas usada)
  *   g t -> /tickets        (gestion / mantenimiento)
- *   g i -> /inventory
+ *   g p -> /preventivo
  *   g m -> /mapa
  *   g a -> /account
  *
@@ -21,7 +21,7 @@ const TARGETS: Record<string, string> = {
   d: "/dashboard",
   b: "/bandeja",
   t: "/tickets",
-  i: "/inventory",
+  p: "/preventivo",
   m: "/mapa",
   a: "/account",
 };

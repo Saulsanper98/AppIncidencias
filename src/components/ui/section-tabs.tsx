@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { resolveSectionTabsPreset, type SectionTabsPresetId } from "@/components/section-tabs-presets";
@@ -13,44 +13,25 @@ export type SectionTab = {
   label: string;
   href: string;
   icon?: LucideIcon;
-  /**
-   * Si está definido y devuelve `false`, la pestaña se oculta para ese rol.
-   */
   visibleTo?: (role: UserRole) => boolean;
-  /**
-   * Función opcional para marcar la pestaña como activa. Por defecto se compara
-   * con `pathname === href` o `pathname.startsWith(href + "/")`.
-   */
   match?: (pathname: string) => boolean;
 };
 
 type Props = {
-  /**
-   * Identificador del preset (definido en `section-tabs-presets.tsx`). Usamos
-   * un id en lugar del array directamente para que los Server Components
-   * puedan renderizar `<SectionTabs preset="dashboard" />` sin pasar funciones
-   * como props (Next.js prohíbe serializar funciones de SC → CC).
-   */
   preset: SectionTabsPresetId;
   className?: string;
   size?: "md" | "sm";
+  /** `underline` = sin caja (recomendado). `boxed` = segmented control con borde. */
+  variant?: "underline" | "boxed";
 };
 
-/**
- * Barra de pestañas para secciones del menú que se han unificado bajo un mismo
- * paraguas (p. ej. Dashboard / Reportes / Cuadros). Cada tab es un `Link` real
- * — no manipulamos estado, navegamos a la URL hija. Así las URLs siguen siendo
- * direccionables y compatibles con bookmarks / refresh.
- *
- * El componente carga la sesión por sí mismo para filtrar tabs por rol.
- * Mientras carga muestra solo las tabs SIN `visibleTo` para evitar parpadeo
- * de "aparece y desaparece" en roles restringidos.
- */
-export function SectionTabs({ preset, className, size = "md" }: Props) {
+export function SectionTabs({ preset, className, size = "md", variant = "underline" }: Props) {
   const tabs = resolveSectionTabsPreset(preset);
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [trackStyle, setTrackStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -88,15 +69,56 @@ export function SectionTabs({ preset, className, size = "md" }: Props) {
     });
   }, [tabs, role, sessionLoaded]);
 
-  // No tiene sentido pintar una sola pestaña: sería ruido visual.
+  const activeIndex = useMemo(() => {
+    return visibleTabs.findIndex((tab) =>
+      tab.match ? tab.match(pathname) : pathname === tab.href || pathname.startsWith(`${tab.href}/`),
+    );
+  }, [visibleTabs, pathname]);
+
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav || activeIndex < 0) {
+      setTrackStyle({ left: 0, width: 0 });
+      return;
+    }
+    const measure = () => {
+      const links = nav.querySelectorAll<HTMLElement>("a");
+      const active = links[activeIndex];
+      if (!active) return;
+      const navRect = nav.getBoundingClientRect();
+      const activeRect = active.getBoundingClientRect();
+      setTrackStyle({
+        left: activeRect.left - navRect.left + nav.scrollLeft,
+        width: activeRect.width,
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    nav.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      window.removeEventListener("resize", measure);
+      nav.removeEventListener("scroll", measure);
+    };
+  }, [activeIndex, visibleTabs, pathname, size]);
+
   if (visibleTabs.length < 2) return null;
 
   return (
     <nav
+      ref={navRef}
       className={cn(
-        "relative -mx-1 mb-4 flex items-center gap-1 overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1",
+        "section-tabs-scroll-fade relative flex items-center overflow-x-auto",
+        variant === "boxed"
+          ? "section-tabs-track -mx-1 mb-4 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1"
+          : "section-tabs-underline-track mb-3 gap-0.5 border-b border-[var(--color-border)]/50",
         className,
       )}
+      style={
+        {
+          "--tab-left": `${trackStyle.left}px`,
+          "--tab-width": `${trackStyle.width}px`,
+        } as React.CSSProperties
+      }
       aria-label="Sub-secciones"
     >
       {visibleTabs.map((tab) => {
@@ -109,11 +131,22 @@ export function SectionTabs({ preset, className, size = "md" }: Props) {
             key={tab.href}
             href={tab.href}
             className={cn(
-              "group inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-all duration-150",
-              size === "sm" && "px-2.5 py-1 text-[13px]",
-              isActive
-                ? "bg-[var(--color-accent-light)] font-semibold text-[var(--color-accent)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--color-accent)_30%,transparent)]"
-                : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+              "relative z-[1] inline-flex shrink-0 items-center gap-2 transition-all duration-150",
+              variant === "boxed"
+                ? cn(
+                    "rounded-lg px-3 py-1.5 text-sm",
+                    size === "sm" && "px-2.5 py-1 text-[13px]",
+                    isActive
+                      ? "segmented-pill--active font-semibold"
+                      : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
+                  )
+                : cn(
+                    "border-b-2 border-transparent -mb-px px-3 py-2 text-sm",
+                    size === "sm" && "px-2.5 py-1.5 text-[13px]",
+                    isActive
+                      ? "font-semibold text-[var(--color-accent)]"
+                      : "text-[var(--color-text-3)] hover:text-[var(--color-text-1)]",
+                  ),
             )}
             aria-current={isActive ? "page" : undefined}
           >
@@ -124,8 +157,10 @@ export function SectionTabs({ preset, className, size = "md" }: Props) {
                 className={cn(
                   "shrink-0",
                   isActive
-                    ? "text-[var(--color-accent)]"
-                    : "text-[var(--color-text-3)] group-hover:text-[var(--color-text-1)]",
+                    ? variant === "boxed"
+                      ? "text-white"
+                      : "text-[var(--color-accent)]"
+                    : "text-[var(--color-text-3)]",
                 )}
               />
             ) : null}

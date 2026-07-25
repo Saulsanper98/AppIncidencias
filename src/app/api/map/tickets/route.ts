@@ -6,6 +6,12 @@ import { ensureCatalogSeeded } from "@/lib/catalog";
 import type { TicketPriority, TicketStatus } from "@/lib/domain";
 import { buildMapTicketFeatures, GRAN_CANARIA_BOUNDS, GRAN_CANARIA_CENTER } from "@/lib/gran-canaria-map-geo";
 import { prisma } from "@/lib/prisma";
+import {
+  normalizeTicketPriorityFilter,
+  normalizeTicketScopeFilter,
+  normalizeTicketStatusFilter,
+  ticketStatusWhereForFilters,
+} from "@/lib/ticket-filters";
 
 function isMissingMapPlaceMunicipioColumn(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2022") {
@@ -15,25 +21,6 @@ function isMissingMapPlaceMunicipioColumn(error: unknown): boolean {
   }
   const msg = error instanceof Error ? error.message : String(error);
   return /mapPlaceMunicipio/i.test(msg) && /no such column|does not exist|Unknown column/i.test(msg);
-}
-
-function normalizeStatus(value: string | null): TicketStatus | "todos" {
-  if (!value || value === "todos") return "todos";
-  if (
-    value === "abierto" ||
-    value === "en_proceso" ||
-    value === "esperando_repuesto" ||
-    value === "resuelto"
-  ) {
-    return value;
-  }
-  return "todos";
-}
-
-function normalizePriority(value: string | null): TicketPriority | "todos" {
-  if (!value || value === "todos") return "todos";
-  if (value === "alta" || value === "media" || value === "baja") return value;
-  return "todos";
 }
 
 function parseIsoDate(value: string | null): Date | null {
@@ -50,8 +37,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ message: "Sesion requerida" }, { status: 401 });
     }
     const { searchParams } = new URL(request.url);
-    const status = normalizeStatus(searchParams.get("status"));
-    const priority = normalizePriority(searchParams.get("priority"));
+    const scope = normalizeTicketScopeFilter(searchParams.get("scope"));
+    const status = normalizeTicketStatusFilter(searchParams.get("status"), { includeBorrador: true });
+    const priority = normalizeTicketPriorityFilter(searchParams.get("priority"));
     const operator = searchParams.get("operator");
     const busId = searchParams.get("busId");
     const partCodeRaw = searchParams.get("partCode")?.trim() ?? "";
@@ -81,8 +69,20 @@ export async function GET(request: Request) {
 
     const now = new Date();
 
+    const statusWhere = ticketStatusWhereForFilters(status, scope, { includeBorrador: true });
+
+    const limitRaw = Number.parseInt(searchParams.get("limit") ?? "2000", 10);
+    const limit = Math.min(5000, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 2000));
+
+    const west = Number.parseFloat(searchParams.get("west") ?? "");
+    const south = Number.parseFloat(searchParams.get("south") ?? "");
+    const east = Number.parseFloat(searchParams.get("east") ?? "");
+    const north = Number.parseFloat(searchParams.get("north") ?? "");
+    const hasBbox =
+      [west, south, east, north].every((n) => Number.isFinite(n)) && west < east && south < north;
+
     const where = {
-      status: status === "todos" ? undefined : status,
+      status: statusWhere,
       priority: priority === "todos" ? undefined : priority,
       busId: busId && busId !== "todas" ? busId : undefined,
       bus: operator && operator !== "todas" ? { operator } : undefined,
@@ -94,6 +94,12 @@ export async function GET(request: Request) {
       ...(urgent ? { OR: [{ priority: "alta" as const }, { slaDeadline: { lt: now } }] } : {}),
       ...(createdAfter ? { createdAt: { gte: createdAfter } } : {}),
       ...(createdBefore ? { createdAt: { lte: createdBefore } } : {}),
+      ...(hasBbox
+        ? {
+            latitude: { gte: south, lte: north },
+            longitude: { gte: west, lte: east },
+          }
+        : {}),
     };
 
     const selectBase = {
@@ -128,6 +134,7 @@ export async function GET(request: Request) {
         where,
         select: { ...selectBase, mapPlaceMunicipio: true },
         orderBy: { createdAt: "desc" },
+        take: limit,
       });
     } catch (error) {
       if (!isMissingMapPlaceMunicipioColumn(error)) throw error;
@@ -135,6 +142,7 @@ export async function GET(request: Request) {
         where,
         select: { ...selectBase },
         orderBy: { createdAt: "desc" },
+        take: limit,
       });
     }
 
@@ -158,6 +166,8 @@ export async function GET(request: Request) {
       center: GRAN_CANARIA_CENTER,
       bounds: GRAN_CANARIA_BOUNDS,
       features,
+      limit,
+      truncated: features.length >= limit,
       fetchedAt: now.toISOString(),
     });
   } catch (error) {

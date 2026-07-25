@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveRequestActor } from "@/lib/auth-context";
+import { median, ticketPrioritySortOrder } from "@/lib/analytics-math";
 import { prisma } from "@/lib/prisma";
 import { canManageUsers } from "@/lib/rbac";
 import { excludedUsersSqlFilter } from "@/lib/ux-exclusions";
@@ -168,27 +169,6 @@ type SummaryRow = {
     tickets_created: { value: number; prev: number; delta_pct: number | null };
   };
 };
-
-function median(arr: number[]): number {
-  if (arr.length === 0) return 0;
-  const sorted = [...arr].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 0) {
-    return Math.round((sorted[mid - 1] + sorted[mid]) / 2);
-  }
-  return sorted[mid];
-}
-
-/** Orden canónico de prioridad para mostrarlas siempre igual. */
-function priorityOrder(p: string): number {
-  switch (p) {
-    case "critica": return 0;
-    case "alta": return 1;
-    case "media": return 2;
-    case "baja": return 3;
-    default: return 4;
-  }
-}
 
 export async function GET(request: Request) {
   try {
@@ -693,7 +673,7 @@ export async function GET(request: Request) {
         median_minutes: median(arr),
         samples: arr.length,
       }))
-      .sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
+      .sort((a, b) => ticketPrioritySortOrder(a.priority) - ticketPrioritySortOrder(b.priority));
 
     // Tickets por prioridad (creados / resueltos)
     const byPriorityRows = await prisma.$queryRawUnsafe<

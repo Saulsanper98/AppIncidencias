@@ -1,28 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
 
+import { ModalShell } from "@/components/ui/modal-shell";
 import { Select, Textarea } from "@/components/ui/input";
 import type { MetricFormat } from "@/lib/dashboard/chart-theme";
 import type { ChartType } from "@/lib/dashboard/chart-types";
+import {
+  DATA_SOURCE_GROUPS,
+  getCompatibleCharts,
+  getDataSourceMeta,
+  isEmbedDataSource,
+  pickDefaultChart,
+} from "@/lib/dashboard/data-sources";
+import { CHART_TYPE_ICONS, CHART_TYPE_LABELS } from "@/lib/dashboard/widget-data-helpers";
 import { cn } from "@/lib/utils";
+
+type WidgetPayload = {
+  title: string;
+  chartType: string;
+  dataSource: string;
+  size: string;
+  config: string;
+};
 
 type AddWidgetModalProps = {
   open: boolean;
   onClose: () => void;
   dashboardId: string;
   userId: string | null;
-  onAdd: (widget: {
-    title: string;
-    chartType: string;
-    dataSource: string;
-    size: string;
-    config: string;
-  }) => void;
+  onAdd: (widget: WidgetPayload) => void;
+  editWidget?: WidgetPayload & { id: string };
+  onSaveEdit?: (widgetId: string, widget: WidgetPayload) => void;
 };
 
-type VisualPreset = "operaciones" | "sla" | "inventario";
+type VisualPreset = "operaciones" | "sla";
 type PersistedVisualSettings = {
   accentColor: string;
   showLegend: boolean;
@@ -33,24 +45,28 @@ type PersistedVisualSettings = {
 
 function getDefaultSeriesLabels(dataSource: string) {
   if (dataSource === "sla_compliance") {
-    return {
-      serieA: "Cumplido",
-      serieB: "Incumplido",
-      serieC: "Buffer",
-    };
+    return { serieA: "En plazo", serieB: "Fuera de plazo", serieC: "—" };
   }
-  return {
-    serieA: "Principal",
-    serieB: "Secundaria",
-    serieC: "Auxiliar",
-  };
+  if (dataSource === "tickets_trend") {
+    return { serieA: "Creados", serieB: "Resueltos", serieC: "—" };
+  }
+  return { serieA: "Principal", serieB: "Secundaria", serieC: "Auxiliar" };
 }
 
 function getVisualSettingsStorageKey(dashboardId: string, userId: string | null) {
   return `dashboard-widget-visual:${userId ?? "anon"}:${dashboardId}`;
 }
 
-export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: AddWidgetModalProps) {
+export function AddWidgetModal({
+  open,
+  onClose,
+  onAdd,
+  onSaveEdit,
+  editWidget,
+  dashboardId,
+  userId,
+}: AddWidgetModalProps) {
+  const isEditMode = Boolean(editWidget);
   const [title, setTitle] = useState("");
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [dataSource, setDataSource] = useState("tickets_by_status");
@@ -72,7 +88,42 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
     if (!open) return;
     setError(null);
     setAdvancedOpen(false);
-  }, [open]);
+    if (editWidget) {
+      setTitle(editWidget.title);
+      setChartType(editWidget.chartType as ChartType);
+      setDataSource(editWidget.dataSource);
+      setSize(editWidget.size as "small" | "medium" | "large");
+      try {
+        const cfg = JSON.parse(editWidget.config || "{}") as {
+          manualData?: string;
+          accentColor?: string;
+          showLegend?: boolean;
+          showGrid?: boolean;
+          smoothLines?: boolean;
+          metricFormat?: MetricFormat;
+          seriesLabels?: { serieA?: string; serieB?: string; serieC?: string };
+          lockSeriesLabels?: boolean;
+        };
+        if (cfg.manualData) setManualData(JSON.stringify(cfg.manualData));
+        if (cfg.accentColor) setAccentColor(cfg.accentColor);
+        setShowLegend(cfg.showLegend ?? true);
+        setShowGrid(cfg.showGrid ?? true);
+        setSmoothLines(cfg.smoothLines ?? true);
+        setMetricFormat(cfg.metricFormat ?? "number");
+        setSeriesLabelA(cfg.seriesLabels?.serieA ?? "Principal");
+        setSeriesLabelB(cfg.seriesLabels?.serieB ?? "Secundaria");
+        setSeriesLabelC(cfg.seriesLabels?.serieC ?? "Auxiliar");
+        setLockSeriesLabels(Boolean(cfg.lockSeriesLabels));
+      } catch {
+        // ignore
+      }
+    } else {
+      setTitle("");
+      setChartType("bar");
+      setDataSource("backlog_by_status");
+      setSize("medium");
+    }
+  }, [open, editWidget]);
 
   useEffect(() => {
     if (!open) return;
@@ -101,12 +152,20 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
   }, [chartType, dataSource, lockSeriesLabels]);
 
   useEffect(() => {
-    if (dataSource === "operation_links" || dataSource.startsWith("embed_")) setChartType("bar");
-  }, [dataSource]);
+    if (!open || isEditMode) return;
+    const meta = getDataSourceMeta(dataSource);
+    if (!meta) return;
+    const nextChart = pickDefaultChart(dataSource);
+    setChartType(nextChart);
+    if (!title.trim()) setTitle(meta.defaultTitle);
+  }, [dataSource, open, isEditMode, title]);
 
-  if (!open) {
-    return null;
-  }
+  useEffect(() => {
+    const allowed = getCompatibleCharts(dataSource);
+    if (allowed.length > 0 && !allowed.includes(chartType)) {
+      setChartType(allowed[0]!);
+    }
+  }, [dataSource, chartType]);
 
   const applyVisualPreset = (preset: VisualPreset) => {
     let next: PersistedVisualSettings;
@@ -118,21 +177,13 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
         smoothLines: true,
         metricFormat: "number",
       };
-    } else if (preset === "sla") {
+    } else {
       next = {
         accentColor: "#059669",
         showLegend: true,
         showGrid: true,
         smoothLines: true,
         metricFormat: "percent",
-      };
-    } else {
-      next = {
-        accentColor: "#D97706",
-        showLegend: true,
-        showGrid: true,
-        smoothLines: false,
-        metricFormat: "integer",
       };
     }
     setAccentColor(next.accentColor);
@@ -197,11 +248,9 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
         const minH =
           dataSource === "embed_tickets"
             ? 520
-            : dataSource === "embed_inventory"
-              ? 400
-              : dataSource === "embed_preventive"
-                ? 360
-                : 320;
+            : dataSource === "embed_preventive"
+              ? 360
+              : 320;
         const col = dataSource === "embed_tickets" ? 4 : 2;
         base.layout = { colSpan: col, minHeightPx: minH };
       }
@@ -216,31 +265,86 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
       // ignore persistence errors
     }
 
-    onAdd({
+    const payload: WidgetPayload = {
       title: safeTitle,
-      chartType,
+      chartType: isEmbedDataSource(dataSource) || dataSource === "operation_links" ? "bar" : chartType,
       dataSource,
       size,
       config,
-    });
+    };
+
+    if (isEditMode && editWidget && onSaveEdit) {
+      onSaveEdit(editWidget.id, payload);
+    } else {
+      onAdd(payload);
+    }
+    onClose();
   };
 
+  const compatibleCharts = getCompatibleCharts(dataSource);
+  const selectedMeta = getDataSourceMeta(dataSource);
+  const showChartPicker = compatibleCharts.length > 0;
+
+  if (!open) {
+    return null;
+  }
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[var(--color-surface-2)] rounded-2xl border border-[var(--color-border)] p-4 w-full max-w-md max-h-[85vh] overflow-hidden shadow-2xl sm:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-subheading">Añadir widget</h2>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      size="md"
+      className="max-h-[85vh] overflow-hidden"
+      shake={Boolean(error)}
+      title={isEditMode ? "Editar widget" : "Añadir widget"}
+      footer={
+        <>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-md flex items-center justify-center text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-surface-3)] transition-all"
+            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)] transition-all"
           >
-            <X size={14} />
+            Cancelar
           </button>
-        </div>
-
+          <button
+            onClick={handleAdd}
+            className="rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-all"
+          >
+            {isEditMode ? "Guardar cambios" : "Añadir widget"}
+          </button>
+        </>
+      }
+    >
         <div
           className="space-y-3 overflow-y-auto pr-1 max-h-[calc(85vh-140px)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0"
         >
+          <div>
+            <label className="text-label block mb-1.5">Fuente de datos</label>
+            <Select
+              value={dataSource}
+              onChange={(e) => {
+                setDataSource(e.target.value);
+                const meta = getDataSourceMeta(e.target.value);
+                if (meta && !isEditMode) setTitle(meta.defaultTitle);
+              }}
+            >
+              {DATA_SOURCE_GROUPS.map((group) => (
+                <optgroup key={group.title} label={group.title}>
+                  {group.sources.map((sourceId) => {
+                    const meta = getDataSourceMeta(sourceId);
+                    return (
+                      <option key={sourceId} value={sourceId}>
+                        {meta?.label ?? sourceId}
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              ))}
+            </Select>
+            {selectedMeta ? (
+              <p className="mt-1.5 text-[11px] text-[var(--color-text-3)]">{selectedMeta.description}</p>
+            ) : null}
+          </div>
+
           <div>
             <label className="text-label block mb-1.5">Título del widget</label>
             <input
@@ -251,56 +355,15 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
             />
           </div>
 
-          {dataSource !== "operation_links" && !dataSource.startsWith("embed_") ? (
+          {showChartPicker ? (
             <div>
               <label className="text-label block mb-1.5">Tipo de gráfica</label>
-              <select
-                id="chart-type"
-                value={chartType}
-                onChange={(e) => setChartType(e.target.value as ChartType)}
-                className="sr-only"
-              >
-                <option value="area">Área</option>
-                <option value="bar">Barras</option>
-                <option value="stacked_bar">Barras apiladas</option>
-                <option value="bar_horizontal">Barras horizontales</option>
-                <option value="pie">Circular (donut)</option>
-                <option value="rose">Rosa (polar)</option>
-                <option value="line">Líneas</option>
-                <option value="stacked_area">Área apilada</option>
-                <option value="composed">Compuesta (barras + línea)</option>
-                <option value="radar">Radar</option>
-                <option value="radialbar">Barras radiales</option>
-                <option value="scatter">Dispersión</option>
-                <option value="bubble">Burbujas</option>
-                <option value="treemap">Treemap</option>
-                <option value="sankey">Sankey (flujo)</option>
-                <option value="funnel">Embudo</option>
-              </select>
-
               <div className="grid grid-cols-5 gap-1.5 mt-2 max-h-56 overflow-y-auto pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0">
-                {[
-                  { value: "bar", label: "Barras", icon: "▊▊▊" },
-                  { value: "stacked_bar", label: "Stack B", icon: "▇▅▃" },
-                  { value: "bar_horizontal", label: "H.Bar", icon: "≡≡" },
-                  { value: "line", label: "Línea", icon: "∿∿" },
-                  { value: "stacked_area", label: "Stack A", icon: "◨◧" },
-                  { value: "area", label: "Área", icon: "◭◭" },
-                  { value: "pie", label: "Donut", icon: "◎" },
-                  { value: "rose", label: "Rose", icon: "✿" },
-                  { value: "composed", label: "Mix", icon: "▊∿" },
-                  { value: "radar", label: "Radar", icon: "⬡" },
-                  { value: "radialbar", label: "Radial", icon: "◉" },
-                  { value: "scatter", label: "Puntos", icon: "∴∵" },
-                  { value: "bubble", label: "Bubble", icon: "◌◍" },
-                  { value: "treemap", label: "Tree", icon: "▦" },
-                  { value: "sankey", label: "Flujo", icon: "⇉" },
-                  { value: "funnel", label: "Embudo", icon: "▽" },
-                ].map(({ value, label, icon }) => (
+                {compatibleCharts.map((value) => (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setChartType(value as ChartType)}
+                    onClick={() => setChartType(value)}
                     className={cn(
                       "flex flex-col items-center justify-center rounded-lg border p-2 text-center transition-all",
                       chartType === value
@@ -308,36 +371,19 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
                         : "border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-text-3)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-2)]",
                     )}
                   >
-                    <span className="text-base leading-none mb-1">{icon}</span>
-                    <span className="text-[10px] leading-tight">{label}</span>
+                    <span className="text-base leading-none mb-1">{CHART_TYPE_ICONS[value] ?? "▣"}</span>
+                    <span className="text-[10px] leading-tight">{CHART_TYPE_LABELS[value] ?? value}</span>
                   </button>
                 ))}
               </div>
             </div>
           ) : null}
 
-          <div>
-            <label className="text-label block mb-1.5">Fuente de datos</label>
-            <Select value={dataSource} onChange={(e) => setDataSource(e.target.value)}>
-              <option value="tickets_by_status">Tickets por estado</option>
-              <option value="tickets_by_operator">Tickets por operadora</option>
-              <option value="tickets_by_priority">Tickets por prioridad</option>
-              <option value="sla_compliance">Cumplimiento SLA (7 días)</option>
-              <option value="manual">Datos manuales</option>
-              <option value="operation_links">Menú: varios enlaces de operación</option>
-              <optgroup label="Vistas embebidas (cada una es un widget)">
-                <option value="embed_tickets">Bandeja de tickets</option>
-                <option value="embed_inventory">Inventario</option>
-                <option value="embed_preventive">Agenda preventiva</option>
-              </optgroup>
-            </Select>
-          </div>
-
-          {dataSource === "operation_links" || dataSource.startsWith("embed_") ? (
+          {dataSource === "operation_links" || isEmbedDataSource(dataSource) ? (
             <p className="text-[11px] text-[var(--color-text-3)]">
               {dataSource === "operation_links"
                 ? "Varios accesos en un solo bloque. El tipo de gráfica no aplica."
-                : "Resumen compacto (lista o tabla), no la pantalla completa. Enlace a la vista detallada. Ajusta ancho y alto en modo edición."}
+                : "Vista embebida compacta. Ajusta ancho y alto en modo edición del panel."}
             </p>
           ) : null}
 
@@ -423,13 +469,6 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
                     className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1.5 text-xs text-[var(--color-text-2)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)] transition-all"
                   >
                     SLA
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyVisualPreset("inventario")}
-                    className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1.5 text-xs text-[var(--color-text-2)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)] transition-all"
-                  >
-                    Inventario
                   </button>
                 </div>
                 <button
@@ -522,22 +561,6 @@ export function AddWidgetModal({ open, onClose, onAdd, dashboardId, userId }: Ad
 
           {error ? <p className="text-xs text-[var(--color-error)]">{error}</p> : null}
         </div>
-
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)] transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleAdd}
-            className="rounded-lg bg-[var(--color-accent)] px-3 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] transition-all"
-          >
-            Añadir widget
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -5,6 +5,8 @@ export function ticketStatusBadgeVariant(
   status: TicketStatus,
 ): "success" | "warning" | "error" | "info" | "neutral" {
   switch (status) {
+    case "borrador":
+      return "neutral";
     case "abierto":
       return "info";
     case "en_proceso":
@@ -18,6 +20,9 @@ export function ticketStatusBadgeVariant(
 
 /** Clases extra para estados que usan `neutral` pero necesitan acento propio. */
 export function ticketStatusBadgeClassName(status: TicketStatus): string | undefined {
+  if (status === "borrador") {
+    return "border-amber-400/30 bg-amber-500/10 text-amber-200";
+  }
   if (status === "esperando_repuesto") {
     return "border-violet-400/25 bg-violet-500/10 text-violet-200";
   }
@@ -53,6 +58,8 @@ export function priorityBadgeProps(priority: TicketPriority): {
  */
 export function statusDotClass(status: TicketStatus): string {
   switch (status) {
+    case "borrador":
+      return "bg-amber-300";
     case "abierto":
       return "bg-indigo-300";
     case "en_proceso":
@@ -64,7 +71,13 @@ export function statusDotClass(status: TicketStatus): string {
   }
 }
 
-/** Color del dot para el badge de prioridad (chip unificado, sin icono externo). */
+/** Clase de fila/card en bandeja según prioridad (borde lateral visible). */
+export function bandejaPriorityRowClass(priority: TicketPriority): string {
+  if (priority === "alta") return "bandeja-row--alta";
+  if (priority === "media") return "bandeja-row--media";
+  return "bandeja-row--baja";
+}
+
 export function priorityDotClass(priority: TicketPriority): string {
   if (priority === "alta") return "bg-[var(--color-error)]";
   if (priority === "media") return "bg-[var(--color-warning)]";

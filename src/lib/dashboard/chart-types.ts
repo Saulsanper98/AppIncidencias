@@ -1,4 +1,5 @@
 export const CHART_TYPES = [
+  "kpi",
   "area",
   "bar",
   "stacked_bar",

@@ -13,9 +13,8 @@
  *    celda separados por coma/punto y coma/barra: los partimos siempre.
  */
 
-import * as XLSX from "xlsx";
-
 import { prisma } from "@/lib/prisma";
+import { readFirstSheetRows } from "@/lib/sheet-import";
 
 export type LineaImportRow = {
   /** Fila del Excel/CSV (1-indexada, sin contar la cabecera si la hay). */
@@ -101,28 +100,17 @@ function detectHeaderRow(firstRow: unknown[]): boolean {
   return false;
 }
 
-export function parseLineasImportBuffer(buffer: Buffer): LineaImportParseResult {
-  let workbook: XLSX.WorkBook;
+export async function parseLineasImportBuffer(buffer: Buffer): Promise<LineaImportParseResult> {
+  let rows: string[][];
   try {
-    workbook = XLSX.read(buffer, { type: "buffer" });
+    rows = await readFirstSheetRows(buffer);
   } catch (error) {
     throw new Error(
-      `No se pudo leer el archivo. Asegúrate de subir un .xlsx, .xls o .csv válido. (${
+      `No se pudo leer el archivo. Asegúrate de subir un .xlsx o .csv válido. (${
         error instanceof Error ? error.message : String(error)
       })`,
     );
   }
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) {
-    throw new Error("El archivo no contiene ninguna hoja.");
-  }
-  const sheet = workbook.Sheets[sheetName];
-
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-    header: 1,
-    defval: "",
-    blankrows: false,
-  });
 
   if (rows.length === 0) {
     throw new Error("El archivo está vacío.");

@@ -1,0 +1,40 @@
+# Fragmento para el stack app-incidencias en Portainer.
+# Base: ubuntu:22.04 (Docker Hub) + Node 20 — NO usar ubuntu:22.04 vacío.
+# Sustituye node-prod (node:20-alpine sin app) por la imagen construida.
+#
+# Pre-requisitos en el host Docker:
+#   /opt/app-incidencias/prod/data/.env
+#   /opt/app-incidencias/prod/data/prisma/dev.db
+#   /opt/app-incidencias/prod/data/uploads/
+#   /opt/app-incidencias/prod/data/certs/   (opcional)
+#   /opt/app-incidencias/prod/data/logs/
+#
+# Build (en el host, con el repo clonado):
+#   cd /opt/app-incidencias/prod/src
+#   sudo bash scripts/docker/build-prod.sh
+#   # equivalente: docker build -t ccmgc-ticketing:prod .
+
+services:
+  node-prod:
+    image: ccmgc-ticketing:prod
+    container_name: node-prod
+    restart: unless-stopped
+    env_file:
+      - /opt/app-incidencias/prod/data/.env
+    environment:
+      TZ: Atlantic/Canary
+      HOST: "0.0.0.0"
+      PORT: "8080"
+    volumes:
+      - /opt/app-incidencias/prod/data/prisma:/app/prisma
+      - /opt/app-incidencias/prod/data/uploads:/app/public/uploads
+      - /opt/app-incidencias/prod/data/certs:/app/certs
+      - /opt/app-incidencias/prod/data/logs:/app/logs
+    networks:
+      lan_ipvlan:
+        ipv4_address: 192.168.12.67
+    # Sin ports: — ipvlan expone la IP directamente en :8080
+
+networks:
+  lan_ipvlan:
+    external: true

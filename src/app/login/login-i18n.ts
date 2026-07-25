@@ -25,12 +25,27 @@ export function loginCopy(locale: LoginLocale) {
   const isEn = locale === "en";
   return {
     skipToContent: isEn ? "Skip to content" : "Ir al contenido",
+    heroEyebrow: isEn ? "Operational" : "Operativo",
     heroTitle: isEn ? "Control Center" : "Centro de Control",
-    heroLead: isEn ? "Incident management · Gran Canaria" : "Gestión de incidencias · Gran Canaria",
+    heroLead: isEn
+      ? "Incidents, fleet and shifts — one place for the control room."
+      : "Incidencias, flota y turnos — el puesto de trabajo del centro de control.",
     langEs: "ES",
     langEn: "EN",
     contrast: isEn ? "High contrast" : "Alto contraste",
     contrastShort: isEn ? "HC" : "AC",
+    contrastAria: isEn ? "Toggle high contrast" : "Activar o desactivar alto contraste",
+    metaShift: isEn ? "Shift" : "Turno",
+    metaAtmosphere: isEn ? "Atmosphere" : "Ambiente",
+    metaNight: isEn ? "Night" : "Noche",
+    metaDay: isEn ? "Day" : "Día",
+    listboxAccounts: (n: number) =>
+      isEn ? (n === 1 ? "1 account" : `${n} accounts`) : n === 1 ? "1 cuenta" : `${n} cuentas`,
+    listboxSelect: isEn ? "Select" : "Selecciona",
+    listboxSearchPlaceholder: isEn ? "Search user…" : "Buscar usuario…",
+    listboxClearSearch: isEn ? "Clear search" : "Limpiar búsqueda",
+    listboxNoMatches: isEn ? "No matches" : "No hay coincidencias",
+    fixCredentials: isEn ? "Edit password" : "Corregir contraseña",
     title: isEn ? "Sign in" : "Iniciar sesión",
     subtitle: isEn
       ? "Gran Canaria mobility control center"

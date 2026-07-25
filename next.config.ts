@@ -45,7 +45,7 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(self)",
+    value: "camera=(), microphone=(self), geolocation=(self)",
   },
 ];
 
@@ -54,6 +54,7 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_DEPLOY_ENV: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
+    NEXT_PUBLIC_HTTPS_PORT: process.env.HTTPS_PORT ?? "3443",
   },
   // Modulos nativos / con worker_threads / con WASM que NUNCA queremos que Next
   // empaquete. Si los bundleamos:
@@ -71,6 +72,22 @@ const nextConfig: NextConfig = {
     "imapflow",
     "mailparser",
   ],
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      const prev = config.externals;
+      config.externals = [
+        ...(Array.isArray(prev) ? prev : prev ? [prev] : []),
+        ({ request }: { request?: string }, callback: (err?: Error | null, result?: string) => void) => {
+          if (request?.startsWith("node:")) {
+            callback(null, `commonjs ${request}`);
+            return;
+          }
+          callback();
+        },
+      ];
+    }
+    return config;
+  },
   // En el build del servidor de produccion no queremos que warnings de ESLint
   // (variables no usadas, console.log, etc.) tumben el despliegue. ESLint se
   // sigue ejecutando manualmente con `npm run lint` en desarrollo.
@@ -80,8 +97,18 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
-        headers: securityHeaders,
+        source: "/_next/static/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
+        source: "/((?!_next/static|_next/image).*)",
+        headers: [
+          ...securityHeaders,
+          // Evita HTML obsoleto que apunta a chunks que ya no existen tras deploy.
+          { key: "Cache-Control", value: "no-store, must-revalidate" },
+        ],
       },
     ];
   },

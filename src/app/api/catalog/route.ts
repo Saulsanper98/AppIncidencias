@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveRequestActor } from "@/lib/auth-context";
+import { tryDeleteLocalBusPhoto } from "@/lib/bus-uploads";
 import { ensureCatalogSeeded } from "@/lib/catalog";
 import { prisma } from "@/lib/prisma";
-import { canManageCatalog } from "@/lib/rbac";
-import { TIPOLOGIA_CSV } from "@/lib/tipologia";
+import { canManageCatalog, canReadCatalog } from "@/lib/rbac";
+import { getTipologias } from "@/lib/tipologia-store";
 
 const createBusSchema = z.object({
   id: z.string().trim().min(3),
@@ -29,20 +30,32 @@ const updateBusSchema = z.object({
   // sin líneas asignadas (p. ej. en mantenimiento o reserva). El POST
   // sigue exigiendo ≥1 para no crear buses huérfanos por accidente.
   lineas: z.array(z.string().trim().min(1)).optional(),
+  description: z.string().max(4000).nullable().optional(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const actor = await resolveRequestActor(request);
+    if (!actor.userId || !canReadCatalog(actor.role)) {
+      return NextResponse.json({ message: "Autenticación requerida" }, { status: 401 });
+    }
+
     await ensureCatalogSeeded();
 
     const buses = await prisma.bus.findMany({
       include: {
         assets: true,
+        photos: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          take: 1,
+        },
       },
       orderBy: {
         id: "asc",
       },
     });
+
+    const tipologias = await getTipologias();
 
     return NextResponse.json({
       buses: buses.map((bus) => ({
@@ -50,6 +63,8 @@ export async function GET() {
         operator: bus.operator,
         municipio: bus.municipio,
         lineas: bus.lineas.split(",").filter(Boolean),
+        description: bus.description ?? null,
+        coverPhotoUrl: bus.photos[0]?.url ?? null,
         assets: bus.assets.map((asset) => ({
           id: asset.id,
           type: asset.type,
@@ -57,7 +72,7 @@ export async function GET() {
           slaMinutes: asset.slaMinutes ?? null,
         })),
       })),
-      tipologias: TIPOLOGIA_CSV,
+      tipologias,
     });
   } catch (error) {
     console.error("Error loading catalog:", error);
@@ -147,6 +162,7 @@ export async function PATCH(request: Request) {
             operator: original.operator,
             municipio: original.municipio,
             lineas: original.lineas,
+            description: original.description,
           },
         }),
         prisma.asset.updateMany({
@@ -158,6 +174,10 @@ export async function PATCH(request: Request) {
           data: { busId: newId },
         }),
         prisma.preventiveTask.updateMany({
+          where: { busId: oldId },
+          data: { busId: newId },
+        }),
+        prisma.busPhoto.updateMany({
           where: { busId: oldId },
           data: { busId: newId },
         }),
@@ -176,6 +196,7 @@ export async function PATCH(request: Request) {
         operator: data.operator,
         municipio: data.municipio,
         lineas: data.lineas ? data.lineas.join(",") : undefined,
+        description: data.description !== undefined ? data.description : undefined,
       },
     });
     return NextResponse.json({ bus: updated, renamed: renamedFromTo });
@@ -204,11 +225,12 @@ export async function DELETE(request: Request) {
     // Tickets están con onDelete: Restrict (no se pueden borrar en
     // cascada) — si hay tickets, el delete fallaría con P2003 igualmente,
     // así que adelantamos el error con info útil para el usuario.
-    const [bus, ticketCount, preventiveCount, assetCount] = await Promise.all([
+    const [bus, ticketCount, preventiveCount, assetCount, photoUrls] = await Promise.all([
       prisma.bus.findUnique({ where: { id }, select: { id: true } }),
       prisma.ticket.count({ where: { busId: id } }),
       prisma.preventiveTask.count({ where: { busId: id } }),
       prisma.asset.count({ where: { busId: id } }),
+      prisma.busPhoto.findMany({ where: { busId: id }, select: { url: true } }),
     ]);
     if (!bus) {
       return NextResponse.json(
@@ -229,9 +251,9 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Asset y PreventiveTask cascadean (onDelete: Cascade) — al borrar
-    // el bus se eliminan sus activos y tareas preventivas automáticamente.
+    // Asset, PreventiveTask y BusPhoto cascadean (onDelete: Cascade).
     await prisma.bus.delete({ where: { id } });
+    await Promise.all(photoUrls.map((p) => tryDeleteLocalBusPhoto(p.url)));
     return NextResponse.json({
       ok: true,
       message: `Bus "${id}" eliminado.${assetCount > 0 ? ` Se borraron también ${assetCount} activo${assetCount === 1 ? "" : "s"} asociado${assetCount === 1 ? "" : "s"}.` : ""}${preventiveCount > 0 ? ` Se borraron ${preventiveCount} mantenimiento${preventiveCount === 1 ? "" : "s"} preventivo${preventiveCount === 1 ? "" : "s"}.` : ""}`,

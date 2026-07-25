@@ -1,4 +1,5 @@
 import type { TicketStatus, UserRole } from "@/lib/domain";
+import { isTicketOwnedByActor, type TicketOwnershipFields } from "@/lib/ticket-ownership";
 
 const validRoles: UserRole[] = ["conductor", "tecnico_campo", "gestor_centro_control"];
 
@@ -15,12 +16,15 @@ export function canCreateTicket(role: UserRole) {
 
 // Los conductores reportan pero no operan: si pudieran cambiar estado
 // se arriesga a que cierren tickets antes de que el técnico los valide.
-export function canUpdateTicketStatus(role: UserRole) {
+// Excepción: cuentas isReadOnly de la central (ETRA) pueden cerrar tickets.
+export function canUpdateTicketStatus(role: UserRole, isReadOnly = false) {
+  if (isReadOnly) return true;
   return role === "tecnico_campo" || role === "gestor_centro_control";
 }
 
 /** Añadir notas / comentarios al ticket (mismo perfil que cambio de estado operativo). */
-export function canAddTicketComment(role: UserRole) {
+export function canAddTicketComment(role: UserRole, isReadOnly = false) {
+  if (isReadOnly) return true;
   return role === "tecnico_campo" || role === "gestor_centro_control";
 }
 
@@ -40,24 +44,162 @@ export function canAssignTicket(role: UserRole) {
   return role === "tecnico_campo" || role === "gestor_centro_control";
 }
 
+/** Corregir datos del ticket (título, bus, tipología…). Incluye la central ETRA (isReadOnly). */
+export function canEditTicket(role: UserRole, isReadOnly = false) {
+  if (isReadOnly) return true;
+  return role === "tecnico_campo" || role === "gestor_centro_control";
+}
+
+/**
+ * ¿Puede este actor editar ESTE ticket concreto?
+ * Gestores: todos. Técnicos: solo los suyos (asignados o creados por ellos).
+ */
+export function canEditTicketRecord(
+  role: UserRole,
+  actorUserId: string,
+  ticket: TicketOwnershipFields,
+  isReadOnly = false,
+) {
+  if (!canEditTicket(role, isReadOnly)) return false;
+  if (isReadOnly || role === "gestor_centro_control") return true;
+  return isTicketOwnedByActor(ticket, actorUserId);
+}
+
+/** Los gestores pueden corregir metadatos incluso en tickets ya resueltos. */
+export function canEditResolvedTicket(role: UserRole) {
+  return role === "gestor_centro_control";
+}
+
+/** Corregir metadatos de un ticket resuelto (gestor: todos; técnico: solo propios). */
+export function canEditResolvedTicketRecord(
+  role: UserRole,
+  actorUserId: string,
+  ticket: TicketOwnershipFields,
+  isReadOnly = false,
+) {
+  if (isReadOnly) return true;
+  if (role === "gestor_centro_control") return true;
+  if (role === "tecnico_campo" && isTicketOwnedByActor(ticket, actorUserId)) return true;
+  return false;
+}
+
+/** Mostrar edición de datos en bandeja o detalle. */
+export function canShowTicketEdit(
+  role: UserRole,
+  status: TicketStatus,
+  isReadOnly = false,
+  needsCompletion = false,
+  actorUserId?: string,
+  ticket?: TicketOwnershipFields,
+) {
+  if (actorUserId && ticket && !canEditTicketRecord(role, actorUserId, ticket, isReadOnly)) {
+    return false;
+  }
+  if (!canEditTicket(role, isReadOnly)) return false;
+  if (needsCompletion) return true;
+  if (isReadOnly) return true;
+  if (status === "borrador") return true;
+  if (status === "resuelto") {
+    if (actorUserId && ticket) {
+      return canEditResolvedTicketRecord(role, actorUserId, ticket, isReadOnly);
+    }
+    return canEditResolvedTicket(role);
+  }
+  return true;
+}
+
+/** ¿La fila de bandeja debe mostrar el menú ⋮? */
+export function ticketHasBandejaActions(
+  role: UserRole,
+  status: TicketStatus,
+  isReadOnly = false,
+  needsCompletion = false,
+  actorUserId?: string,
+  ticket?: TicketOwnershipFields,
+) {
+  if (needsCompletion || status === "borrador") {
+    if (actorUserId && ticket) return canEditTicketRecord(role, actorUserId, ticket, isReadOnly);
+    return canEditTicket(role, isReadOnly);
+  }
+  if (getAllowedTransitions(role, status, isReadOnly).length > 0) return true;
+  if (canShowTicketEdit(role, status, isReadOnly, false, actorUserId, ticket)) return true;
+  if (!isReadOnly && canAssignTicket(role) && status !== "resuelto") return true;
+  if (!isReadOnly && canSoftDeleteTicket(role)) return true;
+  if (!isReadOnly && canRequestTicketDeletion(role) && actorUserId && ticket && isTicketOwnedByActor(ticket, actorUserId)) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Subir adjuntos a un ticket existente. Mismas reglas que añadir un
  * comentario: cualquiera con acceso a la operación puede aportar evidencia.
  */
-export function canUploadAttachment(role: UserRole) {
-  return canAddTicketComment(role);
+export function canUploadAttachment(role: UserRole, isReadOnly = false) {
+  return canAddTicketComment(role, isReadOnly);
 }
 
 /**
- * Eliminar un adjunto. Solo gestores del centro de control, igual que el
- * borrado lógico de tickets. Los técnicos no borran evidencia.
+ * Eliminar un adjunto. Gestores y técnicos de campo (evidencia errónea).
  */
 export function canDeleteAttachment(role: UserRole) {
   return role === "gestor_centro_control" || role === "tecnico_campo";
 }
 
+/** Crear, editar y eliminar dashboards personalizados. */
+export function canManageDashboards(role: UserRole) {
+  return role === "gestor_centro_control";
+}
+
+/** Crear pases de turno (handover). */
+export function canCreateHandover(role: UserRole) {
+  return role === "tecnico_campo" || role === "gestor_centro_control";
+}
+
+/** Consultar y forzar tareas del scheduler interno. */
+export function canUseScheduler(role: UserRole) {
+  return role === "gestor_centro_control";
+}
+
+export { canCreateGlobalTicketTemplate, canCreateGroupTicketTemplate } from "@/lib/ticket-templates";
+
+/** Borrado directo de tickets (solo gestores). */
+export function canSoftDeleteTicket(role: UserRole) {
+  return role === "gestor_centro_control";
+}
+
+/** Solicitar borrado de un ticket propio (técnicos de campo). */
+export function canRequestTicketDeletion(role: UserRole) {
+  return role === "tecnico_campo";
+}
+
+/** Aprobar o rechazar solicitudes de borrado. */
+export function canReviewTicketDeletion(role: UserRole) {
+  return role === "gestor_centro_control";
+}
+
+/** Editar o eliminar entradas de bitácora ajenas (moderación). */
+export function canModerateBitacora(role: UserRole) {
+  return role === "gestor_centro_control";
+}
+
+/** Reportes analíticos agregados (/reportes). Misma visibilidad que la pestaña UI. */
+export function canViewOperationalReports(role: UserRole) {
+  return role === "tecnico_campo" || role === "gestor_centro_control";
+}
+
 export function canManageCatalog(role: UserRole) {
   return role === "gestor_centro_control";
+}
+
+/** Lectura del catálogo de flota: todos los roles autenticados. */
+export function canReadCatalog(_role: UserRole) {
+  return true;
+}
+
+/** Editar ficha de bus (descripción, fotos): todos los roles autenticados. */
+export function canEditBusDetail(_role: UserRole) {
+  return true;
 }
 
 export function canReviewFeedback(role: UserRole) {
@@ -116,12 +258,25 @@ export function canControlDesviosPoller(role: UserRole) {
   return role === "gestor_centro_control";
 }
 
-export function getAllowedTransitions(role: UserRole, current: TicketStatus): TicketStatus[] {
+export function getAllowedTransitions(
+  role: UserRole,
+  current: TicketStatus,
+  isReadOnly = false,
+): TicketStatus[] {
+  // Central ETRA (isReadOnly): solo puede cerrar tickets, no reabrir ni otros estados.
+  if (isReadOnly) {
+    if (current === "resuelto") return [];
+    return ["resuelto"];
+  }
+
   if (role === "conductor") {
     return [];
   }
 
   if (role === "tecnico_campo") {
+    if (current === "borrador") {
+      return ["abierto", "resuelto"];
+    }
     if (current === "abierto") {
       return ["en_proceso", "esperando_repuesto"];
     }
@@ -131,13 +286,16 @@ export function getAllowedTransitions(role: UserRole, current: TicketStatus): Ti
     if (current === "esperando_repuesto") {
       return ["en_proceso"];
     }
+    if (current === "resuelto") {
+      return ["en_proceso"];
+    }
     return [];
   }
 
   if (current === "resuelto") {
-    return [];
+    return ["en_proceso"];
   }
 
-  const allStatuses: TicketStatus[] = ["abierto", "en_proceso", "esperando_repuesto", "resuelto"];
+  const allStatuses: TicketStatus[] = ["borrador", "abierto", "en_proceso", "esperando_repuesto", "resuelto"];
   return allStatuses.filter((status) => status !== current);
 }

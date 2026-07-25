@@ -1,0 +1,26 @@
+# Dependencias y artefactos que no deben entrar en la imagen
+node_modules
+.next
+.git
+.gitignore
+.cursor
+migration-bundle
+logs
+*.log
+.env
+.env.*
+!.env.example
+prisma/*.db
+prisma/*.db-journal
+public/uploads
+certs
+coverage
+playwright-report
+test-results
+*.md
+!README.md
+docs
+scripts/linux
+scripts/*.ps1
+tools
+terminals

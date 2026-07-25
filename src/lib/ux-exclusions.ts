@@ -16,7 +16,7 @@ import { prisma } from "@/lib/prisma";
 const EXCLUDED_EMAILS = [
   "saul@movilidadgc.org",      // propietario de la app
   "jefedesala@movilidadgc.org", // cuenta de prueba / supervisión, no operativa real
-  "read@movilidadgc.org",       // cuenta de solo lectura para mostrar la app
+  "etra@etramovilidad.org",       // cuenta central ETRA (vista lectura)
 ] as const;
 
 /** Caché en memoria del proceso (TTL 60s). Suficiente para SQLite local. */

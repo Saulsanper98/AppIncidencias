@@ -143,7 +143,15 @@ function installFetchInterceptor(): void {
     const startedAt = Date.now();
     try {
       const res = await orig(input as RequestInfo, init);
-      if (!skip && res.status >= 400) {
+      const skipApiErrorTelemetry =
+        skip ||
+        (res.status === 401 &&
+          (path === "/api/auth/session" ||
+            path === "/api/auth/preferences" ||
+            path.startsWith("/api/reports/daily/"))) ||
+        (res.status === 429 &&
+          (path === "/api/auth/session" || path === "/api/notifications/list"));
+      if (!skipApiErrorTelemetry && res.status >= 400) {
         trackUxEvent(
           "api_error",
           {

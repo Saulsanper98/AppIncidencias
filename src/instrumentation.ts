@@ -41,4 +41,11 @@ export async function register(): Promise<void> {
   } catch (err) {
     console.warn("[instrumentation] no se pudo arrancar el scheduler:", err);
   }
+
+  try {
+    const { startDesvioReminderTicker } = await import("@/lib/desvios/reminder-ticker");
+    startDesvioReminderTicker();
+  } catch (err) {
+    console.warn("[instrumentation] no se pudo arrancar el ticker de avisos de desvios:", err);
+  }
 }

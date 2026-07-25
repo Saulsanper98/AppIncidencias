@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { resolveAccountImageUrl } from "@/lib/account-media";
+import { CENTRAL_VIEWER_LABEL } from "@/lib/central-viewer";
 import type { SessionUser, UserRole } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -133,7 +134,7 @@ export function HeaderUserMenu({ user }: HeaderUserMenuProps) {
               ? "font-semibold text-[var(--color-accent)]"
               : "text-[var(--color-text-2)]",
           )}>
-            {user.isReadOnly ? "Solo lectura" : ROLE_LABEL[user.role]}
+            {user.isReadOnly ? CENTRAL_VIEWER_LABEL : ROLE_LABEL[user.role]}
           </span>
         </span>
         <ChevronDown

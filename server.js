@@ -10,8 +10,8 @@
  * variables de entorno (HOST/PORT/NODE_ENV) y añade unas nuevas opcionales:
  *
  *   RATE_LIMIT_DISABLE          → "1" desactiva el rate limit (no recomendado).
- *   RATE_LIMIT_GENERAL_RPM      → req/min sostenidas por IP (def. 240).
- *   RATE_LIMIT_GENERAL_BURST    → tokens máximos del bucket (def. 60).
+ *   RATE_LIMIT_GENERAL_RPM      → req/min sostenidas por IP (def. 360).
+ *   RATE_LIMIT_GENERAL_BURST    → tokens máximos del bucket (def. 80).
  *   RATE_LIMIT_LOGIN_RPM        → req/min para endpoints sensibles (def. 20).
  *   RATE_LIMIT_LOGIN_BURST      → burst sensible (def. 6).
  *   RATE_LIMIT_BAN_THRESHOLD    → nº de 429 en 60s que dispara ban (def. 150).
@@ -19,6 +19,7 @@
  *   RATE_LIMIT_TRUST_PROXY      → "1" lee x-forwarded-for (solo detrás de
  *                                  un reverse proxy de confianza).
  *   RATE_LIMIT_WHITELIST        → CSV de IPs/CIDRs exentas (def. "127.0.0.1,::1").
+ *   RATE_LIMIT_TRUST_LAN        → "1" exime redes privadas (192.168/10/172.16).
  *
  * Si necesitas tunearlo en caliente, ajusta el .env y reinicia el servicio:
  *   Restart-Service CCMGCTicketing
@@ -26,24 +27,88 @@
 
 "use strict";
 
+const fs = require("node:fs");
 const http = require("node:http");
+const https = require("node:https");
+const path = require("node:path");
 const { parse } = require("node:url");
 const next = require("next");
+
+/** Carga `.env` antes de leer RATE_LIMIT_* (NSSM no incluye todas las vars). */
+function loadEnvFile() {
+  const envPath = path.join(process.cwd(), ".env");
+  if (!fs.existsSync(envPath)) return;
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const m = line.match(/^\s*([^#=]+)=(.*)$/);
+    if (!m) continue;
+    const key = m[1].trim();
+    let val = m[2].trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = val;
+  }
+}
+
+loadEnvFile();
 
 // ───────────────────────── Configuración entorno ─────────────────────────
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOST || process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || "3000", 10);
+const httpsPort = parseInt(process.env.HTTPS_PORT || "3443", 10);
+
+function loadTlsOptions() {
+  const pfxPath = process.env.TLS_PFX_PATH;
+  if (pfxPath) {
+    const resolved = path.isAbsolute(pfxPath) ? pfxPath : path.join(process.cwd(), pfxPath);
+    if (!fs.existsSync(resolved)) {
+      console.warn(`[tls] No existe TLS_PFX_PATH: ${resolved}`);
+      return null;
+    }
+    return {
+      pfx: fs.readFileSync(resolved),
+      passphrase: process.env.TLS_PFX_PASSPHRASE || "",
+    };
+  }
+
+  const keyPath = process.env.TLS_KEY_PATH;
+  const certPath = process.env.TLS_CERT_PATH;
+  if (keyPath && certPath) {
+    const resolvedKey = path.isAbsolute(keyPath) ? keyPath : path.join(process.cwd(), keyPath);
+    const resolvedCert = path.isAbsolute(certPath) ? certPath : path.join(process.cwd(), certPath);
+    if (!fs.existsSync(resolvedKey) || !fs.existsSync(resolvedCert)) {
+      console.warn("[tls] TLS_KEY_PATH o TLS_CERT_PATH no encontrados.");
+      return null;
+    }
+    return {
+      key: fs.readFileSync(resolvedKey),
+      cert: fs.readFileSync(resolvedCert),
+    };
+  }
+
+  return null;
+}
+
+function attachServerTimeouts(server) {
+  server.headersTimeout = 15_000;
+  server.requestTimeout = 30_000;
+  server.keepAliveTimeout = 30_000;
+}
 
 const RATE_LIMIT_ENABLED = process.env.RATE_LIMIT_DISABLE !== "1";
-const GEN_RPM = parseInt(process.env.RATE_LIMIT_GENERAL_RPM || "240", 10);
-const GEN_BURST = parseInt(process.env.RATE_LIMIT_GENERAL_BURST || "60", 10);
+const GEN_RPM = parseInt(process.env.RATE_LIMIT_GENERAL_RPM || "360", 10);
+const GEN_BURST = parseInt(process.env.RATE_LIMIT_GENERAL_BURST || "80", 10);
 const LOGIN_RPM = parseInt(process.env.RATE_LIMIT_LOGIN_RPM || "20", 10);
 const LOGIN_BURST = parseInt(process.env.RATE_LIMIT_LOGIN_BURST || "6", 10);
 const BAN_THRESHOLD = parseInt(process.env.RATE_LIMIT_BAN_THRESHOLD || "150", 10);
 const BAN_MS = parseInt(process.env.RATE_LIMIT_BAN_MINUTES || "15", 10) * 60_000;
 const TRUST_PROXY = process.env.RATE_LIMIT_TRUST_PROXY === "1";
+const TRUST_LAN = process.env.RATE_LIMIT_TRUST_LAN === "1";
 const WHITELIST = new Set(
   (process.env.RATE_LIMIT_WHITELIST !== undefined
     ? process.env.RATE_LIMIT_WHITELIST
@@ -156,6 +221,27 @@ function normalizeIp(ip) {
   return ip;
 }
 
+/** RFC1918 + loopback: uso interno en LAN corporativa. */
+function isPrivateLanIp(ip) {
+  const n = normalizeIp(ip);
+  if (n === "127.0.0.1") return true;
+  const parts = n.split(".").map((x) => parseInt(x, 10));
+  if (parts.length !== 4 || parts.some((x) => Number.isNaN(x) || x < 0 || x > 255)) {
+    return false;
+  }
+  if (parts[0] === 10) return true;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  return false;
+}
+
+function isWhitelistedIp(ip) {
+  const n = normalizeIp(ip);
+  if (WHITELIST.has(n)) return true;
+  if (TRUST_LAN && isPrivateLanIp(n)) return true;
+  return false;
+}
+
 function getClientIp(req) {
   if (TRUST_PROXY) {
     const xff = req.headers["x-forwarded-for"];
@@ -169,13 +255,36 @@ function getClientIp(req) {
   return normalizeIp(req.socket && req.socket.remoteAddress);
 }
 
-// Rutas más sensibles: aplican el límite estricto adicional.
-function isSensitiveRoute(pathname) {
+// Rutas de lectura frecuente que NO deben consumir el bucket estricto de login.
+// En cada carga de página varios componentes (layout, sidebar, tabs, tickets)
+// llaman GET /api/auth/session en paralelo; tratarla como "login" provocaba
+// 429 en uso normal y cascadas de error React (#418) al fallar la sesión.
+function isRateLimitExempt(pathname, method) {
   if (!pathname) return false;
+  const m = (method || "GET").toUpperCase();
+  if (pathname === "/api/auth/session" && m === "GET") return true;
+  if (pathname === "/api/auth/preferences" && m === "GET") return true;
+  if (pathname === "/api/notifications/stream") return true;
+  if (pathname === "/api/notifications/list" && m === "GET") return true;
+  if (pathname === "/api/reports/daily/today" && m === "GET") return true;
+  if (pathname === "/api/reports/daily/month" && m === "GET") return true;
+  if (pathname === "/api/users" && m === "GET") return true;
+  if (pathname === "/api/ux/events" && m === "POST") return true;
+  if (pathname === "/api/tickets/drafts-badge" && m === "GET") return true;
+  if (pathname === "/api/announcements/badge" && m === "GET") return true;
+  if (pathname.startsWith("/api/tickets") && m === "GET") return true;
+  return false;
+}
+
+// Rutas sensibles: límite estricto adicional (solo mutaciones de auth).
+function isSensitiveRoute(pathname, method) {
+  if (!pathname) return false;
+  const m = (method || "GET").toUpperCase();
+  if (m !== "POST" && m !== "DELETE") return false;
   return (
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
-    pathname.startsWith("/api/auth/") ||
+    pathname === "/api/auth/session" ||
     pathname.startsWith("/api/users/reset-password") ||
     pathname.startsWith("/api/users/forgot-password")
   );
@@ -187,8 +296,8 @@ function isSensitiveRoute(pathname) {
 function isStaticAsset(pathname) {
   if (!pathname) return false;
   return (
-    pathname.startsWith("/_next/static/") ||
-    pathname.startsWith("/_next/image") ||
+    pathname.startsWith("/api/kb/media/") ||
+    pathname.startsWith("/_next/") ||
     pathname.startsWith("/icons/") ||
     pathname.startsWith("/favicon") ||
     pathname === "/manifest.webmanifest" ||
@@ -205,7 +314,7 @@ const handler = app.getRequestHandler();
 app
   .prepare()
   .then(() => {
-    const server = http.createServer((req, res) => {
+    const requestListener = (req, res) => {
       // Nunca dejamos que un error en el rate limit tumbe la app.
       try {
         const ip = getClientIp(req);
@@ -216,7 +325,12 @@ app
         // handlers puedan auditar la IP real (incluso si TRUST_PROXY=0).
         req.headers["x-real-ip"] = ip;
 
-        if (RATE_LIMIT_ENABLED && !WHITELIST.has(ip) && !isStaticAsset(pathname)) {
+        if (
+          RATE_LIMIT_ENABLED &&
+          !isWhitelistedIp(ip) &&
+          !isStaticAsset(pathname) &&
+          !isRateLimitExempt(pathname, req.method)
+        ) {
           const banUntil = isBanned(ip);
           if (banUntil) {
             return reply429(res, banUntil - Date.now(), "banned");
@@ -224,7 +338,7 @@ app
 
           const passGeneral = generalLimiter.consume(ip);
           const passSensitive =
-            !isSensitiveRoute(pathname) || loginLimiter.consume(ip);
+            !isSensitiveRoute(pathname, req.method) || loginLimiter.consume(ip);
 
           if (!passGeneral || !passSensitive) {
             strike(ip);
@@ -247,7 +361,9 @@ app
           res.end(JSON.stringify({ message: "Internal server error" }));
         }
       }
-    });
+    };
+
+    const server = http.createServer(requestListener);
 
     server.on("clientError", (err, socket) => {
       // hey y similares cierran sockets a medias: evita warnings ruidosos.
@@ -258,11 +374,7 @@ app
       }
     });
 
-    // Endurecimiento de timeouts: si el atacante deja conexiones abiertas sin
-    // mandar bytes, las cortamos para liberar el pool.
-    server.headersTimeout = 15_000;
-    server.requestTimeout = 30_000;
-    server.keepAliveTimeout = 30_000;
+    attachServerTimeouts(server);
 
     server.listen(port, hostname, () => {
       console.log(
@@ -270,7 +382,29 @@ app
       );
       if (RATE_LIMIT_ENABLED) {
         console.log(
-          `  [rate-limit] general=${GEN_RPM}rpm burst=${GEN_BURST} | sensible=${LOGIN_RPM}rpm burst=${LOGIN_BURST} | ban_threshold=${BAN_THRESHOLD}/min ban_dur=${BAN_MS / 60000}min | trust_proxy=${TRUST_PROXY} | whitelist=[${[...WHITELIST].join(",")}]`,
+          `  [rate-limit] general=${GEN_RPM}rpm burst=${GEN_BURST} | sensible=${LOGIN_RPM}rpm burst=${LOGIN_BURST} | ban_threshold=${BAN_THRESHOLD}/min ban_dur=${BAN_MS / 60000}min | trust_proxy=${TRUST_PROXY} | trust_lan=${TRUST_LAN} | whitelist=[${[...WHITELIST].join(",")}]`,
+        );
+      }
+
+      const tlsOptions = loadTlsOptions();
+      if (tlsOptions) {
+        const httpsServer = https.createServer(tlsOptions, requestListener);
+        httpsServer.on("clientError", (err, socket) => {
+          try {
+            socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+          } catch {
+            /* socket ya cerrado */
+          }
+        });
+        attachServerTimeouts(httpsServer);
+        httpsServer.listen(httpsPort, hostname, () => {
+          console.log(
+            `> HTTPS listo en https://0.0.0.0:${httpsPort} (dictado por voz y micrófono requieren esta URL en la LAN)`,
+          );
+        });
+      } else {
+        console.log(
+          "  [tls] Sin certificado (TLS_PFX_PATH). El dictado por voz en http://IP no funcionará; ejecuta scripts/setup-local-https.ps1",
         );
       }
     });

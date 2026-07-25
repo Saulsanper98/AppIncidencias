@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 
 import { resolveRequestActor } from "@/lib/auth-context";
+import { canViewOperationalReports } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,24 @@ type ReportPayload = {
   label?: string;
   since: string;
   until?: string;
-  totals: { created: number; resolved: number; slaCompliancePercent: number | null; mttrMs: number | null };
+  totals: {
+    created: number;
+    resolved: number;
+    uniqueTicketsResolved?: number;
+    slaCompliancePercent: number | null;
+    mttrMs: number | null;
+  };
+  metricsMeta?: {
+    definitions: Record<string, string>;
+    dataQuality: {
+      resolutionEvents: number;
+      uniqueTicketsResolved: number;
+      technicianAttributed: number;
+      legacyUpdatedAtCount: number;
+      gapLegacyVsEvents: number;
+      ticketsWithoutHistory: number;
+    };
+  };
   series: { day: string; creados: number; resueltos: number }[];
   byPriority: { priority: string; count: number }[];
   byOperator: { operator: string; count: number }[];
@@ -43,6 +61,9 @@ export async function GET(request: Request) {
     const actor = await resolveRequestActor(request);
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesión" }, { status: 401 });
+    }
+    if (!canViewOperationalReports(actor.role)) {
+      return NextResponse.json({ message: "Sin permisos para exportar reportes" }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -87,10 +108,36 @@ export async function GET(request: Request) {
       { k: "Hasta", v: data.until ?? "—" },
       { k: "Días", v: data.days },
       { k: "Tickets creados", v: data.totals.created },
-      { k: "Tickets resueltos", v: data.totals.resolved },
+      { k: "Tickets resueltos (acciones)", v: data.totals.resolved },
+      { k: "Tickets únicos cerrados", v: data.totals.uniqueTicketsResolved ?? "—" },
       { k: "SLA cumplido (%)", v: data.totals.slaCompliancePercent ?? "—" },
       { k: "MTTR medio", v: formatMs(data.totals.mttrMs) },
     ]);
+
+    if (data.metricsMeta) {
+      const dq = data.metricsMeta.dataQuality;
+      resumen.addRows([
+        { k: "— Calidad de datos —", v: "" },
+        { k: "Cierres registrados", v: dq.resolutionEvents },
+        { k: "Atribuidos a técnico", v: dq.technicianAttributed },
+        { k: "Método antiguo (updatedAt)", v: dq.legacyUpdatedAtCount },
+        { k: "Diferencia legacy vs real", v: dq.gapLegacyVsEvents },
+        { k: "Sin historial estructurado", v: dq.ticketsWithoutHistory },
+      ]);
+
+      const glosario = workbook.addWorksheet("Glosario métricas");
+      glosario.columns = [
+        { header: "Métrica", key: "metric", width: 28 },
+        { header: "Definición", key: "definition", width: 72 },
+      ];
+      glosario.getRow(1).font = { bold: true };
+      glosario.addRows(
+        Object.entries(data.metricsMeta.definitions).map(([metric, definition]) => ({
+          metric,
+          definition,
+        })),
+      );
+    }
 
     // Hoja 2: Serie temporal.
     const serie = workbook.addWorksheet("Serie temporal");

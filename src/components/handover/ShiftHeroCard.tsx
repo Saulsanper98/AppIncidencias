@@ -168,10 +168,18 @@ export function ShiftHeroCard({
     [now],
   );
 
+  const shiftHeroClass =
+    current.key === "M"
+      ? "shift-hero--morning"
+      : current.key === "T"
+        ? "shift-hero--afternoon"
+        : "shift-hero--night";
+
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-sm sm:p-5",
+        "shift-hero relative overflow-hidden rounded-2xl border bg-gradient-to-br p-4 shadow-sm sm:p-5",
+        shiftHeroClass,
         current.toneBorder,
         current.toneBg,
       )}
@@ -212,9 +220,9 @@ export function ShiftHeroCard({
 
           {/* Mini progreso */}
           <div className="mt-3 flex items-center gap-3">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--color-surface)]/60">
+            <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--color-surface)]/60">
               <div
-                className={cn("h-full rounded-full bg-gradient-to-r transition-all duration-1000", current.toneBar)}
+                className={cn("shift-progress-shimmer h-full rounded-full bg-gradient-to-r transition-all duration-1000", current.toneBar)}
                 style={{ width: `${progress}%` }}
               />
             </div>

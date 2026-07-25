@@ -1,0 +1,29 @@
+# Fragmento test — stack app-incidencias (node-test).
+# IP recomendada: 192.168.12.70 (no compartir .69 con git-test).
+#
+# Datos: /opt/app-incidencias/test/data/
+# Build: docker build -t ccmgc-ticketing:test .
+
+services:
+  node-test:
+    image: ccmgc-ticketing:test
+    container_name: node-test
+    restart: unless-stopped
+    env_file:
+      - /opt/app-incidencias/test/data/.env
+    environment:
+      TZ: Atlantic/Canary
+      HOST: "0.0.0.0"
+      PORT: "8082"
+    volumes:
+      - /opt/app-incidencias/test/data/prisma:/app/prisma
+      - /opt/app-incidencias/test/data/uploads:/app/public/uploads
+      - /opt/app-incidencias/test/data/certs:/app/certs
+      - /opt/app-incidencias/test/data/logs:/app/logs
+    networks:
+      lan_ipvlan:
+        ipv4_address: 192.168.12.70
+
+networks:
+  lan_ipvlan:
+    external: true

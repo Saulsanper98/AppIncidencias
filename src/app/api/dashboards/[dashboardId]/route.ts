@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { resolveRequestActor, writeAuditEvent } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { canManageDashboards } from "@/lib/rbac";
 
 const updateDashboardSchema = z.object({
   name: z.string().trim().min(3),
@@ -18,7 +19,7 @@ export async function PATCH(request: Request, context: ParamsContext) {
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para editar dashboards" }, { status: 401 });
     }
-    if (actor.role !== "gestor_centro_control") {
+    if (!canManageDashboards(actor.role)) {
       return NextResponse.json({ message: "Rol sin permisos para editar dashboards" }, { status: 403 });
     }
 
@@ -61,7 +62,7 @@ export async function DELETE(request: Request, context: ParamsContext) {
     if (!actor.userId) {
       return NextResponse.json({ message: "Debes iniciar sesion para borrar dashboards" }, { status: 401 });
     }
-    if (actor.role !== "gestor_centro_control") {
+    if (!canManageDashboards(actor.role)) {
       return NextResponse.json({ message: "Rol sin permisos para borrar dashboards" }, { status: 403 });
     }
 

@@ -3,6 +3,7 @@
 import { ArrowRight, CalendarClock, Clock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type AgendaTask = {
   id: string;
@@ -29,7 +30,7 @@ function formatTime(iso: string | null): string {
 const URGENCY_STYLE = {
   overdue: {
     border: "var(--color-error)",
-    dot: "bg-[var(--color-error)] animate-pulse",
+    dot: "bg-[var(--color-error)] ccmgc-pulse-dot",
     time: "text-[var(--color-error)] font-semibold",
     label: "Vencida",
     labelCls: "text-[var(--color-error)]",
@@ -84,7 +85,7 @@ export function DashboardPreventiveAgenda() {
       {loading ? (
         <div className="space-y-2.5">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 animate-pulse rounded-lg bg-[var(--color-surface-2)]" />
+            <Skeleton key={i} className="h-16 rounded-lg" />
           ))}
         </div>
       ) : message ? (
@@ -112,7 +113,7 @@ export function DashboardPreventiveAgenda() {
           <p className="mt-0.5 text-xs text-[var(--color-text-3)]">No hay mantenimientos programados</p>
           <button
             type="button"
-            onClick={() => router.push("/inventory")}
+            onClick={() => router.push("/preventivo")}
             className="mt-3 inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]"
           >
             Ver inventario <ArrowRight size={11} strokeWidth={1.5} />

@@ -14,7 +14,6 @@
  * paralelo. Si alguno falla muestra qué buses se quedaron sin actualizar.
  */
 
-import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   Building2,
@@ -27,10 +26,10 @@ import {
   Route,
   Search,
   Trash2,
-  X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ModalShell } from "@/components/ui/modal-shell";
 import { cn } from "@/lib/utils";
 
 export type CatalogBusLite = {
@@ -75,9 +74,6 @@ export function LineaEditModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  // Evita cerrar el dialog cuando el usuario empieza una selección
-  // dentro del modal y suelta el ratón fuera (drag-out al copiar texto).
-  const mouseDownInsideRef = useRef(false);
 
   useEffect(() => {
     // No autoenfocamos el rename para no asustar al usuario, sino el
@@ -86,28 +82,6 @@ export function LineaEditModal({
       .getElementById(`linea-edit-search-${linea}`)
       ?.focus({ preventScroll: true });
   }, [linea]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const handleOverlayMouseDown = useCallback(() => {
-    mouseDownInsideRef.current = false;
-  }, []);
-  const handleOverlayClick = useCallback(() => {
-    if (mouseDownInsideRef.current) {
-      mouseDownInsideRef.current = false;
-      return;
-    }
-    onClose();
-  }, [onClose]);
-  const handleContentMouseDown = useCallback(() => {
-    mouseDownInsideRef.current = true;
-  }, []);
 
   const filteredBuses = useMemo(() => {
     const q = busQuery.trim().toLowerCase();
@@ -239,70 +213,73 @@ export function LineaEditModal({
   };
 
   return (
-    <AnimatePresence>
-      <motion.div
-        key="ovl"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        onMouseDown={handleOverlayMouseDown}
-        onClick={handleOverlayClick}
-        className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 backdrop-blur-sm px-3"
-      >
-        <motion.div
-          key="dlg"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="linea-edit-title"
-          initial={{ opacity: 0, y: 18, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 18, scale: 0.97 }}
-          transition={{ duration: 0.18 }}
-          onMouseDown={(e) => {
-            e.stopPropagation();
-            handleContentMouseDown();
-          }}
-          onClick={(e) => e.stopPropagation()}
-          className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
-        >
-          {/* Header */}
-          <header
-            className="relative flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-5 py-4"
-            style={{
-              background:
-                "radial-gradient(ellipse at 10% 0%, rgba(168,85,247,0.16) 0%, transparent 55%), linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-2) 100%)",
-            }}
+    <ModalShell
+      open
+      onClose={() => !saving && onClose()}
+      shake={Boolean(error)}
+      maxWidth="48rem"
+      className="max-h-[85vh] overflow-hidden"
+      title={
+        <span className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-md shadow-violet-500/30">
+            <Route size={18} className="text-white" strokeWidth={2.2} />
+          </span>
+          <span>
+            <span className="block text-base font-bold">
+              Línea <span className="font-mono text-violet-300">{linea}</span>
+            </span>
+            <span className="mt-0.5 block text-[11.5px] font-normal text-[var(--color-text-3)]">
+              Asigna o desasigna buses, o renombra la línea.
+            </span>
+          </span>
+        </span>
+      }
+      footer={
+        <>
+          <p className="mr-auto text-[11px] text-[var(--color-text-3)]">
+            {dirty ? (
+              <>
+                <span className="font-semibold text-[var(--color-text-2)]">Cambios sin guardar</span>
+                {renameRequested ? " · renombrar línea" : ""}
+                {toAdd.length > 0 ? ` · +${toAdd.length} asignar` : ""}
+                {toRemove.length > 0 ? ` · −${toRemove.length} quitar` : ""}
+              </>
+            ) : (
+              "Sin cambios pendientes"
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-md border border-[var(--color-border)] bg-transparent px-3 py-1.5 text-[12.5px] font-medium text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)] disabled:opacity-60"
           >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-md shadow-violet-500/30">
-                <Route size={18} className="text-white" strokeWidth={2.2} />
-              </div>
-              <div>
-                <h2
-                  id="linea-edit-title"
-                  className="text-base font-bold text-[var(--color-text-1)]"
-                >
-                  Línea{" "}
-                  <span className="font-mono text-violet-300">{linea}</span>
-                </h2>
-                <p className="mt-0.5 text-[11.5px] text-[var(--color-text-3)]">
-                  Asigna o desasigna buses, o renombra la línea.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Cerrar"
-              className="rounded-md p-1.5 text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
-            >
-              <X size={15} />
-            </button>
-          </header>
-
-          {/* Body */}
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-5">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saving || !dirty}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md bg-gradient-to-br from-violet-500 to-fuchsia-600 px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-sm transition-all",
+              saving
+                ? "cursor-wait opacity-80"
+                : !dirty
+                  ? "cursor-not-allowed opacity-60"
+                  : "hover:-translate-y-0.5 hover:shadow-md hover:shadow-violet-500/30",
+            )}
+          >
+            {saving ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Check size={13} strokeWidth={2.6} />
+            )}
+            Guardar cambios
+          </button>
+        </>
+      }
+    >
+      <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto">
             {/* Renombrar */}
             <div>
               <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
@@ -422,58 +399,8 @@ export function LineaEditModal({
                 {error}
               </div>
             ) : null}
-          </div>
-
-          {/* Footer */}
-          <footer className="flex items-center justify-between gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-5 py-3">
-            <p className="text-[11px] text-[var(--color-text-3)]">
-              {dirty ? (
-                <>
-                  <span className="font-semibold text-[var(--color-text-2)]">
-                    Cambios sin guardar
-                  </span>
-                  {renameRequested ? " · renombrar línea" : ""}
-                  {toAdd.length > 0 ? ` · +${toAdd.length} asignar` : ""}
-                  {toRemove.length > 0 ? ` · −${toRemove.length} quitar` : ""}
-                </>
-              ) : (
-                "Sin cambios pendientes"
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={saving}
-                className="rounded-md border border-[var(--color-border)] bg-transparent px-3 py-1.5 text-[12.5px] font-medium text-[var(--color-text-2)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)] disabled:opacity-60"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSave()}
-                disabled={saving || !dirty}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md bg-gradient-to-br from-violet-500 to-fuchsia-600 px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-sm transition-all",
-                  saving
-                    ? "cursor-wait opacity-80"
-                    : !dirty
-                      ? "cursor-not-allowed opacity-60"
-                      : "hover:-translate-y-0.5 hover:shadow-md hover:shadow-violet-500/30",
-                )}
-              >
-                {saving ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <Check size={13} strokeWidth={2.6} />
-                )}
-                Guardar cambios
-              </button>
-            </div>
-          </footer>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+      </div>
+    </ModalShell>
   );
 }
 

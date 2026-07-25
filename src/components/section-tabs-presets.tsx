@@ -1,15 +1,18 @@
 import {
   BarChart3,
+  BookOpenCheck,
   ChartNoAxesCombined,
   ClipboardList,
   Handshake,
   LayoutDashboard,
-  MessageSquarePlus,
+  Megaphone,
+  NotebookPen,
   UserCircle2,
   type LucideIcon,
 } from "lucide-react";
 
 import type { UserRole } from "@/lib/domain";
+import { canViewOperationalReports } from "@/lib/rbac";
 
 /**
  * Definición de una pestaña interna de sección. Coincide con la del componente
@@ -24,10 +27,9 @@ export type SectionTab = {
   match?: (pathname: string) => boolean;
 };
 
-export type SectionTabsPresetId = "dashboard" | "tickets" | "account";
+export type SectionTabsPresetId = "dashboard" | "tickets" | "operacion" | "account" | "conocimiento";
 
-const isTechOrManager = (role: UserRole) =>
-  role === "tecnico_campo" || role === "gestor_centro_control";
+const isTechOrManager = (role: UserRole) => canViewOperationalReports(role);
 
 /**
  * Pestañas de la sección "Dashboard". Englobamos tres pantallas que muestran
@@ -58,27 +60,20 @@ const dashboardTabs: SectionTab[] = [
 ];
 
 /**
- * Pestañas de la sección "Tickets". Tras promover la bandeja a entrada
- * propia del sidebar (junio 2026, vive en /bandeja), aqui quedan las dos
- * vistas que comparten "el equipo del turno":
+ * Pestañas de la sección "Tickets" (gestión del turno). La bandeja vive en
+ * /bandeja como entrada propia del sidebar, sin pestañas internas.
  *
- *   - Gestion       → /tickets — formulario "Nuevo ticket" + alertas y
- *                     tareas preventivas + auditoria.
- *   - Pase de turno → /handover — repaso del turno (M/T/N) al cerrar.
- *
- * La bandeja ya NO aparece como pestaña: el centro de control la abre
- * con 1 click desde el sidebar.
+ *   - Gestión        → /tickets — apunte express + formulario completo (desplegable).
+ *   - Pase de turno  → /handover — repaso al cerrar turno.
  */
 const ticketsTabs: SectionTab[] = [
   {
     label: "Gestión",
     href: "/tickets",
     icon: ClipboardList,
-    // Mantenemos /tickets/[id] aqui tambien por si el usuario navega al
-    // detalle desde otras secciones (mapa, busqueda...) — la pestana
-    // activa sigue siendo "Gestion" para conservar el contexto visual.
     match: (pathname) =>
-      pathname === "/tickets" || pathname.startsWith("/tickets/"),
+      pathname === "/tickets" ||
+      pathname.startsWith("/tickets/"),
   },
   {
     label: "Pase de turno",
@@ -95,7 +90,26 @@ const ticketsTabs: SectionTab[] = [
  */
 const accountTabs: SectionTab[] = [
   { label: "Cuenta", href: "/account", icon: UserCircle2 },
-  { label: "Feedback", href: "/feedback", icon: MessageSquarePlus },
+];
+
+/**
+ * Pestañas de la sección "Conocimiento": referencia permanente (KB),
+ * bitácora operativa entre turnos y novedades/avisos.
+ */
+const conocimientoTabs: SectionTab[] = [
+  {
+    label: "Base de conocimiento",
+    href: "/kb",
+    icon: BookOpenCheck,
+    match: (pathname) => pathname === "/kb" || pathname.startsWith("/kb/"),
+  },
+  {
+    label: "Bitácora",
+    href: "/bitacora",
+    icon: NotebookPen,
+    match: (pathname) => pathname === "/bitacora" || pathname.startsWith("/bitacora/"),
+  },
+  { label: "Novedades", href: "/novedades", icon: Megaphone },
 ];
 
 /**
@@ -108,8 +122,11 @@ export function resolveSectionTabsPreset(id: SectionTabsPresetId): SectionTab[] 
     case "dashboard":
       return dashboardTabs;
     case "tickets":
+    case "operacion":
       return ticketsTabs;
     case "account":
       return accountTabs;
+    case "conocimiento":
+      return conocimientoTabs;
   }
 }

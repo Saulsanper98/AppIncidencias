@@ -10,6 +10,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { FeedbackPageClient } from "@/components/feedback/FeedbackPageClient";
+import { KpiPill } from "@/components/ui/kpi-pill";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
@@ -56,8 +57,8 @@ export default async function FeedbackPage() {
               <MessageSquarePlus size={20} strokeWidth={1.7} className="text-[var(--color-accent)]" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="dashboard-pretitle">
-                <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+              <div className="ccmgc-eyebrow dashboard-pretitle">
+                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
                 CCMGC · Mi espacio
               </div>
               <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
@@ -74,44 +75,36 @@ export default async function FeedbackPage() {
           {/* KPIs reales: solo se muestran cuando el usuario ya tiene historial. */}
           {counts.total > 0 ? (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span
-                className="tickets-kpi-pill"
-                style={{ ["--pill-tone" as string]: "var(--color-accent)" }}
-              >
-                <Inbox size={12} strokeWidth={1.9} />
-                <span className="tickets-kpi-pill-value">{counts.total}</span>
-                <span className="tickets-kpi-pill-label">Mis envíos</span>
-              </span>
+              <KpiPill
+                label="Mis envíos"
+                value={counts.total}
+                tone="accent"
+                icon={<Inbox size={12} strokeWidth={1.9} />}
+              />
               {counts.enRevision > 0 ? (
-                <span
-                  className="tickets-kpi-pill"
-                  style={{ ["--pill-tone" as string]: "var(--color-warning)" }}
-                >
-                  <Clock size={12} strokeWidth={1.9} />
-                  <span className="tickets-kpi-pill-value">{counts.enRevision}</span>
-                  <span className="tickets-kpi-pill-label">En revisión</span>
-                </span>
+                <KpiPill
+                  label="En revisión"
+                  value={counts.enRevision}
+                  tone="warning"
+                  icon={<Clock size={12} strokeWidth={1.9} />}
+                />
               ) : null}
               {counts.implementados > 0 ? (
-                <span
-                  className="tickets-kpi-pill"
-                  style={{ ["--pill-tone" as string]: "var(--color-success)" }}
+                <KpiPill
+                  label="Implementados"
+                  value={counts.implementados}
+                  tone="success"
+                  icon={<CheckCircle2 size={12} strokeWidth={1.9} />}
                   title="Tus sugerencias que ya se han incorporado a la app"
-                >
-                  <CheckCircle2 size={12} strokeWidth={1.9} />
-                  <span className="tickets-kpi-pill-value">{counts.implementados}</span>
-                  <span className="tickets-kpi-pill-label">Implementados</span>
-                </span>
+                />
               ) : null}
               {counts.descartados > 0 ? (
-                <span
-                  className="tickets-kpi-pill"
-                  style={{ ["--pill-tone" as string]: "var(--color-text-3)" }}
-                >
-                  <XCircle size={12} strokeWidth={1.9} />
-                  <span className="tickets-kpi-pill-value">{counts.descartados}</span>
-                  <span className="tickets-kpi-pill-label">Descartados</span>
-                </span>
+                <KpiPill
+                  label="Descartados"
+                  value={counts.descartados}
+                  tone="neutral"
+                  icon={<XCircle size={12} strokeWidth={1.9} />}
+                />
               ) : null}
             </div>
           ) : (

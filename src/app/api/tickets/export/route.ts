@@ -5,36 +5,34 @@
  * busId, partCode, mine) y devuelve un Excel con:
  *  - Hoja "Tickets": fila por ticket con los campos clave.
  *  - Hoja "Filtros": resumen de qué filtros se aplicaron.
- *
- * Diseño:
- *  - Usa `exceljs`, igual que las plantillas de catálogo y el daily report.
- *  - `runtime = "nodejs"` (Edge no soporta buffer binario grande).
- *  - Tope de seguridad: 10.000 filas para evitar OOM si alguien intenta
- *    exportar la BD entera sin filtros.
  */
 
 import { NextResponse } from "next/server";
-import ExcelJS from "exceljs";
 import { Prisma } from "@prisma/client";
 
 import type { TicketPriority, TicketStatus } from "@/lib/domain";
 import { resolveRequestActor } from "@/lib/auth-context";
+import { formatCanary } from "@/lib/datetime/canary";
 import { prisma } from "@/lib/prisma";
-import { CANARY_TIMEZONE } from "@/lib/datetime/canary";
+import {
+  normalizeTicketPriorityFilter,
+  normalizeTicketStatusFilter,
+} from "@/lib/ticket-filters";
+import {
+  TICKET_PRIORITY_LABELS,
+  TICKET_STATUS_LABELS,
+} from "@/lib/ticket-labels";
+import {
+  buildTicketsExportWorkbook,
+  ticketsXlsxFilename,
+  type TicketExportRow,
+} from "@/lib/tickets/ticket-export-xlsx";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_ROWS = 10_000;
 
-/**
- * Rangos de fecha predefinidos (sugerencia de Javi). El usuario elige uno
- * desde la UI y el servidor lo traduce a `from`/`to` en zona horaria local.
- * `custom` requiere que la URL traiga `from`/`to` explícitos (ISO date).
- *
- * Filtramos por `createdAt` porque es el campo más natural cuando un técnico
- * dice "los partes de hoy" o "del último mes".
- */
 type DateRangePreset = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "lastMonth" | "custom";
 
 function startOfDay(d: Date): Date {
@@ -54,9 +52,6 @@ function resolveDateRange(
   fromRaw: string | null,
   toRaw: string | null,
 ): { from: Date | null; to: Date | null; preset: DateRangePreset | null; label: string } {
-  // Aceptamos ambos casings (`thisMonth` y `thismonth`) para ser tolerantes
-  // con el cliente; comparamos en lowercase pero devolvemos el preset
-  // canónico camelCase.
   const lower = (range ?? "").toLowerCase();
   const now = new Date();
   switch (lower) {
@@ -91,13 +86,12 @@ function resolveDateRange(
       const to = toRaw ? new Date(toRaw) : null;
       const fromOk = from && !Number.isNaN(from.getTime()) ? startOfDay(from) : null;
       const toOk = to && !Number.isNaN(to.getTime()) ? endOfDay(to) : null;
-      const label = [fromOk?.toISOString().slice(0, 10), toOk?.toISOString().slice(0, 10)]
-        .filter(Boolean)
-        .join(" → ") || "Personalizado";
+      const label =
+        [fromOk?.toISOString().slice(0, 10), toOk?.toISOString().slice(0, 10)].filter(Boolean).join(" → ") ||
+        "Personalizado";
       return { from: fromOk, to: toOk, preset: "custom", label };
     }
     default: {
-      // Sin range: respetamos from/to si llegan sueltos (compat).
       const from = fromRaw ? new Date(fromRaw) : null;
       const to = toRaw ? new Date(toRaw) : null;
       const fromOk = from && !Number.isNaN(from.getTime()) ? startOfDay(from) : null;
@@ -109,53 +103,10 @@ function resolveDateRange(
         from: fromOk,
         to: toOk,
         preset: "custom",
-        label: [fromOk?.toISOString().slice(0, 10), toOk?.toISOString().slice(0, 10)]
-          .filter(Boolean)
-          .join(" → "),
+        label: [fromOk?.toISOString().slice(0, 10), toOk?.toISOString().slice(0, 10)].filter(Boolean).join(" → "),
       };
     }
   }
-}
-
-function normalizeStatus(value: string | null): TicketStatus | "todos" {
-  if (!value || value === "todos") return "todos";
-  if (
-    value === "abierto" ||
-    value === "en_proceso" ||
-    value === "esperando_repuesto" ||
-    value === "resuelto"
-  ) {
-    return value;
-  }
-  return "todos";
-}
-
-function normalizePriority(value: string | null): TicketPriority | "todos" {
-  if (!value || value === "todos") return "todos";
-  if (value === "alta" || value === "media" || value === "baja") return value;
-  return "todos";
-}
-
-const STATUS_LABELS: Record<TicketStatus, string> = {
-  abierto: "Abierto",
-  en_proceso: "En proceso",
-  esperando_repuesto: "Esperando repuesto",
-  resuelto: "Resuelto",
-};
-
-const PRIORITY_LABELS: Record<TicketPriority, string> = {
-  alta: "Alta",
-  media: "Media",
-  baja: "Baja",
-};
-
-function formatCanary(date: Date | null): string {
-  if (!date) return "";
-  return new Intl.DateTimeFormat("es-ES", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: CANARY_TIMEZONE,
-  }).format(date);
 }
 
 export async function GET(request: Request) {
@@ -166,8 +117,8 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const status = normalizeStatus(searchParams.get("status"));
-    const priority = normalizePriority(searchParams.get("priority"));
+    const status = normalizeTicketStatusFilter(searchParams.get("status"), { includeBorrador: false });
+    const priority = normalizeTicketPriorityFilter(searchParams.get("priority"));
     const operator = searchParams.get("operator");
     const busId = searchParams.get("busId");
     const partCodeRaw = searchParams.get("partCode")?.trim() ?? "";
@@ -180,8 +131,6 @@ export async function GET(request: Request) {
       searchParams.get("to"),
     );
 
-    // Resuelve `partCode` igual que el GET: tickets que tengan una reserva
-    // de esa pieza (reservada o consumida).
     let partTicketIds: string[] | null = null;
     if (partCodeRaw) {
       const part = await prisma.sparePart.findUnique({
@@ -235,136 +184,69 @@ export async function GET(request: Request) {
       take: MAX_ROWS,
     });
 
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = "CCMGC Ticketing";
-    workbook.created = new Date();
-    const sheet = workbook.addWorksheet("Tickets", {
-      views: [{ state: "frozen", ySplit: 1 }],
+    const exportedAt = new Date();
+    const now = exportedAt;
+    const rows: TicketExportRow[] = tickets.map((t) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      status: t.status as TicketStatus,
+      priority: t.priority as TicketPriority,
+      operator: t.bus.operator,
+      busId: t.busId,
+      municipio: t.mapPlaceMunicipio?.trim() || t.bus.municipio,
+      tipo: t.tipo ?? "",
+      subtipo: t.subtipo ?? "",
+      subsubtipo: t.subsubtipo ?? "",
+      dominio: t.dominio ?? "",
+      nivelImpacto: t.nivelImpacto ?? "",
+      assetType: t.asset.type,
+      linea: t.lineaLabel ?? "",
+      servicio: t.servicioLabel ?? "",
+      serviceStopped: t.serviceStopped,
+      impactedLines: t.impactedLines,
+      conductor: t.conductorLabel ?? "",
+      assignedTo: t.assignedTo?.name ?? "",
+      slaDeadline: t.slaDeadline,
+      slaOverdue: t.status !== "resuelto" && t.slaDeadline.getTime() < now.getTime(),
+      incidentOccurredAt: t.incidentOccurredAt,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+      needsCompletion: t.needsCompletion,
+      lat: t.latitude ?? "",
+      lng: t.longitude ?? "",
+    }));
+
+    const workbook = await buildTicketsExportWorkbook(rows, {
+      statusLabel: status === "todos" ? "Todos" : TICKET_STATUS_LABELS[status],
+      priorityLabel: priority === "todos" ? "Todas" : TICKET_PRIORITY_LABELS[priority],
+      operator: operator && operator !== "todas" ? operator : "Todas",
+      busId: busId && busId !== "todas" ? busId : "Todos",
+      partCode: partCodeRaw || "—",
+      onlyMine: Boolean(onlyMine),
+      dateRangeLabel: dateRange.label,
+      dateFrom: dateRange.from ? formatCanary(dateRange.from, { dateStyle: "short", timeStyle: "short" }) : undefined,
+      dateTo: dateRange.to ? formatCanary(dateRange.to, { dateStyle: "short", timeStyle: "short" }) : undefined,
+      exportedBy: actor.displayName,
+      exportedAt,
+      totalRows: tickets.length,
+      maxRows: MAX_ROWS,
     });
-
-    sheet.columns = [
-      { header: "ID corto", key: "shortId", width: 12 },
-      { header: "ID completo", key: "id", width: 28 },
-      { header: "Título", key: "title", width: 50 },
-      { header: "Estado", key: "status", width: 18 },
-      { header: "Prioridad", key: "priority", width: 12 },
-      { header: "Operadora", key: "operator", width: 16 },
-      { header: "Bus", key: "busId", width: 12 },
-      { header: "Municipio", key: "municipio", width: 18 },
-      { header: "Tipo", key: "tipo", width: 16 },
-      { header: "Subtipo", key: "subtipo", width: 18 },
-      { header: "Subsubtipo", key: "subsubtipo", width: 22 },
-      { header: "Dominio", key: "dominio", width: 14 },
-      { header: "Nivel impacto", key: "nivelImpacto", width: 14 },
-      { header: "Línea", key: "linea", width: 12 },
-      { header: "Servicio", key: "servicio", width: 12 },
-      { header: "Conductor", key: "conductor", width: 18 },
-      { header: "Asignado a", key: "assignedTo", width: 22 },
-      { header: "SLA (deadline)", key: "slaDeadline", width: 20 },
-      { header: "SLA vencido", key: "slaOverdue", width: 12 },
-      { header: "Creado", key: "createdAt", width: 20 },
-      { header: "Actualizado", key: "updatedAt", width: 20 },
-      { header: "Latitud", key: "lat", width: 12 },
-      { header: "Longitud", key: "lng", width: 12 },
-    ];
-
-    const now = new Date();
-    for (const t of tickets) {
-      sheet.addRow({
-        shortId: t.id.slice(-8).toUpperCase(),
-        id: t.id,
-        title: t.title,
-        status: STATUS_LABELS[t.status as TicketStatus] ?? t.status,
-        priority: PRIORITY_LABELS[t.priority as TicketPriority] ?? t.priority,
-        operator: t.bus.operator,
-        busId: t.busId,
-        municipio: t.mapPlaceMunicipio?.trim() || t.bus.municipio,
-        tipo: t.tipo ?? "",
-        subtipo: t.subtipo ?? "",
-        subsubtipo: t.subsubtipo ?? "",
-        dominio: t.dominio ?? "",
-        nivelImpacto: t.nivelImpacto ?? "",
-        linea: t.lineaLabel ?? "",
-        servicio: t.servicioLabel ?? "",
-        conductor: t.conductorLabel ?? "",
-        assignedTo: t.assignedTo?.name ?? "",
-        slaDeadline: formatCanary(t.slaDeadline),
-        slaOverdue:
-          t.status !== "resuelto" && t.slaDeadline.getTime() < now.getTime() ? "Sí" : "",
-        createdAt: formatCanary(t.createdAt),
-        updatedAt: formatCanary(t.updatedAt),
-        lat: t.latitude ?? "",
-        lng: t.longitude ?? "",
-      });
-    }
-
-    // Cabecera en negrita + fila congelada.
-    sheet.getRow(1).font = { bold: true };
-    sheet.getRow(1).alignment = { vertical: "middle" };
-
-    // Estilos por prioridad (columna E = Prioridad).
-    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      if (rowNumber === 1) return;
-      const prio = String(row.getCell("priority").value ?? "").toLowerCase();
-      if (prio === "alta") {
-        row.getCell("priority").fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFFEE2E2" },
-        };
-      } else if (prio === "media") {
-        row.getCell("priority").fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFFFEDD5" },
-        };
-      }
-    });
-
-    // Hoja con resumen de filtros aplicados.
-    const filtros = workbook.addWorksheet("Filtros");
-    filtros.columns = [
-      { header: "Filtro", key: "k", width: 24 },
-      { header: "Valor", key: "v", width: 40 },
-    ];
-    filtros.getRow(1).font = { bold: true };
-    filtros.addRows([
-      { k: "Estado", v: status === "todos" ? "Todos" : STATUS_LABELS[status] },
-      { k: "Prioridad", v: priority === "todos" ? "Todas" : PRIORITY_LABELS[priority] },
-      { k: "Operadora", v: operator && operator !== "todas" ? operator : "Todas" },
-      { k: "Bus", v: busId && busId !== "todas" ? busId : "Todos" },
-      { k: "Código pieza", v: partCodeRaw || "—" },
-      { k: "Solo míos", v: onlyMine ? "Sí" : "No" },
-      { k: "Rango fechas", v: dateRange.label },
-      ...(dateRange.from ? [{ k: "Desde", v: formatCanary(dateRange.from) }] : []),
-      ...(dateRange.to ? [{ k: "Hasta", v: formatCanary(dateRange.to) }] : []),
-      { k: "Exportado por", v: actor.displayName },
-      { k: "Exportado en", v: formatCanary(new Date()) },
-      { k: "Total filas", v: tickets.length },
-      { k: "Limite máximo", v: MAX_ROWS },
-    ]);
 
     const buffer = await workbook.xlsx.writeBuffer();
+    const rangeSuffix = dateRange.preset ? `_${dateRange.preset.replace(/[^a-z0-9]+/gi, "")}` : "";
+    const filename = ticketsXlsxFilename(exportedAt, rangeSuffix);
 
-    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const rangeSuffix = dateRange.preset
-      ? `_${dateRange.preset.replace(/[^a-z0-9]+/gi, "")}`
-      : "";
-    const filename = `tickets_${datePart}${rangeSuffix}.xlsx`;
     return new NextResponse(buffer as ArrayBuffer, {
       status: 200,
       headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "no-store",
       },
     });
   } catch (error) {
     console.error("Error exportando tickets:", error);
-    return NextResponse.json(
-      { message: "No se pudo exportar la bandeja de tickets" },
-      { status: 500 },
-    );
+    return NextResponse.json({ message: "No se pudo exportar la bandeja de tickets" }, { status: 500 });
   }
 }

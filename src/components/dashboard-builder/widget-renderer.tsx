@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Ref } from "react";
-import { Copy, Download, EyeOff, RotateCcw, Wand2, X } from "lucide-react";
+import { Copy, Download, EyeOff, Pencil, RotateCcw, Wand2, X } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -39,9 +39,22 @@ import {
 } from "recharts";
 
 import { DashboardPreventiveAgenda } from "@/components/dashboard-preventive-agenda";
-import { InventoryCompactWidget } from "@/components/dashboard-embeds/inventory-compact-widget";
+import { KpiWidgetCard } from "@/components/dashboard-builder/kpi-widget-card";
+import { WidgetCardFrame } from "@/components/dashboard-builder/widget-card-frame";
 import { TicketsBandejaWidget } from "@/components/dashboard-embeds/tickets-bandeja-widget";
 import { CHART_THEME, formatMetric, type MetricFormat } from "@/lib/dashboard/chart-theme";
+import type { CustomDashboardData } from "@/lib/dashboard/dashboard-data-types";
+import { getDataSourceLabel as getRegistryLabel, isKpiDataSource } from "@/lib/dashboard/data-sources";
+import {
+  buildMultiSeriesData,
+  buildNumericValues,
+  getAnalyticsRows,
+  getEmptyStateBySource,
+  getEntryLabel,
+  isMultiSeriesSource,
+  isTicketDistributionSource,
+  QUICK_DATA_SOURCES,
+} from "@/lib/dashboard/widget-data-helpers";
 import { cn } from "@/lib/utils";
 import type { ChartType } from "@/lib/dashboard/chart-types";
 
@@ -54,7 +67,8 @@ type WidgetRendererProps = {
     size: string;
     config: string;
   };
-  data: DashboardData;
+  data: CustomDashboardData;
+  days?: number;
   isEditing?: boolean;
   onRemove?: (id: string) => void;
   onRequestEdit?: () => void;
@@ -73,12 +87,7 @@ type WidgetRendererProps = {
   chartHeight?: number;
 };
 
-type DashboardData = {
-  tickets_by_status: { name: string; value: number }[];
-  tickets_by_operator: { name: string; value: number }[];
-  tickets_by_priority: { name: string; value: number }[];
-  sla_compliance: { day: string; cumplido: number; incumplido: number }[];
-};
+type DashboardData = CustomDashboardData;
 
 type ManualConfig = {
   manualData?: { name: string; value: number }[];
@@ -110,38 +119,6 @@ type ExecutiveTooltipProps = {
   payload?: ReadonlyArray<ExecutiveTooltipPayloadItem>;
   label?: string | number;
 };
-
-function getEntryLabel(entry: DataEntry) {
-  return String((entry as { day?: string; name?: string }).day ?? (entry as { name?: string }).name ?? "");
-}
-
-function buildMultiSeriesData(sourceData: DataEntry[], dataSource: string) {
-  return sourceData.map((entry, index) => {
-    const baseLabel = getEntryLabel(entry);
-    const mainValue =
-      typeof entry.value === "number"
-        ? entry.value
-        : Number(dataSource === "sla_compliance" ? (entry as { cumplido?: number | string }).cumplido ?? 0 : entry.value ?? 0);
-    const secondaryValue =
-      dataSource === "sla_compliance"
-        ? Number((entry as { incumplido?: number | string }).incumplido ?? 0)
-        : Math.max(1, Math.round(mainValue * (0.35 + (index % 3) * 0.15)));
-    return {
-      name: baseLabel,
-      serieA: Math.max(0, mainValue),
-      serieB: Math.max(0, secondaryValue),
-      serieC: Math.max(0, Math.round((mainValue + secondaryValue) * 0.3)),
-    };
-  });
-}
-
-function buildNumericValues(sourceData: DataEntry[], dataSource: string) {
-  return sourceData.map((entry) => {
-    const raw = dataSource === "sla_compliance" ? (entry as { cumplido?: number | string }).cumplido ?? 0 : entry.value ?? 0;
-    const value = typeof raw === "number" ? raw : Number(raw);
-    return Number.isFinite(value) ? value : 0;
-  });
-}
 
 function renderLegendContent(payload: ReadonlyArray<LegendEntry>, isSmallWidget: boolean, paddingTop: string) {
   return (
@@ -198,21 +175,13 @@ function renderLegendContent(payload: ReadonlyArray<LegendEntry>, isSmallWidget:
 }
 
 function getDataSourceLabel(dataSource: string) {
-  if (dataSource === "tickets_by_status") return "Tickets por estado";
-  if (dataSource === "tickets_by_operator") return "Tickets por operadora";
-  if (dataSource === "tickets_by_priority") return "Tickets por prioridad";
-  if (dataSource === "sla_compliance") return "Cumplimiento SLA (7 días)";
-  if (dataSource === "manual") return "Datos manuales";
-  if (dataSource === "operation_links") return "Enlaces de operación";
-  if (dataSource === "embed_tickets") return "Bandeja de tickets (resumen)";
-  if (dataSource === "embed_inventory") return "Inventario (resumen)";
-  if (dataSource === "embed_map") return "Mapa embebido (descontinuado)";
-  if (dataSource === "embed_preventive") return "Agenda preventiva (resumen)";
-  return "Fuente personalizada";
+  return getRegistryLabel(dataSource);
 }
 
 function getDataSourceMicrocopy(dataSource: string, totalPoints: number) {
-  if (dataSource === "sla_compliance") return "Comparando cumplimiento diario (7 dias).";
+  if (dataSource === "sla_compliance") return "Resueltos en plazo vs fuera de plazo por día.";
+  if (dataSource === "tickets_trend") return "Entradas y cierres diarios en el periodo.";
+  if (dataSource === "backlog_by_status") return "Snapshot del backlog activo.";
   if (dataSource === "tickets_by_priority") return "Snapshot: criticidad de tickets en el conjunto actual.";
   if (dataSource === "tickets_by_operator") return "Snapshot: tickets agrupados por operadora.";
   if (dataSource === "tickets_by_status") return "Snapshot: tickets agrupados por estado.";
@@ -220,15 +189,6 @@ function getDataSourceMicrocopy(dataSource: string, totalPoints: number) {
   if (dataSource === "operation_links") return "Accesos al contenido habitual del panel.";
   if (dataSource.startsWith("embed_")) return "Vista embebida de la aplicación.";
   return `${totalPoints} puntos en visualizacion`;
-}
-
-/** Fuentes categóricas (conteos por dimensión), sin serie temporal: no aplican mensajes de MA ni “serie homogénea” genéricos. */
-function isTicketDistributionSource(dataSource: string) {
-  return (
-    dataSource === "tickets_by_status" ||
-    dataSource === "tickets_by_operator" ||
-    dataSource === "tickets_by_priority"
-  );
 }
 
 /** Pie/Sankey/Funnel suelen dejar `label` vacío; el nombre útil va en `payload[0].name` o en el objeto anidado. */
@@ -396,15 +356,6 @@ function MiniSparkline({
   );
 }
 
-const QUICK_DATA_SOURCES = [
-  { id: "tickets_by_status", label: "Estado" },
-  { id: "tickets_by_operator", label: "Operadora" },
-  { id: "tickets_by_priority", label: "Prioridad" },
-  { id: "sla_compliance", label: "SLA" },
-  { id: "manual", label: "Manual" },
-  { id: "operation_links", label: "Enlaces" },
-] as const;
-
 const OPERATION_QUICK_LINKS = [
   // /bandeja desde junio 2026 (la bandeja se promovio a entrada propia
   // del sidebar; /tickets queda para gestion y mantenimiento).
@@ -412,45 +363,8 @@ const OPERATION_QUICK_LINKS = [
   { href: "/tickets", label: "Nuevo ticket", hint: "Alta de incidencias y preventivo" },
   { href: "/dashboard", label: "Panel operativo", hint: "KPIs e incidencias activas" },
   { href: "/mapa", label: "Mapa de incidencias", hint: "Vista geográfica" },
-  { href: "/inventory", label: "Inventario", hint: "Repuestos y almacenes" },
+  { href: "/preventivo", label: "Preventivo", hint: "Buses anómalos y tareas" },
 ] as const;
-
-function getEmptyStateBySource(dataSource: string) {
-  if (dataSource === "tickets_by_status") {
-    return {
-      title: "Aun no hay tickets por estado para mostrar.",
-      action: "Revisa si hay tickets creados o amplía el rango temporal del dashboard.",
-    };
-  }
-  if (dataSource === "tickets_by_operator") {
-    return {
-      title: "No hay datos por operadora en este momento.",
-      action: "Valida la asignación de operadora en los tickets y vuelve a cargar.",
-    };
-  }
-  if (dataSource === "tickets_by_priority") {
-    return {
-      title: "No hay prioridades registradas en el periodo actual.",
-      action: "Comprueba que los tickets tienen prioridad calculada (impacto).",
-    };
-  }
-  if (dataSource === "sla_compliance") {
-    return {
-      title: "Todavía no hay datos de cumplimiento SLA.",
-      action: "Genera más actividad o cambia de fuente para ver métricas inmediatas.",
-    };
-  }
-  if (dataSource === "manual") {
-    return {
-      title: "No hay datos manuales configurados.",
-      action: "Añade un JSON válido en la configuración del widget para visualizarlo.",
-    };
-  }
-  return {
-    title: "Sin datos para la fuente seleccionada.",
-    action: "Cambia la fuente o ajusta la configuración del widget.",
-  };
-}
 
 function getChartEntryAnimationClass(chartType: string, size: string) {
   const isSmall = size === "small";
@@ -501,6 +415,7 @@ function getTransitionByWidgetSize(size: string) {
 export function WidgetRenderer({
   widget,
   data,
+  days,
   isEditing,
   onRemove,
   onRequestEdit,
@@ -543,7 +458,7 @@ export function WidgetRenderer({
     () =>
       widget.dataSource === "manual"
         ? (parsedConfig.manualData ?? [])
-        : (data[widget.dataSource as keyof DashboardData] ?? []),
+        : getAnalyticsRows(data, widget.dataSource),
     [widget.dataSource, parsedConfig.manualData, data],
   );
 
@@ -853,12 +768,17 @@ export function WidgetRenderer({
     );
   };
 
-  const embedCardClass = cn(
-    "flex h-full min-h-0 flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] relative",
-    cardPaddingClass,
-    isEditing && "ring-1 ring-[var(--color-accent)]/40",
-    isKeyboardFocused && "ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface)]",
-  );
+  const widgetInnerClass = cn("flex h-full min-h-0 flex-col", cardPaddingClass);
+
+  const shellProps = {
+    accentColor,
+    exportRootRef,
+    presentationMode,
+    isEditing,
+    isKeyboardFocused,
+    onMouseDown: () => onWidgetPaneMouseDown?.(),
+    "aria-label": widget.title,
+  } as const;
 
   const embedHeader = (
     <div className={cn("mb-3 shrink-0 border-b border-[var(--color-border)] pb-3 flex items-start justify-between", presentationMode && "pb-2")}>
@@ -881,49 +801,41 @@ export function WidgetRenderer({
     </div>
   );
 
+  if (widget.chartType === "kpi" || isKpiDataSource(widget.dataSource)) {
+    return (
+      <WidgetCardFrame {...shellProps}>
+        <div className={widgetInnerClass}>
+          {embedHeader}
+          <KpiWidgetCard
+            title={widget.title}
+            dataSource={widget.dataSource}
+            kpis={data.kpis}
+            accentColor={accentColor}
+            days={days ?? data.days}
+            presentationMode={presentationMode}
+          />
+        </div>
+      </WidgetCardFrame>
+    );
+  }
+
   if (widget.dataSource === "embed_tickets") {
     return (
-      <div
-        ref={exportRootRef}
-        role="region"
-        aria-label={widget.title}
-        onMouseDown={() => onWidgetPaneMouseDown?.()}
-        className={embedCardClass}
-      >
+      <WidgetCardFrame {...shellProps}>
+        <div className={widgetInnerClass}>
         {embedHeader}
         <div className="min-h-0 flex-1 overflow-auto [-webkit-overflow-scrolling:touch]">
           <TicketsBandejaWidget />
         </div>
-      </div>
-    );
-  }
-
-  if (widget.dataSource === "embed_inventory") {
-    return (
-      <div
-        ref={exportRootRef}
-        role="region"
-        aria-label={widget.title}
-        onMouseDown={() => onWidgetPaneMouseDown?.()}
-        className={embedCardClass}
-      >
-        {embedHeader}
-        <div className="min-h-0 flex-1 overflow-auto">
-          <InventoryCompactWidget />
         </div>
-      </div>
+      </WidgetCardFrame>
     );
   }
 
   if (widget.dataSource === "embed_map") {
     return (
-      <div
-        ref={exportRootRef}
-        role="region"
-        aria-label={widget.title}
-        onMouseDown={() => onWidgetPaneMouseDown?.()}
-        className={embedCardClass}
-      >
+      <WidgetCardFrame {...shellProps}>
+        <div className={widgetInnerClass}>
         {embedHeader}
         <div className="min-h-0 flex-1 space-y-3 p-2 text-sm leading-relaxed text-[var(--color-text-2)]">
           <p>
@@ -939,41 +851,28 @@ export function WidgetRenderer({
             </p>
           ) : null}
         </div>
-      </div>
+        </div>
+      </WidgetCardFrame>
     );
   }
 
   if (widget.dataSource === "embed_preventive") {
     return (
-      <div
-        ref={exportRootRef}
-        role="region"
-        aria-label={widget.title}
-        onMouseDown={() => onWidgetPaneMouseDown?.()}
-        className={embedCardClass}
-      >
+      <WidgetCardFrame {...shellProps}>
+        <div className={widgetInnerClass}>
         {embedHeader}
         <div className="max-h-[min(420px,55vh)] min-h-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]">
           <DashboardPreventiveAgenda />
         </div>
-      </div>
+        </div>
+      </WidgetCardFrame>
     );
   }
 
   if (widget.dataSource === "operation_links") {
     return (
-      <div
-        ref={exportRootRef}
-        role="region"
-        aria-label={widget.title}
-        onMouseDown={() => onWidgetPaneMouseDown?.()}
-        className={cn(
-          "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] relative",
-          cardPaddingClass,
-          isEditing && "ring-1 ring-[var(--color-accent)]/40",
-          isKeyboardFocused && "ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface)]",
-        )}
-      >
+      <WidgetCardFrame {...shellProps}>
+        <div className={widgetInnerClass}>
         <div className={cn("mb-3 border-b border-[var(--color-border)] pb-3 flex items-start justify-between", presentationMode && "pb-2")}>
           <div>
             <h3 className={cn("text-subheading", isEditing && "pl-5", presentationMode && "text-[15px]")}>{widget.title}</h3>
@@ -1004,26 +903,18 @@ export function WidgetRenderer({
             </li>
           ))}
         </ul>
-      </div>
+        </div>
+      </WidgetCardFrame>
     );
   }
 
   if (!sourceData || sourceData.length === 0) {
     return (
+      <WidgetCardFrame {...shellProps} aria-describedby={a11ySummaryId}>
+        <div className={widgetInnerClass}>
       <div
-        ref={exportRootRef}
-        role="region"
-        aria-label={widget.title}
-        aria-describedby={a11ySummaryId}
-        onMouseDown={() => onWidgetPaneMouseDown?.()}
-        className={cn(
-          "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] relative",
-          cardPaddingClass,
-          isEditing && "ring-1 ring-[var(--color-accent)]/40",
-          isKeyboardFocused && "ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface)]",
-        )}
+        className={cn("mb-3 border-b border-[var(--color-border)] pb-3 flex items-start justify-between", presentationMode && "pb-2")}
       >
-        <div className={cn("mb-3 border-b border-[var(--color-border)] pb-3 flex items-start justify-between", presentationMode && "pb-2")}>
           <div>
             <h3 className={cn("text-subheading", isEditing && "pl-5", presentationMode && "text-[15px]")}>{widget.title}</h3>
             <p className={cn("text-caption text-[var(--color-text-3)] mt-1", isEditing && "pl-5")}>{dataSourceLabel}</p>
@@ -1068,7 +959,8 @@ export function WidgetRenderer({
         <span id={a11ySummaryId} className="sr-only">
           {a11ySummaryText}
         </span>
-      </div>
+        </div>
+      </WidgetCardFrame>
     );
   }
 
@@ -1368,10 +1260,11 @@ export function WidgetRenderer({
     }
 
     if (widget.chartType === "composed") {
+      const composedData = isMultiSeriesSource(widget.dataSource) ? multiSeriesData : sourceData;
       return (
         <div style={{ width: "100%", height: responsiveChartHeight }}>
           <ResponsiveContainer width="100%" height={responsiveChartHeight}>
-            <ComposedChart data={sourceData} margin={{ top: 4, right: 8, left: -20, bottom: 4 }}>
+            <ComposedChart data={composedData} margin={{ top: 4, right: 8, left: -20, bottom: 4 }}>
               {showGrid ? <CartesianGrid strokeDasharray={CHART_THEME.grid.dash} stroke={CHART_THEME.grid.stroke} vertical={false} /> : null}
               <XAxis dataKey="name" tick={tickBySize} axisLine={false} tickLine={false} />
               <YAxis tick={tickBySize} tickFormatter={formatTick} axisLine={false} tickLine={false} />
@@ -1380,13 +1273,29 @@ export function WidgetRenderer({
                 contentStyle={CHART_THEME.tooltip.contentStyle}
                 labelStyle={CHART_THEME.tooltip.labelStyle}
               />
-              {compactLegend}
-              <Bar dataKey="value" fillOpacity={0.8} radius={[4, 4, 0, 0]}>
-                {sourceData.map((_, index) => (
-                  <Cell key={index} fill={entryColors[index]} />
-                ))}
-              </Bar>
-              <Line type={smoothLines ? "monotone" : "linear"} dataKey="value" stroke={accentColor} strokeWidth={2} dot={renderColoredDot} />
+              {isMultiSeriesSource(widget.dataSource) ? compactStackedLegend : compactLegend}
+              {isMultiSeriesSource(widget.dataSource) ? (
+                <>
+                  <Bar dataKey="serieA" name={stackedLabels.serieA} fill={palette[0]} fillOpacity={0.85} radius={[4, 4, 0, 0]} />
+                  <Line
+                    type={smoothLines ? "monotone" : "linear"}
+                    dataKey="serieB"
+                    name={stackedLabels.serieB}
+                    stroke={palette[1]}
+                    strokeWidth={2}
+                    dot={renderColoredDot}
+                  />
+                </>
+              ) : (
+                <>
+                  <Bar dataKey="value" fillOpacity={0.8} radius={[4, 4, 0, 0]}>
+                    {sourceData.map((_, index) => (
+                      <Cell key={index} fill={entryColors[index]} />
+                    ))}
+                  </Bar>
+                  <Line type={smoothLines ? "monotone" : "linear"} dataKey="value" stroke={accentColor} strokeWidth={2} dot={renderColoredDot} />
+                </>
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -1629,19 +1538,8 @@ export function WidgetRenderer({
   })();
 
   return (
-    <div
-      ref={exportRootRef}
-      role="region"
-      aria-label={widget.title}
-      aria-describedby={a11ySummaryId}
-      onMouseDown={() => onWidgetPaneMouseDown?.()}
-      className={cn(
-        "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] relative",
-        cardPaddingClass,
-        isEditing && "ring-1 ring-[var(--color-accent)]/40",
-        isKeyboardFocused && "ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface)]",
-      )}
-    >
+    <WidgetCardFrame {...shellProps} aria-describedby={a11ySummaryId}>
+      <div className={widgetInnerClass}>
       <div className={cn("mb-3 border-b border-[var(--color-border)] pb-3 flex items-start justify-between", presentationMode && "pb-2")}>
         <div>
           <h3 className={cn("text-subheading", isEditing && "pl-5", presentationMode && "text-[15px]")}>{widget.title}</h3>
@@ -1663,7 +1561,17 @@ export function WidgetRenderer({
         </div>
       </div>
       {isEditing && !presentationMode ? (
-        <div className="mb-2 flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-1">
+        <div className="mb-2 flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/90 p-1 backdrop-blur-sm">
+          {onRequestEdit ? (
+            <button
+              type="button"
+              onClick={onRequestEdit}
+              className="rounded-md p-1.5 text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+              aria-label="Editar widget"
+            >
+              <Pencil size={13} />
+            </button>
+          ) : null}
           <button
             onClick={() => onDuplicate?.(widget.id)}
             className="rounded-md p-1.5 text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
@@ -1719,6 +1627,7 @@ export function WidgetRenderer({
       <span id={a11ySummaryId} className="sr-only">
         {a11ySummaryText}
       </span>
-    </div>
+      </div>
+    </WidgetCardFrame>
   );
 }

@@ -17,9 +17,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Sparkles, X, Zap } from "lucide-react";
+import { Loader2, Sparkles, Zap } from "lucide-react";
 
 import type { TicketTemplate } from "@/components/tickets/TicketTemplatePicker";
+import { ticketTemplateScopeLabel } from "@/lib/ticket-templates";
 import { defaultForm } from "@/components/tickets/tickets-module-types";
 import type {
   CatalogBus,
@@ -28,8 +29,15 @@ import type {
 } from "@/components/tickets/tickets-module-types";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { ModalShell } from "@/components/ui/modal-shell";
 import type { NivelImpacto, TipologiaItem } from "@/lib/tipologia";
 import type { SessionUser } from "@/lib/domain";
+import {
+  collectOperatorPrefixes,
+  formatPrefixHint,
+  validateOptionalLineaLabel,
+} from "@/lib/catalog-id-format";
+import { resolveBusIdForForm } from "@/lib/ticket-bus-asset";
 import { cn } from "@/lib/utils";
 import { trackUxEvent } from "@/lib/ux-telemetry";
 
@@ -102,27 +110,22 @@ export function QuickTicketDialog({
     }
   }, [open, templates, loadingTemplates, canActorAssumeTicket]);
 
-  // Cierre con Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !saving) onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, saving, onClose]);
-
   /** Plantillas válidas para ticket rápido: tipología completa + título. */
   const usableTemplates = useMemo(() => {
     if (!templates) return [] as TicketTemplate[];
     return templates
       .filter((t) => t.tipo && t.subtipo && t.subsubtipo && t.title)
       .sort((a, b) => {
-        // Globales primero, luego personales; dentro de cada grupo por nombre.
         if (a.scope !== b.scope) return a.scope === "global" ? -1 : 1;
         return a.name.localeCompare(b.name, "es");
       });
   }, [templates]);
+
+  const templatesByScope = useMemo(() => {
+    const group = usableTemplates.filter((t) => t.scope === "global");
+    const personal = usableTemplates.filter((t) => t.scope !== "global");
+    return { group, personal };
+  }, [usableTemplates]);
 
   const selectedTemplate = useMemo(
     () => usableTemplates.find((t) => t.id === selectedTemplateId) ?? null,
@@ -141,6 +144,21 @@ export function QuickTicketDialog({
       ) ?? null
     );
   }, [selectedTemplate, tipologias]);
+
+  const catalogPrefixes = useMemo(
+    () => collectOperatorPrefixes([...catalog.map((bus) => bus.id), ...lineas]),
+    [catalog, lineas],
+  );
+  const trimmedBusId = busId.trim();
+  const busIdValidation = useMemo(
+    () => resolveBusIdForForm(trimmedBusId, catalog.map((bus) => bus.id), catalogPrefixes),
+    [trimmedBusId, catalog, catalogPrefixes],
+  );
+  const lineaValidation = useMemo(
+    () => validateOptionalLineaLabel(lineaLabel, lineas, catalogPrefixes),
+    [lineaLabel, lineas, catalogPrefixes],
+  );
+  const canSubmitBusLinea = busIdValidation.ok && lineaValidation.ok;
 
   // Si la plantilla precarga línea o servicio, prerrellenamos los inputs
   // (el usuario los puede sobreescribir si quiere).
@@ -163,6 +181,12 @@ export function QuickTicketDialog({
     setSubmitError(null);
   }, [canActorAssumeTicket]);
 
+  const handleClose = useCallback(() => {
+    if (saving) return;
+    reset();
+    onClose();
+  }, [saving, reset, onClose]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitError(null);
@@ -180,11 +204,19 @@ export function QuickTicketDialog({
       setSubmitError("Indica el bus.");
       return;
     }
+    if (!busIdValidation.ok) {
+      setSubmitError(busIdValidation.message);
+      return;
+    }
+    if (!lineaValidation.ok) {
+      setSubmitError(lineaValidation.message);
+      return;
+    }
 
     // Construimos el FormState completo combinando plantilla + variables.
     const form: FormState = {
-      ...defaultForm(busId.trim()),
-      busId: busId.trim(),
+      ...defaultForm(busIdValidation.normalized),
+      busId: busIdValidation.normalized,
       tipo: resolvedTipologia.tipo,
       subtipo: resolvedTipologia.subtipo,
       subsubtipo: resolvedTipologia.subsubtipo,
@@ -197,7 +229,7 @@ export function QuickTicketDialog({
       impactedLines: selectedTemplate.impactedLines ?? 1,
       serviceStopped: selectedTemplate.serviceStopped ?? false,
       comment: [selectedTemplate.commentInitial, extraNote].filter(Boolean).join("\n").trim(),
-      lineaLabel: lineaLabel.trim(),
+      lineaLabel: lineaValidation.normalized ?? "",
       servicioLabel: servicioLabel.trim(),
       conductorLabel: conductorLabel.trim(),
       mapLatitude: "",
@@ -246,50 +278,56 @@ export function QuickTicketDialog({
     });
   };
 
-  if (!open) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="quick-ticket-title"
-    >
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-lg overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
-      >
-        <header className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] bg-gradient-to-r from-[var(--color-accent-light)] to-transparent px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-accent)] text-white">
-              <Zap size={16} strokeWidth={1.8} aria-hidden />
-            </div>
-            <div>
-              <h2
-                id="quick-ticket-title"
-                className="text-[15px] font-semibold text-[var(--color-text-1)]"
-              >
-                Ticket rápido
-              </h2>
-              <p className="text-[11.5px] text-[var(--color-text-3)]">
-                Plantilla + datos variables. Atajo: <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1 font-mono text-[10px]">Q</kbd>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              reset();
-              onClose();
-            }}
-            className="rounded p-1 text-[var(--color-text-3)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]"
-            aria-label="Cerrar"
+    <ModalShell
+      open={open}
+      onClose={handleClose}
+      variant="sheet"
+      shake={Boolean(submitError)}
+      maxWidth="32rem"
+      title={
+        <span className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-accent)] text-white">
+            <Zap size={16} strokeWidth={1.8} aria-hidden />
+          </span>
+          <span>
+            <span className="block text-[15px] font-semibold">Ticket rápido</span>
+            <span className="block text-[11.5px] font-normal text-[var(--color-text-3)]">
+              Plantilla + datos variables. Atajo:{" "}
+              <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1 font-mono text-[10px]">
+                Q
+              </kbd>
+            </span>
+          </span>
+        </span>
+      }
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={handleClose} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            form="quick-ticket-form"
+            variant="primary"
+            size="sm"
+            disabled={saving || !selectedTemplate || !canSubmitBusLinea}
+            className={cn(createAsResolved && "bg-emerald-600 hover:bg-emerald-700")}
           >
-            <X size={16} aria-hidden />
-          </button>
-        </header>
-
-        <div className="max-h-[70vh] space-y-3 overflow-y-auto p-4">
+            {saving ? (
+              <span className="flex items-center gap-1">
+                <Loader2 size={12} className="animate-spin" aria-hidden /> Guardando…
+              </span>
+            ) : createAsResolved ? (
+              "Crear y cerrar"
+            ) : (
+              "Crear ticket"
+            )}
+          </Button>
+        </div>
+      }
+    >
+      <form id="quick-ticket-form" onSubmit={handleSubmit} className="max-h-[70vh] space-y-3 overflow-y-auto">
           {/* Plantilla */}
           <label className="block">
             <span className="flex items-center gap-1.5 text-[11.5px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
@@ -303,10 +341,13 @@ export function QuickTicketDialog({
             ) : templateError ? (
               <p className="mt-1 text-[12px] text-[var(--color-error)]">{templateError}</p>
             ) : usableTemplates.length === 0 ? (
-              <p className="mt-1 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 text-[12px] text-[var(--color-text-3)]">
-                Aún no hay plantillas reutilizables. Guarda una desde el formulario completo
-                marcando "Incluir variables operativas".
-              </p>
+              <div className="mt-1 space-y-2 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2.5 text-[12px] text-[var(--color-text-3)]">
+                <p>Aún no hay plantillas reutilizables para ticket rápido.</p>
+                <p className="text-[11px]">
+                  Crea la tuya en <span className="font-medium text-[var(--color-text-2)]">Nuevo ticket → Plantillas</span>,
+                  con tipología completa y título, marcando «Incluir variables operativas» si quieres usarla aquí.
+                </p>
+              </div>
             ) : (
               <>
                 <Select
@@ -315,14 +356,30 @@ export function QuickTicketDialog({
                   className="mt-1"
                 >
                   <option value="">— Elegir plantilla —</option>
-                  {usableTemplates.map((tpl) => (
-                    <option key={tpl.id} value={tpl.id}>
-                      {tpl.scope === "global" ? "🌐 " : "👤 "}
-                      {tpl.name}
-                      {tpl.category ? ` · ${tpl.category}` : ""}
-                    </option>
-                  ))}
+                  {templatesByScope.group.length > 0 ? (
+                    <optgroup label={ticketTemplateScopeLabel("global")}>
+                      {templatesByScope.group.map((tpl) => (
+                        <option key={tpl.id} value={tpl.id}>
+                          {tpl.name}
+                          {tpl.category ? ` · ${tpl.category}` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {templatesByScope.personal.length > 0 ? (
+                    <optgroup label={ticketTemplateScopeLabel("personal")}>
+                      {templatesByScope.personal.map((tpl) => (
+                        <option key={tpl.id} value={tpl.id}>
+                          {tpl.name}
+                          {tpl.category ? ` · ${tpl.category}` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
                 </Select>
+                <p className="mt-1.5 text-[10.5px] text-[var(--color-text-3)]">
+                  ¿Falta la tuya? Créala en Nuevo ticket → Plantillas de ticket → Guardar como plantilla.
+                </p>
                 {selectedTemplate ? (
                   <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10.5px]">
                     <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[var(--color-text-2)]">
@@ -359,11 +416,17 @@ export function QuickTicketDialog({
                     list="quick-ticket-bus-options"
                     value={busId}
                     onChange={(e) => setBusId(e.target.value)}
-                    placeholder="Teclea o selecciona…"
+                    placeholder={catalogPrefixes.length ? `Ej: ${formatPrefixHint(catalogPrefixes)}` : "Ej: GF-11018"}
                     autoComplete="off"
                     spellCheck={false}
                     required
+                    aria-invalid={trimmedBusId !== "" && !busIdValidation.ok}
                   />
+                  {trimmedBusId && !busIdValidation.ok ? (
+                    <p className="mt-1 text-[11px] text-[var(--color-danger)]" role="alert">
+                      {busIdValidation.message}
+                    </p>
+                  ) : null}
                   <datalist id="quick-ticket-bus-options">
                     {catalog.map((bus) => (
                       <option key={bus.id} value={bus.id}>
@@ -393,9 +456,15 @@ export function QuickTicketDialog({
                     list="quick-ticket-linea-options"
                     value={lineaLabel}
                     onChange={(e) => setLineaLabel(e.target.value)}
-                    placeholder="Ej: GL-1"
+                    placeholder={catalogPrefixes.length ? `Ej: ${formatPrefixHint(catalogPrefixes)}` : "Ej: GL-1"}
                     maxLength={120}
+                    aria-invalid={lineaLabel.trim() !== "" && !lineaValidation.ok}
                   />
+                  {lineaLabel.trim() && !lineaValidation.ok ? (
+                    <p className="mt-1 text-[11px] text-[var(--color-danger)]" role="alert">
+                      {lineaValidation.message}
+                    </p>
+                  ) : null}
                   <datalist id="quick-ticket-linea-options">
                     {lineas.map((linea) => (
                       <option key={linea} value={linea} />
@@ -471,40 +540,7 @@ export function QuickTicketDialog({
               {submitError}
             </p>
           ) : null}
-        </div>
-
-        <footer className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-4 py-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              reset();
-              onClose();
-            }}
-            disabled={saving}
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            disabled={saving || !selectedTemplate || !busId.trim()}
-            className={cn(createAsResolved && "bg-emerald-600 hover:bg-emerald-700")}
-          >
-            {saving ? (
-              <span className="flex items-center gap-1">
-                <Loader2 size={12} className="animate-spin" aria-hidden /> Guardando…
-              </span>
-            ) : createAsResolved ? (
-              "Crear y cerrar"
-            ) : (
-              "Crear ticket"
-            )}
-          </Button>
-        </footer>
       </form>
-    </div>
+    </ModalShell>
   );
 }

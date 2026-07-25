@@ -270,7 +270,7 @@ export async function buildDailyReportXlsx(
         { range: "D10:E13", label: "PRIORIDAD ALTA", value: String(totals.byPriority.alta), accent: PRIORITY_TEXT.alta },
         { range: "F10:G13", label: "PRIORIDAD MEDIA", value: String(totals.byPriority.media), accent: PRIORITY_TEXT.media },
         { range: "H10:I13", label: "PRIORIDAD BAJA", value: String(totals.byPriority.baja), accent: PRIORITY_TEXT.baja },
-        { range: "J10:K13", label: "VEH\u00cdCULOS ACTIVOS", value: String(meta.activeBusesCount ?? 0), accent: T.brandSoft },
+        { range: "J10:K13", label: "SERVICIOS ACTIVOS", value: String(meta.activeBusesCount ?? 0), accent: T.brandSoft },
       ]
     : [
         { range: "A10:E13", label: "TOTAL INCIDENCIAS", value: String(totals.total), accent: T.brand, emphasis: "primary" },
@@ -436,6 +436,7 @@ export async function buildDailyReportXlsx(
 
 function summarize(rows: DailyReportRow[]) {
   const byStatus: Record<TicketStatus, number> = {
+    borrador: 0,
     abierto: 0,
     en_proceso: 0,
     esperando_repuesto: 0,

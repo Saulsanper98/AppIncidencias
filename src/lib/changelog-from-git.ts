@@ -270,7 +270,6 @@ const URL_LABELS: Record<string, string> = {
   "/feedback": "Sugerencias y opiniones",
   "/bandeja": "Bandeja",
   "/tickets": "Tickets",
-  "/inventory": "Inventario",
   "/desvios": "Desvíos",
   "/mapa": "Mapa",
   "/kb": "Base de Conocimiento",

@@ -17,6 +17,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { toast } from "@/components/toast-host";
+import { DatePickerField } from "@/components/ui/date-picker-field";
+import { TimePickerField } from "@/components/ui/datetime-picker-field";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { canaryParts, dateInCanary } from "@/lib/datetime/canary";
 import type {
@@ -207,8 +209,8 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
               )}
             </div>
             <div className="min-w-0">
-              <div className="dashboard-pretitle">
-                <span className="dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+              <div className="ccmgc-eyebrow dashboard-pretitle">
+                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
                 CCMGC · {isEdit ? "Edición de desvío" : "Nuevo desvío"}
               </div>
               <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
@@ -235,7 +237,7 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
               type="button"
               onClick={() => void submit()}
               disabled={submitting}
-              className="login-primary-cta-premium inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-xs font-semibold text-white disabled:opacity-60"
+              className="ccmgc-primary-cta inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-xs font-semibold text-white disabled:opacity-60"
             >
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
               {isEdit ? "Guardar cambios" : "Crear desvío"}
@@ -306,17 +308,18 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
 
           <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:grid-cols-2">
             <Field label="Fecha inicio" error={fieldErrors.fecha_inicio} required>
-              <Input
-                type="date"
+              <DatePickerField
                 value={form.fecha_inicio}
-                onChange={(e) => setForm((p) => ({ ...p, fecha_inicio: e.target.value }))}
+                onChange={(fecha_inicio) => setForm((p) => ({ ...p, fecha_inicio }))}
+                ariaLabel="Fecha inicio"
+                placeholder="Elegir fecha…"
               />
             </Field>
             <Field label="Hora inicio">
-              <Input
-                type="time"
+              <TimePickerField
                 value={form.hora_inicio}
-                onChange={(e) => setForm((p) => ({ ...p, hora_inicio: e.target.value }))}
+                onChange={(hora_inicio) => setForm((p) => ({ ...p, hora_inicio }))}
+                ariaLabel="Hora inicio"
               />
             </Field>
 
@@ -341,21 +344,18 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
             ) : (
               <>
                 <Field label="Fecha fin" error={fieldErrors.fecha_fin} required>
-                  <Input
-                    type="date"
+                  <DatePickerField
                     value={form.fecha_fin}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, fecha_fin: e.target.value }))
-                    }
+                    onChange={(fecha_fin) => setForm((p) => ({ ...p, fecha_fin }))}
+                    ariaLabel="Fecha fin"
+                    placeholder="Elegir fecha…"
                   />
                 </Field>
                 <Field label="Hora fin">
-                  <Input
-                    type="time"
+                  <TimePickerField
                     value={form.hora_fin}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, hora_fin: e.target.value }))
-                    }
+                    onChange={(hora_fin) => setForm((p) => ({ ...p, hora_fin }))}
+                    ariaLabel="Hora fin"
                   />
                 </Field>
               </>
@@ -719,13 +719,7 @@ function ParadasEditor({
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-// Los <input type="date"> y <input type="time"> trabajan con strings naive
-// (sin TZ). Tanto al pintar (toDateInput/toTimeInput) como al recombinar
-// (combine), tratamos esos strings como HORA CANARIA literal: el operador
-// nunca tiene que pensar en zonas horarias. El navegador puede estar en otra
-// TZ; usando canaryParts/dateInCanary garantizamos que "22:00" mostrado y
-// guardado en el form se almacene como las 22:00 de Atlantic/Canary y vuelva
-// a salir como "22:00" tras un round-trip por el servidor.
+// Fecha y hora del formulario: strings naive (sin TZ) en hora canaria literal.
 
 function toDateInput(d: Date): string {
   const p = canaryParts(d);

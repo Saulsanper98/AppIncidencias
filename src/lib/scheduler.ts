@@ -41,7 +41,11 @@ import {
   sendUserEmail,
   ticketAbsoluteUrl,
 } from "@/lib/email-notifications";
+import { getEscalationRules } from "@/lib/escalation-config";
 import { prisma } from "@/lib/prisma";
+import { runDueTicketRecurrences } from "@/lib/ticket-recurrence";
+import { reassignTicketForSlaBreach, tryAutoAssignTicket } from "@/lib/ticket-auto-assign";
+import { publishTicketEvent } from "@/lib/tickets-events";
 
 type SchedulerStatus = {
   enabled: boolean;
@@ -54,6 +58,8 @@ type SchedulerStatus = {
   ticksTotal: number;
   ticketsEscalated: number;
   ticketsSlaWarned: number;
+  ticketsAutoAssigned: number;
+  ticketsSlaBreached: number;
 };
 
 type RuleConfig = {
@@ -122,6 +128,8 @@ class Scheduler {
   private ticksTotal = 0;
   private ticketsEscalated = 0;
   private ticketsSlaWarned = 0;
+  private ticketsAutoAssigned = 0;
+  private ticketsSlaBreached = 0;
   private rules: RuleConfig = DEFAULT_RULES;
 
   status(): SchedulerStatus {
@@ -136,6 +144,8 @@ class Scheduler {
       ticksTotal: this.ticksTotal,
       ticketsEscalated: this.ticketsEscalated,
       ticketsSlaWarned: this.ticketsSlaWarned,
+      ticketsAutoAssigned: this.ticketsAutoAssigned,
+      ticketsSlaBreached: this.ticketsSlaBreached,
     };
   }
 
@@ -173,7 +183,13 @@ class Scheduler {
     this.lastTickAt = new Date();
     try {
       await this.runDailyReport();
-      await this.runRules();
+      const escalation = await getEscalationRules();
+      this.rules = {
+        unassignedAgeMinutes: escalation.unassignedAgeMinutes,
+        slaWarnMinutes: escalation.slaWarnMinutes,
+      };
+      await this.runRules(escalation);
+      await runDueTicketRecurrences();
       this.lastError = null;
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error);
@@ -264,8 +280,25 @@ class Scheduler {
     console.log(`[scheduler] informe diario generado y enviado a ${recipients.length} buzón(es)`);
   }
 
-  private async runRules(): Promise<void> {
+  private async runRules(escalation: Awaited<ReturnType<typeof getEscalationRules>>): Promise<void> {
     const now = new Date();
+    const staleTicketHours = escalation.staleTicketHours;
+
+    // 0) Asignación automática de tickets sin dueño (creación, recurrencia, etc.)
+    if (escalation.autoAssignEnabled) {
+      const pendingAssign = await prisma.ticket.findMany({
+        where: {
+          assignedToUserId: null,
+          status: { in: ["abierto", "en_proceso", "esperando_repuesto"] satisfies TicketStatus[] },
+        },
+        select: { id: true },
+        take: 40,
+      });
+      for (const row of pendingAssign) {
+        const result = await tryAutoAssignTicket(row.id);
+        if (result.assigned) this.ticketsAutoAssigned++;
+      }
+    }
 
     // 1) Auto-escalación: tickets sin asignar, abiertos, con cierta edad
     //    según prioridad. Buscamos solo los que aún no han sido escalados
@@ -389,6 +422,171 @@ class Scheduler {
         },
       });
       this.ticketsSlaWarned++;
+    }
+
+    // 2b) SLA vencido: aviso al centro + reasignación si está habilitada.
+    const breached = await prisma.ticket.findMany({
+      where: {
+        status: { in: ["abierto", "en_proceso", "esperando_repuesto"] satisfies TicketStatus[] },
+        slaDeadline: { lt: now },
+      },
+      select: {
+        id: true,
+        title: true,
+        busId: true,
+        priority: true,
+        status: true,
+        slaDeadline: true,
+        assignedToUserId: true,
+      },
+      take: 50,
+    });
+
+    for (const ticket of breached) {
+      const previous = await prisma.auditEvent.findFirst({
+        where: { ticketId: ticket.id, action: "ticket.sla_breached" },
+        select: { id: true },
+      });
+      if (previous) continue;
+
+      const overdueMin = Math.round((now.getTime() - ticket.slaDeadline.getTime()) / 60_000);
+      const recipients = opsInboxEmails();
+      if (recipients.length > 0) {
+        const { subject, html } = renderTicketEmail({
+          headline: "SLA vencido",
+          body: `El SLA venció hace <b>${overdueMin} min</b>. Revisa o reasigna el ticket.`,
+          ticketId: ticket.id,
+          ticketTitle: ticket.title,
+          busId: ticket.busId,
+          status: ticket.status,
+          priority: ticket.priority,
+          actor: "Sistema (regla)",
+        });
+        await sendDirectEmail({
+          to: recipients,
+          subject,
+          html,
+          dedupeKey: `sla-breach:${ticket.id}`,
+        });
+      }
+
+      if (ticket.assignedToUserId) {
+        const { subject, html } = renderTicketEmail({
+          headline: "SLA vencido en tu ticket",
+          body: `El SLA de este ticket ha vencido (hace ${overdueMin} min).`,
+          ticketId: ticket.id,
+          ticketTitle: ticket.title,
+          busId: ticket.busId,
+          status: ticket.status,
+          priority: ticket.priority,
+        });
+        await sendUserEmail({
+          userIds: [ticket.assignedToUserId],
+          subject,
+          html,
+          dedupeKey: `sla-breach-assignee:${ticket.id}`,
+        });
+      }
+
+      await prisma.auditEvent.create({
+        data: {
+          ticketId: ticket.id,
+          action: "ticket.sla_breached",
+          detail: `SLA vencido hace ${overdueMin} min`,
+        },
+      });
+      this.ticketsSlaBreached++;
+
+      if (escalation.slaReassignEnabled) {
+        const reassigned = await reassignTicketForSlaBreach(ticket.id, ticket.assignedToUserId);
+        if (reassigned.assigned) {
+          publishTicketEvent("ticket_updated", {
+            id: ticket.id,
+            busId: ticket.busId,
+            status: ticket.status,
+            priority: ticket.priority,
+            title: ticket.title,
+            assignedToUserId: reassigned.userId,
+            assignedToUserName: reassigned.userName,
+            by: "Sistema (SLA)",
+          });
+        }
+      }
+    }
+
+    // 3) Tickets sin actualizar > N horas: aviso al centro de control.
+    const staleBefore = new Date(now.getTime() - staleTicketHours * 60 * 60 * 1000);
+    const staleTickets = await prisma.ticket.findMany({
+      where: {
+        status: { in: ["abierto", "en_proceso", "esperando_repuesto"] satisfies TicketStatus[] },
+        updatedAt: { lte: staleBefore },
+      },
+      select: {
+        id: true,
+        title: true,
+        busId: true,
+        priority: true,
+        status: true,
+        updatedAt: true,
+        assignedToUserId: true,
+      },
+      take: 30,
+    });
+
+    for (const ticket of staleTickets) {
+      const previous = await prisma.auditEvent.findFirst({
+        where: { ticketId: ticket.id, action: "ticket.stale_warned" },
+        select: { id: true },
+      });
+      if (previous) continue;
+
+      const hoursStale = Math.round((now.getTime() - ticket.updatedAt.getTime()) / 3_600_000);
+      const recipients = opsInboxEmails();
+      if (recipients.length > 0) {
+        const { subject, html } = renderTicketEmail({
+          headline: "Ticket sin actualizar",
+          body: `El ticket lleva <b>${hoursStale} h</b> sin cambios (umbral ${staleTicketHours} h). Revisa si sigue vigente o ciérralo.`,
+          ticketId: ticket.id,
+          ticketTitle: ticket.title,
+          busId: ticket.busId,
+          status: ticket.status,
+          priority: ticket.priority,
+          actor: "Sistema (regla)",
+        });
+        await sendDirectEmail({
+          to: recipients,
+          subject,
+          html,
+          dedupeKey: `stale:${ticket.id}`,
+        });
+      }
+
+      if (ticket.assignedToUserId) {
+        const { subject, html } = renderTicketEmail({
+          headline: "Tu ticket lleva mucho sin movimiento",
+          body: `Han pasado <b>${hoursStale} h</b> desde la última actualización. ¿Necesitas ayuda o puedes cerrarlo?`,
+          ticketId: ticket.id,
+          ticketTitle: ticket.title,
+          busId: ticket.busId,
+          status: ticket.status,
+          priority: ticket.priority,
+          actor: "Sistema (regla)",
+        });
+        await sendUserEmail({
+          userIds: [ticket.assignedToUserId],
+          subject,
+          html,
+          dedupeKey: `stale-assignee:${ticket.id}`,
+        });
+      }
+
+      await prisma.auditEvent.create({
+        data: {
+          ticketId: ticket.id,
+          action: "ticket.stale_warned",
+          detail: `Sin actualizar ${hoursStale}h (umbral ${staleTicketHours}h)`,
+        },
+      });
     }
   }
 }

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Informe tipología CCMGC — Manual vs aplicación</title>
+  <style>
+    @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      color: #1a1a2e;
+      max-width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    .cover {
+      page-break-after: always;
+      min-height: 240mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 12mm 0;
+    }
+    .cover-kicker {
+      font-size: 9pt;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 8mm;
+    }
+    .cover h1 {
+      font-size: 22pt;
+      line-height: 1.15;
+      margin: 0 0 6mm;
+      color: #0f172a;
+    }
+    .cover-meta {
+      margin-top: 10mm;
+      font-size: 10pt;
+      color: #475569;
+    }
+    .cover-meta p { margin: 2mm 0; }
+    .badge {
+      display: inline-block;
+      margin-top: 8mm;
+      padding: 2mm 4mm;
+      border-radius: 4px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 9pt;
+      font-weight: 600;
+    }
+    h2 {
+      font-size: 13pt;
+      color: #0f172a;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 2mm;
+      margin: 8mm 0 4mm;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11pt;
+      color: #334155;
+      margin: 5mm 0 2mm;
+      page-break-after: avoid;
+    }
+    p { margin: 2mm 0 3mm; }
+    ul { margin: 2mm 0 4mm; padding-left: 5mm; }
+    li { margin-bottom: 1.5mm; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 3mm 0 5mm;
+      font-size: 9.5pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 2.5mm 3mm;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .summary-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-left: 3px solid #2563eb;
+      padding: 4mm 5mm;
+      margin: 4mm 0 6mm;
+      page-break-inside: avoid;
+    }
+    .summary-box strong { color: #0f172a; }
+    .footer-note {
+      margin-top: 10mm;
+      padding-top: 4mm;
+      border-top: 1px solid #e2e8f0;
+      font-size: 8.5pt;
+      color: #64748b;
+      font-style: italic;
+    }
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="cover-kicker">Centro de Control de Movilidad de Gran Canaria</div>
+    <h1>Informe de alineación:<br />Tipología operativa — Manual vs aplicación</h1>
+    <p style="font-size: 11pt; color: #475569; max-width: 140mm;">
+      Comparativa entre la clasificación técnica del procedimiento
+      <strong>CCMGC-PRO-OPS-INC-2026-V1</strong> (sección 3.6) y el catálogo implementado
+      en la aplicación de incidencias.
+    </p>
+    <div class="cover-meta">
+      <p><strong>Documento de referencia:</strong> CCMGC-PRO-OPS-INC-2026-V1 · § 3.6</p>
+      <p><strong>Sistema:</strong> AppIncidencias (CCMGC Ticketing)</p>
+      <p><strong>Fuente en código:</strong> <code>src/lib/tipologia.ts</code></p>
+      <p><strong>Fecha del informe:</strong> 23 de junio de 2026</p>
+      <p><strong>Alcance:</strong> Análisis descriptivo — sin cambios aplicados</p>
+    </div>
+    <span class="badge">Documento para entrega</span>
+  </section>
+
+  <h2>1. Resumen ejecutivo</h2>
+  <div class="summary-box">
+    <p>
+      La tipología del manual y la de la aplicación <strong>comparten la misma estructura de alto nivel</strong>
+      (nueve dominios: Estado General, Comunicaciones, Localización, Billetaje, Planificación, Operativa,
+      Desvíos, Impresión y Genérica).
+    </p>
+    <p>
+      <strong>No coinciden al 100 %.</strong> Hay entradas faltantes, clasificaciones mal ubicadas,
+      diferencias de nomenclatura y entradas propias de la app que no figuran en el manual.
+    </p>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Indicador</th><th>Manual (aprox.)</th><th>Aplicación</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Hojas terminales (subsubtipo)</td><td>~52</td><td>59</td></tr>
+      <tr><td>Coincidencias claras</td><td>—</td><td>~35–38</td></tr>
+      <tr><td>Entradas faltantes</td><td>~17</td><td>—</td></tr>
+      <tr><td>Mal ubicadas en la app</td><td>—</td><td>~5</td></tr>
+      <tr><td>Solo en la app</td><td>—</td><td>~6</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Conclusión:</strong> La base es la misma taxonomía del manual, pero no está sincronizada con la versión 2026 del procedimiento.</p>
+
+  <h2>2. Correspondencia por dominio</h2>
+  <table>
+    <thead>
+      <tr><th>Dominio (manual)</th><th>En la aplicación</th><th>Estado</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>3.6.1 Estado General</td><td>Estado general</td><td>Parcial</td></tr>
+      <tr><td>3.6.2 Comunicaciones</td><td>Comunicaciones</td><td>Muy alineado</td></tr>
+      <tr><td>3.6.3 Localización</td><td>Localizacion</td><td>Parcial</td></tr>
+      <tr><td>3.6.4 Billetaje</td><td>Billetaje</td><td>Casi completo</td></tr>
+      <tr><td>3.6.5 Planificación</td><td>Planificacion</td><td>Incompleto</td></tr>
+      <tr><td>3.6.6 Operativa</td><td>Operativa</td><td>Muy incompleto / mal ubicado</td></tr>
+      <tr><td>3.6.7 Desvíos</td><td>Desvios</td><td>Parcial</td></tr>
+      <tr><td>3.6.8 Impresión</td><td>Impresion</td><td>Incompleto</td></tr>
+      <tr><td>3.6.9 Genérica</td><td>Generica</td><td>Correcto</td></tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <h2>3. Entradas faltantes en la aplicación</h2>
+
+  <h3>3.1 Estado General</h3>
+  <ul><li>Bloqueo (Reset / bloqueo)</li></ul>
+
+  <h3>3.2 Localización</h3>
+  <ul><li>Avería cuentakilómetros (Informativo)</li></ul>
+
+  <h3>3.3 Planificación</h3>
+  <ul>
+    <li>Viaje no registrado</li>
+    <li>Servicio desconocido (en manual: Planificación; en app: Operativa)</li>
+    <li>Fleco/Refuerzo</li>
+    <li>Servicio no cargado (la app solo tiene «Servicio festivo no cargado»)</li>
+  </ul>
+
+  <h3>3.4 Operativa</h3>
+  <ul>
+    <li>Duda</li>
+    <li>Uso indebido, Secuencia operativa incorrecta, Encierro</li>
+    <li>Inicio en intensificación</li>
+    <li>Identificación incorrecta del conductor</li>
+    <li>Cambio manual (cambio manual de viaje)</li>
+  </ul>
+
+  <h3>3.5 Desvíos</h3>
+  <ul>
+    <li>Desvío sobrevenido</li>
+    <li>Activación no posible</li>
+  </ul>
+
+  <h3>3.6 Impresión</h3>
+  <ul>
+    <li>Atasco de papel</li>
+    <li>Cambio de rollo de papel</li>
+  </ul>
+
+  <h2>4. Entradas mal ubicadas o con nombre distinto</h2>
+  <table>
+    <thead>
+      <tr><th>En la aplicación</th><th>Ubicación actual</th><th>Según manual</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Hora adelantada / Hora atrasada</td><td>Estado general → Software</td><td>Operativa → Uso incorrecto</td></tr>
+      <tr><td>Inicio Sesion</td><td>Estado general → Software</td><td>Operativa → Inicio de sesión</td></tr>
+      <tr><td>Servicio desconocido</td><td>Operativa → Formación</td><td>Planificación → Incorrecta</td></tr>
+      <tr><td>Apagado abrupto</td><td>Operativa → Formación</td><td>Estado general → Apagado</td></tr>
+      <tr><td>Inicio prematuro</td><td>Operativa → Error operativo</td><td>Operativa → Inicio de sesión</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.1 Diferencias de nomenclatura</h3>
+  <ul>
+    <li>Acentos: Localizacion, Planificacion, Impresion, Generica (sin tilde en la app).</li>
+    <li>Subtipos: Reset/Bloqueo vs Reset / bloqueo; Incorrecto vs Incorrecta; Reset vs Resets.</li>
+    <li>Hojas: Error Tarea Pupitre vs Error en tarea (X); Componente actualizado vs Componente actualizado falla.</li>
+    <li>Impresión: Falta papel como Informativo; manual la agrupa bajo Estado del papel.</li>
+  </ul>
+
+  <h2>5. Entradas solo en la aplicación (no en el manual)</h2>
+  <ul>
+    <li>Reset GPS (Localización)</li>
+    <li>EMV operativa incorrecta (06) (Billetaje)</li>
+    <li>No abrir/cerrar puertas (Operativa)</li>
+    <li>Cambio automatico de linea / Impacto en localizacion (Desvíos)</li>
+    <li>Subtipo Formacion en Operativa</li>
+  </ul>
+
+  <div class="page-break"></div>
+
+  <h2>6. Detalle por apartado del manual</h2>
+
+  <h3>6.1 Estado General (3.6.1)</h3>
+  <p><strong>Coinciden:</strong> Sistema no comunica, Fallo en el encendido, Panel táctil no responde, Apagado, Apagado abrupto, Visor apagado, Reset, Reset forzado, Reset no controlado, Error Tarea Pupitre, Actualización de componentes, Sin claves.</p>
+  <p><strong>Falta:</strong> Bloqueo. <strong>Sobran o están mal:</strong> Inicio Sesion, Hora adelantada, Hora atrasada.</p>
+
+  <h3>6.2 Comunicaciones (3.6.2)</h3>
+  <p><strong>Coinciden:</strong> Vehículo no comunica, Fonía sin comunicación, Alarma comunicaciones, Alarma paquetes, Paneles, Reset router, Reset WiFi. <strong>Alineación completa.</strong></p>
+
+  <h3>6.3 Localización (3.6.3)</h3>
+  <p><strong>Coinciden:</strong> Error GPS, Error antena GPS, No posiciona correctamente, Avería odómetro. <strong>Falta:</strong> Avería cuentakilómetros. <strong>Sobra:</strong> Reset GPS.</p>
+
+  <h3>6.4 Billetaje (3.6.4)</h3>
+  <p><strong>Coinciden:</strong> Validadora inactiva, Zona destino no válida, Sin operatividad EMV, Estado EMV, Validadora sin comunicaciones, Reinicio no solicitado, Tarjeta no detectada. <strong>Sobra:</strong> EMV operativa incorrecta (06).</p>
+
+  <h3>6.5 Planificación (3.6.5)</h3>
+  <p><strong>Coinciden:</strong> Servicio no asignado, Servicio equivocado, Viaje adelantado, Viaje atrasado, Cambio entre conductores, Servicio festivo no cargado.</p>
+  <p><strong>Faltan:</strong> Viaje no registrado, Servicio desconocido, Fleco/Refuerzo, Servicio no cargado.</p>
+
+  <h3>6.6 Operativa (3.6.6)</h3>
+  <p><strong>Coinciden parcialmente:</strong> Cambio manual indebido, Inicio prematuro.</p>
+  <p><strong>Faltan:</strong> Duda, Uso indebido, Secuencia operativa incorrecta, Encierro, Hora adelantada/atrasada, Inicio en intensificación, Identificación incorrecta del conductor, Cambio manual (viaje).</p>
+  <p><strong>Sobran o están mal:</strong> Formación/Servicio desconocido, Formación/Apagado abrupto, No abrir/cerrar puertas.</p>
+
+  <h3>6.7 Desvíos (3.6.7)</h3>
+  <p><strong>Coinciden:</strong> Desvío no cargado, Desvío fuera de horario. <strong>Faltan:</strong> Desvío sobrevenido, Activación no posible. <strong>Sobra:</strong> Cambio automático de línea.</p>
+
+  <h3>6.8 Impresión (3.6.8)</h3>
+  <p><strong>Coinciden:</strong> Error impresora, Falta papel (subtipo distinto). <strong>Faltan:</strong> Atasco de papel, Cambio de rollo de papel.</p>
+
+  <h3>6.9 Genérica (3.6.9)</h3>
+  <p><strong>Coincide:</strong> Incidencia genérica (catch-all).</p>
+
+  <h2>7. Recomendaciones (sin implementar)</h2>
+  <ol>
+    <li>Alinear <code>TIPOLOGIA_CSV</code> y base de datos con el manual 2026.</li>
+    <li>Definir política de transición para tickets históricos con tipología antigua.</li>
+    <li>Validar con operación si las entradas propias de la app deben conservarse como extensión CCMGC.</li>
+    <li>Unificar nomenclatura con el procedimiento oficial.</li>
+  </ol>
+
+  <h2>8. Anexo técnico</h2>
+  <ul>
+    <li>Archivo fuente: <code>src/lib/tipologia.ts</code></li>
+    <li>Persistencia: modelo <code>TipologiaEntry</code> (Prisma)</li>
+    <li>API administración: <code>/api/admin/tipologia</code></li>
+    <li>Seed: <code>ensureTipologiaSeeded()</code> en <code>src/lib/tipologia-store.ts</code></li>
+  </ul>
+
+  <p class="footer-note">
+    Documento generado a partir del análisis comparativo entre el manual operativo CCMGC-PRO-OPS-INC-2026-V1
+    y la tipología implementada en la aplicación de incidencias CCMGC Ticketing.
+  </p>
+</body>
+</html>

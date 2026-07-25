@@ -1,8 +1,11 @@
 "use client";
 
+import { AlertTriangle } from "lucide-react";
 import { useEffect } from "react";
 
 import { CcmgcLogo } from "@/components/ccmgc-logo";
+import { Button } from "@/components/ui/button";
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
 
 export default function GlobalError({
   error,
@@ -14,31 +17,34 @@ export default function GlobalError({
   useEffect(() => {
     console.error("CCMGC error boundary:", error);
   }, [error]);
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-[var(--color-bg)] px-4 py-12 text-center">
-      <CcmgcLogo className="h-12 w-auto opacity-90" />
-      <div>
-        <p className="text-eyebrow text-[var(--color-error)]">Error 500</p>
-        <h1 className="mt-2 text-[28px] font-semibold text-[var(--color-text-1)]">Algo no funciono</h1>
-        <p className="mt-2 max-w-md text-sm text-[var(--color-text-3)]">
-          Se ha producido un error inesperado. Se ha registrado el incidente; puedes intentarlo de nuevo o volver al
-          dashboard.
+    <div className="ccmgc-page-enter flex min-h-screen flex-col items-center justify-center gap-6 bg-[var(--color-bg)] px-4 py-12 text-center">
+      <div className="ccmgc-stagger-in ccmgc-stagger-in-1">
+        <CcmgcLogo className="mx-auto h-12 w-auto opacity-90" />
+      </div>
+      <div className="ccmgc-stagger-in ccmgc-stagger-in-2 ccmgc-shake max-w-md space-y-3">
+        <SectionEyebrow pulse dotColor="var(--color-error)">
+          Error inesperado
+        </SectionEyebrow>
+        <h1 className="dashboard-hero-title flex items-center justify-center gap-2 text-[28px]">
+          <AlertTriangle size={24} className="text-[var(--color-error)]" aria-hidden />
+          Algo no funcionó
+        </h1>
+        <p className="text-sm text-[var(--color-text-3)]">
+          Se ha producido un error inesperado. Puedes intentarlo de nuevo o volver al dashboard.
         </p>
         {error.digest ? (
-          <p className="mt-3 num-tabular text-[11px] text-[var(--color-text-3)]/70">ID: {error.digest}</p>
+          <p className="num-tabular text-[11px] text-[var(--color-text-3)]/70">ID: {error.digest}</p>
         ) : null}
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          onClick={reset}
-          className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] px-4 py-2 text-sm font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/20"
-        >
+      <div className="ccmgc-stagger-in ccmgc-stagger-in-3 flex flex-wrap items-center justify-center gap-2">
+        <Button type="button" variant="primary" onClick={reset}>
           Reintentar
-        </button>
+        </Button>
         <a
           href="/dashboard"
-          className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-2 text-sm font-medium text-[var(--color-text-2)] transition-colors hover:text-[var(--color-text-1)]"
+          className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-2)] transition-colors hover:text-[var(--color-text-1)]"
         >
           Ir al dashboard
         </a>

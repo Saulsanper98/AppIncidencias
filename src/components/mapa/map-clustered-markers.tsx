@@ -11,6 +11,7 @@ import { statusMapMarkerColorHex, type MapTicketFeature } from "@/lib/gran-canar
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
+  borrador: "Pendiente de completar",
   abierto: "Abierto",
   en_proceso: "En Proceso",
   esperando_repuesto: "Esperando repuesto",
@@ -18,6 +19,30 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
 };
 
 const PRIORITY_LABEL = { alta: "Alta", media: "Media", baja: "Baja" } as const;
+
+const PRIORITY_WEIGHT: Record<keyof typeof PRIORITY_LABEL, number> = {
+  alta: 3,
+  media: 2,
+  baja: 1,
+};
+
+function dominantClusterPriority(
+  sc: Supercluster,
+  clusterId: number,
+): keyof typeof PRIORITY_LABEL {
+  const leaves = sc.getLeaves(clusterId, Infinity);
+  let best: keyof typeof PRIORITY_LABEL = "baja";
+  let bestWeight = 0;
+  for (const leaf of leaves) {
+    const priority = (leaf.properties as MapTicketFeature).priority;
+    const weight = PRIORITY_WEIGHT[priority] ?? 1;
+    if (weight > bestWeight) {
+      bestWeight = weight;
+      best = priority;
+    }
+  }
+  return best;
+}
 
 type ClusterOrPoint = Supercluster.ClusterFeature<Supercluster.AnyProps> | Supercluster.PointFeature<Supercluster.AnyProps>;
 
@@ -102,9 +127,15 @@ export function MapClusteredMarkers({
         const props = item.properties as MapTicketFeature & { cluster?: boolean; point_count?: number };
         if (props.cluster) {
           const count = props.point_count ?? 0;
+          const sc = indexRef.current;
+          const clusterId = Number(item.id);
+          const priority =
+            sc && Number.isFinite(clusterId)
+              ? dominantClusterPriority(sc, clusterId)
+              : "media";
           const icon = L.divIcon({
             className: "ccmgc-map-cluster-icon",
-            html: `<div class="ccmgc-map-cluster-inner">${count}</div>`,
+            html: `<div class="ccmgc-map-cluster-inner ccmgc-map-cluster-inner--${priority}">${count}</div>`,
             iconSize: [36, 36],
             iconAnchor: [18, 18],
           });

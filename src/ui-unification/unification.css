@@ -1,0 +1,75 @@
+/**
+ * Estilos de la vista previa UI unificada.
+ * Solo aplican con <html data-ui-unification="1">.
+ * Borrar este fichero junto con src/ui-unification/ para revertir.
+ */
+
+[data-ui-unification] {
+  --uiu-type-eyebrow: 10px;
+  --uiu-type-caption: 11px;
+  --uiu-type-body: 13px;
+  --uiu-type-title: 15px;
+  --uiu-type-hero: 22px;
+}
+
+[data-ui-unification] .uiu-type-caption {
+  font-size: var(--uiu-type-caption);
+  line-height: 1.35;
+}
+
+[data-ui-unification] .uiu-type-body {
+  font-size: var(--uiu-type-body);
+  line-height: 1.45;
+}
+
+[data-ui-unification] .uiu-page-hero {
+  background: linear-gradient(
+    135deg,
+    var(--color-surface) 0%,
+    var(--color-surface) 55%,
+    color-mix(in oklab, var(--hero-accent-operacion) 9%, var(--color-surface)) 100%
+  );
+}
+
+[data-ui-unification] .uiu-page-hero--conocimiento {
+  background: linear-gradient(
+    135deg,
+    var(--color-surface) 0%,
+    var(--color-surface) 55%,
+    color-mix(in oklab, var(--hero-accent-conocimiento) 10%, var(--color-surface)) 100%
+  );
+}
+
+[data-ui-unification] .uiu-page-hero--handover {
+  background: linear-gradient(
+    135deg,
+    var(--color-surface) 0%,
+    var(--color-surface) 55%,
+    color-mix(in oklab, var(--hero-accent-conductor) 8%, var(--color-surface)) 100%
+  );
+}
+
+[data-ui-unification] .account-section {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-ui-unification] .filter-chip {
+  font-size: var(--uiu-type-caption);
+}
+
+[data-ui-unification] .uiu-preview-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-size: var(--uiu-type-caption);
+  font-weight: 600;
+  color: var(--color-text-2);
+  background: color-mix(in oklab, var(--color-accent) 12%, var(--color-surface-2));
+  border-bottom: 1px solid color-mix(in oklab, var(--color-accent) 22%, transparent);
+}

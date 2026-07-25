@@ -34,7 +34,7 @@ export default async function DesviosPage() {
   const role = parseUserRole(user.role);
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-4">
+    <div className="mx-auto min-w-0 max-w-full space-y-4 sm:max-w-[1400px]">
       <DesviosTable
         canCreate={canManageDesvios(role)}
         canManage={canManageDesvios(role)}

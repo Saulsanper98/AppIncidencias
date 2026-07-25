@@ -52,6 +52,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TableListSkeleton } from "@/components/ui/view-skeletons";
 import { cn } from "@/lib/utils";
 
 type Trend = { value: number; prev: number; delta_pct: number | null };
@@ -261,6 +265,18 @@ export function AnalyticsBoard() {
     if (roleFilter === "all") return data.ranking;
     return data.ranking.filter((r) => r.role === roleFilter);
   }, [data, roleFilter]);
+  const groupedClientErrors = useMemo(() => {
+    const out: Record<"alta" | "media" | "baja", Summary["errors"]> = {
+      alta: [],
+      media: [],
+      baja: [],
+    };
+    if (!data?.errors) return out;
+    for (const err of data.errors) {
+      out[inferErrorSeverity(err.message)].push(err);
+    }
+    return out;
+  }, [data?.errors]);
 
   return (
     <div className="space-y-6">
@@ -294,6 +310,9 @@ export function AnalyticsBoard() {
                 </span>
               </div>
               <div>
+                <SectionEyebrow pulse dotColor="var(--color-accent)" className="mb-1.5">
+                  CCMGC · Telemetría
+                </SectionEyebrow>
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-1)] sm:text-3xl">
                     Analítica de uso
@@ -340,44 +359,52 @@ export function AnalyticsBoard() {
           </div>
 
           {/* Fila de KPIs grandes inline (con tendencia vs periodo anterior) */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <HeroStat
-              label="Eventos capturados"
-              value={data?.totals.events ?? 0}
-              trend={data?.trends.events ?? null}
-              compareLabel={compareLabel}
-              Icon={Activity}
-              tone="sky"
-              loading={loading && !data}
-            />
-            <HeroStat
-              label="Sesiones únicas"
-              value={data?.totals.sessions ?? 0}
-              trend={data?.trends.sessions ?? null}
-              compareLabel={compareLabel}
-              Icon={Sparkles}
-              tone="violet"
-              loading={loading && !data}
-            />
-            <HeroStat
-              label="Tickets resueltos"
-              value={data?.trends.tickets_resolved.value ?? 0}
-              trend={data?.trends.tickets_resolved ?? null}
-              compareLabel={compareLabel}
-              Icon={CheckCircle2}
-              tone="emerald"
-              loading={loading && !data}
-            />
-            <HeroStat
-              label="Tickets creados"
-              value={data?.trends.tickets_created.value ?? 0}
-              trend={data?.trends.tickets_created ?? null}
-              compareLabel={compareLabel}
-              Icon={Flame}
-              tone="amber"
-              loading={loading && !data}
-            />
-          </div>
+          {loading && !data ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 rounded-xl" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <HeroStat
+                label="Eventos capturados"
+                value={data?.totals.events ?? 0}
+                trend={data?.trends.events ?? null}
+                compareLabel={compareLabel}
+                Icon={Activity}
+                tone="sky"
+                loading={loading && !data}
+              />
+              <HeroStat
+                label="Sesiones únicas"
+                value={data?.totals.sessions ?? 0}
+                trend={data?.trends.sessions ?? null}
+                compareLabel={compareLabel}
+                Icon={Sparkles}
+                tone="violet"
+                loading={loading && !data}
+              />
+              <HeroStat
+                label="Tickets resueltos"
+                value={data?.trends.tickets_resolved.value ?? 0}
+                trend={data?.trends.tickets_resolved ?? null}
+                compareLabel={compareLabel}
+                Icon={CheckCircle2}
+                tone="emerald"
+                loading={loading && !data}
+              />
+              <HeroStat
+                label="Tickets creados"
+                value={data?.trends.tickets_created.value ?? 0}
+                trend={data?.trends.tickets_created ?? null}
+                compareLabel={compareLabel}
+                Icon={Flame}
+                tone="amber"
+                loading={loading && !data}
+              />
+            </div>
+          )}
 
           {/* Mini sparkline de actividad diaria */}
           {data?.timeseries?.length ? (
@@ -409,9 +436,17 @@ export function AnalyticsBoard() {
         </div>
       ) : null}
 
+      {loading && !data ? (
+        <div className="space-y-4">
+          <Skeleton className="h-72 w-full rounded-xl" />
+          <TableListSkeleton rows={8} />
+        </div>
+      ) : (
+        <>
       {/* ───── FUNNELS + TIEMPO CREACIÓN ───── */}
       <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <Card
+          staggerIndex={1}
           title="Embudos de flujos clave"
           Icon={Filter}
           subtitle="Tasa de completitud y duración media"
@@ -430,6 +465,7 @@ export function AnalyticsBoard() {
         </Card>
 
         <Card
+          staggerIndex={2}
           title="Tickets creados por usuario"
           Icon={Hourglass}
           subtitle="Todos los creadores · mediana de tiempo en formulario cuando hay telemetría"
@@ -508,6 +544,7 @@ export function AnalyticsBoard() {
       {/* ───── TIEMPO POR SECCIÓN + POR TURNO ───── */}
       <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <Card
+          staggerIndex={3}
           title="Tiempo de uso por sección"
           Icon={Layers}
           subtitle="Top 10 paths por tiempo total acumulado"
@@ -563,7 +600,7 @@ export function AnalyticsBoard() {
           )}
         </Card>
 
-        <Card title="Actividad por turno" Icon={Clock} subtitle="Cuándo se trabaja más">
+        <Card staggerIndex={4} title="Actividad por turno" Icon={Clock} subtitle="Cuándo se trabaja más">
           {!data || data.by_shift.length === 0 ? (
             <EmptyHint text="Sin datos." />
           ) : (
@@ -630,6 +667,7 @@ export function AnalyticsBoard() {
 
       {/* ───── RANKING ───── */}
       <Card
+        staggerIndex={5}
         title="Ranking de productividad"
         Icon={Trophy}
         subtitle="Score = (creados × 0.5) + resueltos · ordenado de mayor a menor"
@@ -738,6 +776,7 @@ export function AnalyticsBoard() {
       {/* ───── BÚSQUEDAS + ERRORES ───── */}
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <Card
+          staggerIndex={6}
           title="Top búsquedas (Ctrl+K)"
           Icon={Search}
           subtitle="Qué buscan los usuarios en el buscador global"
@@ -781,35 +820,54 @@ export function AnalyticsBoard() {
         </Card>
 
         <Card
+          staggerIndex={7}
           title="Errores cliente"
           Icon={AlertOctagon}
-          subtitle="Agrupados por mensaje, recientes arriba"
+          subtitle="Agrupados por severidad y mensaje"
           tone="error"
         >
           {!data || data.errors.length === 0 ? (
             <EmptyHint text="Sin errores cliente. Bien hecho." accent="emerald" />
           ) : (
-            <ul className="space-y-1.5">
-              {data.errors.map((e, idx) => (
-                <li
-                  key={idx}
-                  className="rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/[0.05] px-3 py-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="line-clamp-2 text-[12px] font-medium text-[var(--color-text-1)]">
-                      {e.message}
-                    </span>
-                    <span className="shrink-0 rounded-full bg-[var(--color-error)]/25 px-2 py-0.5 font-mono text-[10.5px] font-bold tabular-nums text-[var(--color-error)]">
-                      {e.n}×
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[10px] text-[var(--color-text-3)]">
-                    <Clock size={9} className="-mt-0.5 mr-1 inline" />
-                    último: {timeAgo(new Date(e.last_at))}
-                  </p>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-2">
+              {(["alta", "media", "baja"] as const).map((severity) => {
+                const list = groupedClientErrors[severity];
+                if (list.length === 0) return null;
+                return (
+                  <section key={severity} className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/35 p-2">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
+                        Severidad {severity}
+                      </span>
+                      <Badge variant={severity === "alta" ? "error" : severity === "media" ? "warning" : "neutral"}>
+                        {list.length}
+                      </Badge>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {list.map((e, idx) => (
+                        <li
+                          key={`${severity}-${idx}`}
+                          className="rounded-lg border border-[var(--color-error)]/25 bg-[var(--color-error)]/[0.05] px-3 py-2"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="line-clamp-2 text-[12px] font-medium text-[var(--color-text-1)]">
+                              {e.message}
+                            </span>
+                            <span className="shrink-0 rounded-full bg-[var(--color-error)]/25 px-2 py-0.5 font-mono text-[10.5px] font-bold tabular-nums text-[var(--color-error)]">
+                              {e.n}×
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[10px] text-[var(--color-text-3)]">
+                            <Clock size={9} className="-mt-0.5 mr-1 inline" />
+                            último: {timeAgo(new Date(e.last_at))}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                );
+              })}
+            </div>
           )}
         </Card>
       </div>
@@ -817,6 +875,7 @@ export function AnalyticsBoard() {
       {/* ───── BLOQUE NUEVO: SLA / MTTR ───── */}
       <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <Card
+          staggerIndex={8}
           title="Cumplimiento de SLA"
           Icon={ShieldCheck}
           subtitle="Tickets resueltos a tiempo en el rango"
@@ -829,6 +888,7 @@ export function AnalyticsBoard() {
         </Card>
 
         <Card
+          staggerIndex={9}
           title="Tiempo de resolución (MTTR)"
           Icon={Timer}
           subtitle="Datos reales de tickets, no telemetría"
@@ -841,6 +901,7 @@ export function AnalyticsBoard() {
         </Card>
 
         <Card
+          staggerIndex={10}
           title="Incidencias por flota"
           Icon={Bus}
           subtitle="Drill-down completo: bus, línea u operador"
@@ -865,6 +926,7 @@ export function AnalyticsBoard() {
       {/* ───── BLOQUE NUEVO: TIEMPO POR ESTADO + RESPONSIVIDAD ───── */}
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <Card
+          staggerIndex={11}
           title="Tiempo medio en cada estado"
           Icon={Hourglass}
           subtitle="Dónde se atascan los tickets antes de pasar al siguiente estado"
@@ -877,6 +939,7 @@ export function AnalyticsBoard() {
         </Card>
 
         <Card
+          staggerIndex={12}
           title="Responsividad del equipo"
           Icon={Zap}
           subtitle="Tiempo desde que se asigna hasta el primer cambio de estado"
@@ -891,6 +954,7 @@ export function AnalyticsBoard() {
 
       {/* ───── BLOQUE NUEVO: HEATMAP DÍA × HORA ───── */}
       <Card
+        staggerIndex={13}
         title="Actividad por día y hora"
         Icon={CalendarDays}
         subtitle="Cuándo se usa la app — útil para detectar horas pico"
@@ -905,6 +969,7 @@ export function AnalyticsBoard() {
       {/* ───── BLOQUE NUEVO: PRIORIDAD + API ERRORS + ROLES ───── */}
       <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <Card
+          staggerIndex={14}
           title="Tickets por prioridad"
           Icon={Gauge}
           subtitle="Creados vs resueltos en el rango"
@@ -948,6 +1013,7 @@ export function AnalyticsBoard() {
         </Card>
 
         <Card
+          staggerIndex={15}
           title="Errores de API"
           Icon={AlertTriangle}
           subtitle="Endpoints con más fallos · capturados en cliente"
@@ -968,6 +1034,7 @@ export function AnalyticsBoard() {
                   /\/((?:c[a-z0-9]{8,})|(?:[0-9a-f]{8}-[0-9a-f-]+))(?=\/|$)/g,
                   (_, id: string) => `/${id.slice(0, 4)}…${id.slice(-3)}`,
                 );
+                const statusLabel = e.status === 0 ? "Red" : String(e.status);
                 return (
                 <li
                   key={`${e.path}-${e.status}-${i}`}
@@ -981,7 +1048,7 @@ export function AnalyticsBoard() {
                         : "bg-amber-500/20 text-amber-300",
                     )}
                   >
-                    {e.status}
+                    {statusLabel}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p
@@ -1002,6 +1069,7 @@ export function AnalyticsBoard() {
         </Card>
 
         <Card
+          staggerIndex={16}
           title="Eventos por rol"
           Icon={Users}
           subtitle="Quién usa más la app"
@@ -1036,6 +1104,8 @@ export function AnalyticsBoard() {
           )}
         </Card>
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1686,6 +1756,7 @@ function Card({
   children,
   className,
   tone,
+  staggerIndex,
 }: {
   title: string;
   subtitle?: string;
@@ -1693,6 +1764,7 @@ function Card({
   children: React.ReactNode;
   className?: string;
   tone?: "default" | "error";
+  staggerIndex?: number;
 }) {
   return (
     <section
@@ -1704,6 +1776,7 @@ function Card({
       // cazar el patron en cada panel interior.
       className={cn(
         "min-w-0 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5",
+        staggerIndex != null && `ccmgc-stagger-in ccmgc-stagger-in-${((staggerIndex - 1) % 6) + 1}`,
         className,
       )}
     >
@@ -2165,4 +2238,25 @@ function timeAgo(date: Date): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function inferErrorSeverity(message: string): "alta" | "media" | "baja" {
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes("fatal") ||
+    normalized.includes("panic") ||
+    normalized.includes("crash") ||
+    normalized.includes("out of memory")
+  ) {
+    return "alta";
+  }
+  if (
+    normalized.includes("timeout") ||
+    normalized.includes("network") ||
+    normalized.includes("fetch") ||
+    normalized.includes(" 500")
+  ) {
+    return "media";
+  }
+  return "baja";
 }

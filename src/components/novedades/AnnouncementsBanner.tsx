@@ -2,6 +2,7 @@
 
 import { AlertTriangle, ChevronDown, RefreshCw, Siren, X } from "lucide-react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 
 import { MarkdownView } from "@/components/kb/MarkdownView";
@@ -23,6 +24,7 @@ export function AnnouncementsBanner() {
   const [criticals, setCriticals] = useState<Announcement[]>([]);
   const [warnings, setWarnings] = useState<Announcement[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [dismissingIds, setDismissingIds] = useState<Set<string>>(() => new Set());
 
   const load = useCallback(async () => {
     try {
@@ -47,15 +49,24 @@ export function AnnouncementsBanner() {
   useSseEvent("announcement_deleted", () => void load());
 
   const dismiss = async (id: string) => {
-    // Mutación optimista: lo quitamos ya y avisamos al server.
-    setCriticals((prev) => prev.filter((a) => a.id !== id));
-    setWarnings((prev) => prev.filter((a) => a.id !== id));
-    try {
-      await fetch(`/api/announcements/${encodeURIComponent(id)}/read`, { method: "POST" });
-      window.dispatchEvent(new Event("ccmgc-announcements-changed"));
-    } catch {
-      void load();
-    }
+    setDismissingIds((prev) => new Set(prev).add(id));
+    window.setTimeout(() => {
+      setCriticals((prev) => prev.filter((a) => a.id !== id));
+      setWarnings((prev) => prev.filter((a) => a.id !== id));
+      setDismissingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      void (async () => {
+        try {
+          await fetch(`/api/announcements/${encodeURIComponent(id)}/read`, { method: "POST" });
+          window.dispatchEvent(new Event("ccmgc-announcements-changed"));
+        } catch {
+          void load();
+        }
+      })();
+    }, 250);
   };
 
   const primary = criticals[0];
@@ -65,9 +76,49 @@ export function AnnouncementsBanner() {
 
   if (!primary && !warningBanner) return null;
 
-  if (primary) return <CriticalBanner item={primary} extra={moreCriticals} expanded={expandedId === primary.id} onToggle={() => setExpandedId(expandedId === primary.id ? null : primary.id)} onDismiss={() => void dismiss(primary.id)} />;
-  if (warningBanner) return <WarningBanner item={warningBanner} extra={moreWarnings} expanded={expandedId === warningBanner.id} onToggle={() => setExpandedId(expandedId === warningBanner.id ? null : warningBanner.id)} onDismiss={() => void dismiss(warningBanner.id)} />;
-  return null;
+  return (
+    <AnimatePresence initial={false}>
+      {primary ? (
+        <motion.div
+          key={primary.id}
+          layout
+          initial={{ opacity: 1, height: "auto" }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.25, ease: "easeInOut" }}
+          className={dismissingIds.has(primary.id) ? "ccmgc-collapse-exit" : undefined}
+        >
+          <CriticalBanner
+            item={primary}
+            extra={moreCriticals}
+            expanded={expandedId === primary.id}
+            onToggle={() => setExpandedId(expandedId === primary.id ? null : primary.id)}
+            onDismiss={() => void dismiss(primary.id)}
+          />
+        </motion.div>
+      ) : warningBanner ? (
+        <motion.div
+          key={warningBanner.id}
+          layout
+          initial={{ opacity: 1, height: "auto" }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.25, ease: "easeInOut" }}
+          className={dismissingIds.has(warningBanner.id) ? "ccmgc-collapse-exit" : undefined}
+        >
+          <WarningBanner
+            item={warningBanner}
+            extra={moreWarnings}
+            expanded={expandedId === warningBanner.id}
+            onToggle={() =>
+              setExpandedId(expandedId === warningBanner.id ? null : warningBanner.id)
+            }
+            onDismiss={() => void dismiss(warningBanner.id)}
+          />
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
 }
 
 // ─── Banner CRÍTICO ────────────────────────────────────────────────────────
@@ -129,7 +180,7 @@ function CriticalBanner({
             <span className="inline-flex items-center gap-1">
               <span
                 aria-hidden
-                className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-white"
+                className="ccmgc-pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-white"
                 style={{ animationDuration: "1.4s" }}
               />
               Aviso crítico
@@ -218,7 +269,7 @@ function CriticalBanner({
       {/* Línea inferior con destello */}
       <div
         aria-hidden
-        className="pointer-events-none absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent"
+        className="announcement-critical-edge pointer-events-none absolute bottom-0 left-0 right-0 h-px"
       />
     </div>
   );

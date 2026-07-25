@@ -117,3 +117,57 @@
   border-radius: 0.35rem !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
 }
+
+/* ── Bandeja lateral del mapa ─────────────────────────────────────────── */
+.mapa-bandeja {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.mapa-bandeja__list {
+  scrollbar-gutter: stable;
+}
+
+.mapa-bandeja__list ul[role="listbox"] > li > button {
+  border-left-style: solid;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.mapa-bandeja__list ul[role="listbox"] > li + li > button {
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 65%, transparent);
+}
+
+.mapa-bandeja__list ul[role="listbox"] > li > button:hover {
+  background: color-mix(in srgb, var(--color-surface-2) 55%, transparent);
+}
+
+/* ── Panel de opciones del mapa (drawer derecho) ──────────────────────── */
+.mapa-options-overlay {
+  background: rgba(2, 8, 20, 0.72) !important;
+  backdrop-filter: blur(8px);
+}
+
+.ccmgc-drawer-panel--map-options {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--color-surface-2) 88%, #0a1628) 0%,
+    color-mix(in srgb, var(--color-surface) 92%, #060d18) 100%
+  );
+}
+
+.mapa-options-panel__head {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.mapa-options-section > summary {
+  user-select: none;
+}
+
+.mapa-options-section > summary:hover {
+  color: color-mix(in srgb, var(--color-accent) 85%, white);
+}
+
+/* ── Hero del mapa ─────────────────────────────────────────────────────── */
+.mapa-hero {
+  --hero-accent-operacion: var(--color-accent);
+  --hero-accent-conocimiento: #38bdf8;
+}

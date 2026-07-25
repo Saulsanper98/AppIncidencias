@@ -83,6 +83,3 @@ export function formatSlaOverdueLabel(minsLate: number): string {
   const rem = m % 60;
   return rem ? `${h} h ${rem} min` : `${h} h`;
 }
-
-// TODO: tests unitarios para calculatePriority — los casos edge con
-// nivelImpacto=Medio y serviceStopped=true no están cubiertos todavía.

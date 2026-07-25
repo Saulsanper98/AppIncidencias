@@ -38,6 +38,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { KpiPill } from "@/components/ui/kpi-pill";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type SugerenciaType = "idea" | "mejora";
 type SugerenciaStatus =
@@ -292,46 +294,55 @@ export function SugerenciasBoard({
       ? Math.round(((stats?.totalPlanificadas ?? 0) / totalIdeasMejoras) * 100)
       : 0;
 
+  const maxVotes = useMemo(
+    () => Math.max(1, ...items.map((it) => it.voteCount)),
+    [items],
+  );
+
   return (
     <div className="space-y-4">
       {/* ───── KPIs ───── */}
       {stats ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Kpi
+          <KpiPill
+            layout="stacked"
             label="Ideas"
             value={stats.totalIdeas}
-            icon={Lightbulb}
-            tone="amber"
-            hint="propuestas creativas"
-            progress={ideasPct}
+            tone="warning"
+            icon={<Lightbulb size={12} strokeWidth={2.2} />}
+            hint={`${ideasPct}% del total`}
+            animateValue
           />
-          <Kpi
+          <KpiPill
+            layout="stacked"
             label="Mejoras"
             value={stats.totalMejoras}
-            icon={TrendingUp}
-            tone="emerald"
-            hint="optimizaciones sugeridas"
-            progress={mejorasPct}
+            tone="success"
+            icon={<TrendingUp size={12} strokeWidth={2.2} />}
+            hint={`${mejorasPct}% del total`}
+            animateValue
           />
-          <Kpi
+          <KpiPill
+            layout="stacked"
             label="Planificadas"
             value={stats.totalPlanificadas}
-            icon={Sparkles}
             tone="violet"
-            hint="en cola de desarrollo"
-            progress={planificadasPct}
+            icon={<Sparkles size={12} strokeWidth={2.2} />}
+            hint={`${planificadasPct}% en cola`}
+            animateValue
           />
-          <Kpi
+          <KpiPill
+            layout="stacked"
             label="Implementadas"
             value={stats.totalImplementadas}
-            icon={CheckCircle2}
             tone="success"
+            icon={<CheckCircle2 size={12} strokeWidth={2.2} />}
             hint={
               totalIdeasMejoras > 0
-                ? `${implementadasPct}% del total entregado`
+                ? `${implementadasPct}% entregado`
                 : "ya en producción"
             }
-            progress={implementadasPct}
+            animateValue
           />
         </div>
       ) : null}
@@ -348,12 +359,12 @@ export function SugerenciasBoard({
                 type="button"
                 onClick={() => setFilter(opt.value)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all",
+                  "filter-chip gap-1.5 font-semibold",
                   active
                     ? isMine
                       ? "border-fuchsia-400 bg-gradient-to-br from-fuchsia-500 to-violet-600 text-white shadow-md shadow-fuchsia-500/20"
-                      : "border-violet-400 bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-md shadow-violet-500/20"
-                    : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-2)] hover:-translate-y-0.5 hover:border-violet-400/40 hover:text-[var(--color-text-1)]",
+                      : "filter-chip--active border-violet-400 bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-md shadow-violet-500/20"
+                    : undefined,
                 )}
               >
                 <opt.icon size={12} strokeWidth={2.2} />
@@ -471,6 +482,7 @@ export function SugerenciasBoard({
                     voting={votingId === item.id}
                     pop={justVotedId === item.id}
                     rank={rankByIdMap.get(item.id)}
+                    votePct={(item.voteCount / maxVotes) * 100}
                     isCurrentUser={
                       currentUserName != null && item.userName === currentUserName
                     }
@@ -493,78 +505,6 @@ export function SugerenciasBoard({
 }
 
 // ─── Subcomponentes ────────────────────────────────────────────────────────────
-
-function Kpi({
-  label,
-  value,
-  icon: Icon,
-  tone,
-  hint,
-  progress,
-}: {
-  label: string;
-  value: number;
-  icon: typeof Trophy;
-  tone: "amber" | "emerald" | "violet" | "success";
-  hint?: string;
-  progress?: number;
-}) {
-  const toneCls = {
-    amber: "from-amber-500/25 via-amber-500/5 to-transparent ring-amber-500/30 text-amber-300",
-    emerald:
-      "from-emerald-500/25 via-emerald-500/5 to-transparent ring-emerald-500/30 text-emerald-300",
-    violet:
-      "from-violet-500/25 via-violet-500/5 to-transparent ring-violet-500/30 text-violet-300",
-    success:
-      "from-[var(--color-success)]/30 via-[var(--color-success)]/5 to-transparent ring-[var(--color-success)]/30 text-[var(--color-success)]",
-  }[tone];
-
-  const barCls = {
-    amber: "bg-amber-500",
-    emerald: "bg-emerald-500",
-    violet: "bg-violet-500",
-    success: "bg-[var(--color-success)]",
-  }[tone];
-
-  return (
-    <div
-      className={cn(
-        "group relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br p-4 ring-1 ring-inset transition-all hover:-translate-y-0.5 hover:shadow-lg",
-        toneCls,
-      )}
-    >
-      {/* Glow decorativo */}
-      <div
-        className={cn(
-          "pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-30 blur-2xl transition-opacity group-hover:opacity-60",
-          barCls,
-        )}
-      />
-
-      <div className="relative flex items-center justify-between">
-        <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-widest opacity-90">
-          <Icon size={12} strokeWidth={2.4} />
-          {label}
-        </span>
-        <Icon size={20} strokeWidth={1.8} className="opacity-30" />
-      </div>
-      <p className="relative mt-2 font-mono text-3xl font-bold tabular-nums text-[var(--color-text-1)] sm:text-4xl">
-        {value.toLocaleString("es-ES")}
-      </p>
-      {hint ? (
-        <p className="relative mt-0.5 text-[10.5px] opacity-80">{hint}</p>
-      ) : null}
-      {progress != null ? (
-        <div className="relative mt-2.5 h-1.5 overflow-hidden rounded-full bg-black/35">
-          <div
-            className={cn("h-full rounded-full transition-all duration-700", barCls)}
-            style={{ width: `${Math.max(progress, 4)}%` }}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 const PODIUM_META = [
   {
@@ -762,6 +702,7 @@ function SugerenciaCard({
   voting,
   pop,
   rank,
+  votePct,
   isCurrentUser,
   onVote,
 }: {
@@ -769,6 +710,7 @@ function SugerenciaCard({
   voting: boolean;
   pop: boolean;
   rank: number | undefined;
+  votePct: number;
   isCurrentUser: boolean;
   onVote: () => void;
 }) {
@@ -937,6 +879,13 @@ function SugerenciaCard({
             </button>
           ) : null}
         </footer>
+        <div className="sugerencia-vote-bar mt-2">
+          <div
+            className="sugerencia-vote-bar-fill"
+            style={{ width: `${Math.max(votePct, item.voteCount > 0 ? 4 : 0)}%` }}
+            aria-hidden
+          />
+        </div>
       </div>
     </article>
   );
@@ -945,7 +894,7 @@ function SugerenciaCard({
 function HotBadge() {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-orange-500/25 to-red-500/25 px-2 py-0.5 text-[11px] font-bold uppercase tracking-widest text-orange-200 ring-1 ring-inset ring-orange-500/40">
-      <Flame size={9} strokeWidth={2.4} className="animate-pulse" />
+      <Flame size={9} strokeWidth={2.4} className="ccmgc-pulse-dot" />
       Hot
     </span>
   );
@@ -987,14 +936,7 @@ function SkeletonList() {
           key={i}
           className="relative h-[88px] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]"
         >
-          <div
-            className="absolute inset-0 animate-pulse"
-            style={{
-              background:
-                "linear-gradient(90deg, transparent 0%, rgba(168,85,247,0.06) 50%, transparent 100%)",
-              backgroundSize: "200% 100%",
-            }}
-          />
+          <Skeleton className="absolute inset-0 rounded-none" />
         </div>
       ))}
     </div>
