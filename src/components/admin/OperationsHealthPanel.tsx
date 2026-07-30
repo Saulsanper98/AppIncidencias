@@ -1,9 +1,10 @@
 "use client";
 
-import { Activity, AlertTriangle, Clock, Mail, RefreshCw, Server } from "lucide-react";
+import { AlertTriangle, Clock, Mail, RefreshCw, Server } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 type HealthPayload = {
@@ -72,7 +73,15 @@ export function OperationsHealthPanel() {
   }, [load]);
 
   if (loading && !data) {
-    return <p className="text-sm text-[var(--color-text-3)]">Cargando salud del sistema…</p>;
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-36 rounded-xl" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (error) {
@@ -93,18 +102,14 @@ export function OperationsHealthPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-1)]">
-          <Activity size={16} aria-hidden />
-          Salud del sistema
-        </h2>
+      <div className="flex items-center justify-end gap-2">
         <button
           type="button"
           onClick={() => void load()}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)]"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 px-3 py-1.5 text-[11px] font-medium text-[var(--color-text-2)] transition-colors hover:text-[var(--color-accent)]"
         >
           <RefreshCw size={12} aria-hidden />
-          Actualizar
+          Actualizar estado
         </button>
       </div>
 

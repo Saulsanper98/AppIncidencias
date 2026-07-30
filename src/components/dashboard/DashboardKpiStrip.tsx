@@ -23,6 +23,12 @@ export function getDashboardCriticalCounts(loading: boolean, kpis: KpisData | nu
   if (loading || !kpis) {
     return { slaVencidos: 0, altaPrioridad: 0 };
   }
+  if (kpis.slaVencidosCount != null && kpis.altaPrioridadCount != null) {
+    return {
+      slaVencidos: kpis.slaVencidosCount,
+      altaPrioridad: kpis.altaPrioridadCount,
+    };
+  }
   return {
     slaVencidos: kpis.incidenciasActivas.filter((t) => slaMinutesRemaining(t.slaDeadline) <= 0).length,
     altaPrioridad: kpis.incidenciasActivas.filter((t) => t.priority === "alta").length,

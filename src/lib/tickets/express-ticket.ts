@@ -25,16 +25,22 @@ export function parseIncidentOccurredAt(raw: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-export function buildExpressTicketFields(note: string, tipologia?: ExpressTipologiaFields | null) {
+export function buildExpressTicketFields(
+  note: string,
+  tipologia?: ExpressTipologiaFields | null,
+  options?: { priority?: TicketPriority; falloOrigen?: "maquina" | "conductor" | "externo" },
+) {
   const base = tipologia ?? getGenericTipologia();
   const description = note.trim();
   const title = titleFromExpressNote(description);
-  const priority: TicketPriority = calculatePriority({
-    assetType: "sae",
-    impactedLines: 1,
-    serviceStopped: false,
-    nivelImpacto: base.nivelImpacto,
-  });
+  const priority: TicketPriority =
+    options?.priority ??
+    calculatePriority({
+      assetType: "sae",
+      impactedLines: 1,
+      serviceStopped: false,
+      nivelImpacto: base.nivelImpacto,
+    });
 
   return {
     tipo: base.tipo,
@@ -47,6 +53,7 @@ export function buildExpressTicketFields(note: string, tipologia?: ExpressTipolo
     title,
     description,
     priority,
+    falloOrigen: options?.falloOrigen ?? "maquina",
     impactedLines: 1,
     serviceStopped: false,
   };

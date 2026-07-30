@@ -40,6 +40,8 @@ const expressSchema = z.object({
   incidentOccurredAt: z.string().trim().min(1, "Indica la hora de la incidencia"),
   mode: z.enum(["borrador", "resuelto"]),
   tipologia: expressTipologiaSchema.optional(),
+  priority: z.enum(["alta", "media", "baja"]).optional(),
+  falloOrigen: z.enum(["maquina", "conductor", "externo"]).optional().default("maquina"),
 });
 
 export async function POST(request: Request) {
@@ -61,7 +63,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const { busId: rawBusId, note, incidentOccurredAt: incidentRaw, mode, tipologia: tipologiaRaw } = parsed.data;
+    const {
+      busId: rawBusId,
+      note,
+      incidentOccurredAt: incidentRaw,
+      mode,
+      tipologia: tipologiaRaw,
+      priority: requestedPriority,
+      falloOrigen,
+    } = parsed.data;
 
     if (mode === "resuelto" && !canUpdateTicketStatus(actor.role, actor.isReadOnly)) {
       return NextResponse.json({ message: "No puedes cerrar tickets con este rol" }, { status: 403 });
@@ -105,7 +115,10 @@ export async function POST(request: Request) {
       };
     }
 
-    const fields = buildExpressTicketFields(note, tipologiaOverride);
+    const fields = buildExpressTicketFields(note, tipologiaOverride, {
+      priority: requestedPriority,
+      falloOrigen,
+    });
     const slaMinutes =
       asset.slaMinutes != null && asset.slaMinutes > 0
         ? asset.slaMinutes
@@ -143,6 +156,7 @@ export async function POST(request: Request) {
         description: fields.description,
         status: asResolved ? "resuelto" : "borrador",
         priority: fields.priority,
+        falloOrigen: fields.falloOrigen,
         slaDeadline: new Date(addMinutesIso(now, slaMinutes)),
         incidentOccurredAt: incidentAt,
         needsCompletion: true,

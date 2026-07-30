@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { Send } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Moon, Send, Sunrise, Sunset } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { JSONContent } from "@tiptap/react";
 
@@ -28,12 +28,21 @@ import {
 } from "@/lib/shift-utils";
 
 const DRAFT_KEY = "ccmgc_bitacora_compose_v1";
+const SHIFT_ICONS = { M: Sunrise, T: Sunset, N: Moon } as const;
+
+function parseKindParam(raw: string | null): BitacoraKind | null {
+  if (raw === "nota" || raw === "alerta" || raw === "pendiente") return raw;
+  return null;
+}
 
 export function BitacoraComposeView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const kindFromUrl = parseKindParam(searchParams.get("kind"));
   const activeShift = currentShiftNow();
+  const ShiftIcon = SHIFT_ICONS[activeShift];
 
-  const [composeKind, setComposeKind] = useState<BitacoraKind>("nota");
+  const [composeKind, setComposeKind] = useState<BitacoraKind>(kindFromUrl ?? "nota");
   const [composeTitle, setComposeTitle] = useState("");
   const [composePinned, setComposePinned] = useState(false);
   const [shiftDate, setShiftDate] = useState(todayYmd);
@@ -44,9 +53,15 @@ export function BitacoraComposeView() {
   const [hasDraft, setHasDraft] = useState(false);
 
   useEffect(() => {
+    if (kindFromUrl) setComposeKind(kindFromUrl);
+  }, [kindFromUrl]);
+
+  useEffect(() => {
     try {
       const raw = sessionStorage.getItem(DRAFT_KEY);
       if (!raw) return;
+      // Si venimos con ?kind= desde dashboard/atajo, no pisamos el tipo con el borrador.
+      const preferUrlKind = Boolean(kindFromUrl);
       const d = JSON.parse(raw) as {
         composeKind?: BitacoraKind;
         composeTitle?: string;
@@ -55,7 +70,7 @@ export function BitacoraComposeView() {
         shift?: ShiftKey;
         composeContent?: JSONContent;
       };
-      if (d.composeKind) setComposeKind(d.composeKind);
+      if (!preferUrlKind && d.composeKind) setComposeKind(d.composeKind);
       if (typeof d.composeTitle === "string") setComposeTitle(d.composeTitle);
       if (typeof d.composePinned === "boolean") setComposePinned(d.composePinned);
       if (d.shiftDate) setShiftDate(d.shiftDate);
@@ -65,6 +80,8 @@ export function BitacoraComposeView() {
     } catch {
       /* ignore */
     }
+    // Solo hidratar borrador al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -119,26 +136,32 @@ export function BitacoraComposeView() {
     <BitacoraPageShell className="max-w-[720px]" showSectionTabs>
       <div className="b-log-compose">
         <header className="b-log-compose__header">
-          <div className="min-w-0 flex-1">
-            <p className="b-log-compose__eyebrow">Nueva entrada</p>
-            <Input
-              value={composeTitle}
-              onChange={(e) => setComposeTitle(e.target.value)}
-              placeholder="Título opcional (ej. Bus 1234 sin SAE)"
-              maxLength={160}
-              className="b-log-input b-log-compose__title-input mt-2"
-              aria-label="Título de la entrada"
+          <div className="b-log-compose__top">
+            <div className="min-w-0">
+              <p className="b-log-compose__eyebrow">Nueva entrada</p>
+              <p className="b-log-compose__shift" title="Turno en curso">
+                <ShiftIcon size={13} strokeWidth={2} aria-hidden />
+                {SHIFT_LABEL[activeShift]} · {shiftWindowLabel(activeShift)}
+              </p>
+            </div>
+            <BitacoraKindSegment
+              value={composeKind}
+              onChange={setComposeKind}
+              className="b-log-compose__kinds"
             />
-            <p className="b-log-compose__hint mt-2">{COMPOSE_KIND_HINTS[composeKind]}</p>
-            <p className="b-log-compose__hint mt-1 opacity-80">
-              {SHIFT_LABEL[activeShift]} en curso · {shiftWindowLabel(activeShift)}
-            </p>
           </div>
-          <BitacoraKindSegment value={composeKind} onChange={setComposeKind} className="shrink-0" />
-        </header>
 
-        <div className="b-log-compose__meta-row">
-          <div className="b-log-compose__meta-row-sub">
+          <Input
+            value={composeTitle}
+            onChange={(e) => setComposeTitle(e.target.value)}
+            placeholder="Título opcional (ej. Bus 1234 sin SAE)"
+            maxLength={160}
+            className="b-log-input b-log-compose__title-input"
+            aria-label="Título de la entrada"
+          />
+          <p className="b-log-compose__hint">{COMPOSE_KIND_HINTS[composeKind]}</p>
+
+          <div className="b-log-compose__meta-row">
             <DatePickerField
               compact
               value={shiftDate}
@@ -150,7 +173,7 @@ export function BitacoraComposeView() {
               size="compact"
               value={shift}
               onChange={(e) => setShift(e.target.value as ShiftKey)}
-              className="b-log-input"
+              className="b-log-input b-log-compose__shift-select"
               aria-label="Turno"
             >
               <option value="M">Mañana (M)</option>
@@ -158,14 +181,14 @@ export function BitacoraComposeView() {
               <option value="N">Noche (N)</option>
             </Select>
           </div>
-        </div>
+        </header>
 
         <div className="b-log-compose__editor">
           <TipTapEditor
             value={composeContent}
             onChange={setComposeContent}
-            placeholder="Escribe lo que el próximo turno debe saber… Usa @ para mencionar."
-            minHeight="18rem"
+            placeholder="Escribe la nota… Usa @ para mencionar o Vincular para un ticket, bus o desvío."
+            minHeight="16rem"
             autoFocus
             variant="embedded"
           />
@@ -174,8 +197,8 @@ export function BitacoraComposeView() {
         {error ? <p className="b-log-alert b-log-alert--error">{error}</p> : null}
 
         <footer className="b-log-compose__footer b-log-compose__footer-sticky">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-1">
+          <div className="b-log-compose__footer-inner">
+            <div className="b-log-compose__footer-meta">
               <BitacoraPinToggle checked={composePinned} onChange={setComposePinned} id="compose-pin" />
               {hasDraft ? (
                 <p className="b-log-compose__draft-note">Borrador guardado en esta sesión</p>
@@ -188,7 +211,7 @@ export function BitacoraComposeView() {
               loading={posting}
               startIcon={!posting ? <Send size={16} strokeWidth={2} aria-hidden /> : undefined}
               disabled={!canPost || posting}
-              className="h-11 min-w-[200px] shrink-0 sm:w-auto"
+              className="b-log-compose__publish"
               onClick={() => void publish()}
             >
               Publicar en bitácora

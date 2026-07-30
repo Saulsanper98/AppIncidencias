@@ -1,0 +1,665 @@
+/* Plantillas de ticket — mismo lenguaje plano que Apunte express */
+
+.ccmgc-template-shell--panel {
+  overflow: hidden;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px color-mix(in oklab, black 12%, transparent);
+}
+
+/* Anula el glow de globals.css (.ccmgc-template-shell / --open) */
+.ccmgc-template-shell.ccmgc-template-shell--panel,
+.ccmgc-template-shell.ccmgc-template-shell--panel.ccmgc-template-shell--open {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px color-mix(in oklab, black 12%, transparent);
+}
+
+.ccmgc-template-panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 1rem 1.1rem 0.85rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
+  background: transparent;
+}
+
+.ccmgc-template-panel-header__lead {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.ccmgc-template-panel-header__icon {
+  display: inline-flex;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: var(--color-accent);
+  background: var(--color-accent-light);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 25%, transparent);
+  box-shadow: none;
+}
+
+.ccmgc-template-panel-header__copy {
+  min-width: 0;
+}
+
+.ccmgc-template-panel-header__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.55rem;
+}
+
+.ccmgc-template-panel-header__title {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-1);
+}
+
+.ccmgc-template-panel-header__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-2);
+  background: color-mix(in oklab, var(--color-surface-2) 80%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-border) 85%, transparent);
+}
+
+.ccmgc-template-panel-header__subtitle {
+  margin-top: 0.25rem;
+  max-width: 34rem;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--color-text-3);
+}
+
+.ccmgc-template-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-1);
+  border: 1px solid var(--color-border);
+  background: color-mix(in oklab, var(--color-surface-2) 70%, transparent);
+  box-shadow: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ccmgc-template-new-btn:hover {
+  transform: none;
+  border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
+  background: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface-2));
+  box-shadow: none;
+}
+
+.ccmgc-template-new-btn:active {
+  transform: none;
+}
+
+.ccmgc-template-new-btn__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.15rem;
+  width: 1.15rem;
+  border-radius: 0.3rem;
+  color: var(--color-accent);
+  background: transparent;
+}
+
+.ccmgc-template-new-btn--primary {
+  color: #fff;
+  border-color: color-mix(in oklab, var(--color-accent) 80%, black 10%);
+  background: var(--color-accent);
+  box-shadow: none;
+}
+
+.ccmgc-template-new-btn--primary:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 90%, white 5%);
+  background: color-mix(in oklab, var(--color-accent) 88%, white 8%);
+  box-shadow: none;
+}
+
+.ccmgc-template-new-btn--primary .ccmgc-template-new-btn__icon {
+  color: #fff;
+  background: transparent;
+}
+
+.ccmgc-template-new-btn--compact {
+  padding: 0.38rem 0.72rem;
+  font-size: 11.5px;
+  border-radius: 0.45rem;
+}
+
+.ccmgc-template-new-btn--compact .ccmgc-template-new-btn__icon {
+  height: 1.1rem;
+  width: 1.1rem;
+  border-radius: 0.25rem;
+}
+
+.ccmgc-template-shell--manage {
+  overflow: hidden;
+}
+
+.ccmgc-template-panel-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.55rem 0.75rem;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+}
+
+.ccmgc-template-shell--manage.ccmgc-template-shell--open .ccmgc-template-panel-bar {
+  border-bottom-color: color-mix(in oklab, var(--color-border) 80%, transparent);
+}
+
+.ccmgc-template-panel-trigger {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 14rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.1rem 0;
+  text-align: left;
+  border-radius: 0.5rem;
+  transition: background 0.15s ease;
+}
+
+.ccmgc-template-panel-trigger:hover {
+  background: transparent;
+}
+
+.ccmgc-template-panel-trigger__chevron {
+  display: inline-flex;
+  height: 1.75rem;
+  width: 1.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.45rem;
+  color: var(--color-text-3);
+  background: color-mix(in oklab, var(--color-surface-2) 75%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-border) 90%, transparent);
+  transition:
+    transform 0.2s ease,
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.ccmgc-template-panel-trigger__chevron--open {
+  transform: rotate(180deg);
+  color: var(--color-accent);
+  background: var(--color-accent-light);
+  border-color: color-mix(in oklab, var(--color-accent) 25%, transparent);
+}
+
+.ccmgc-template-panel-bar__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.ccmgc-template-shell--panel .ccmgc-template-panel {
+  padding: 0;
+  border-top: none;
+  background: transparent;
+}
+
+.ccmgc-template-shell--panel .ccmgc-template-panel__toolbar {
+  display: none;
+}
+
+/* Cuerpo de plantillas dentro de ManageSectionCard */
+.manage-section-card .ccmgc-template-panel {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.manage-section-card .ccmgc-template-panel__groups {
+  max-height: min(280px, 40vh);
+  gap: 0.75rem;
+  overflow-y: auto;
+}
+
+.ccmgc-template-group__head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.15rem;
+  padding: 0.35rem 0.45rem 0.15rem;
+}
+
+.ccmgc-template-group__title {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+
+.ccmgc-template-group__count {
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-3);
+  opacity: 0.75;
+}
+
+/* Filas planas (sin mini-card anidada) */
+.ccmgc-template-shell--panel .ccmgc-template-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid color-mix(in oklab, var(--color-border) 55%, transparent);
+}
+
+.ccmgc-template-card--premium {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 0;
+  padding: 0.65rem 0.45rem;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-border) 55%, transparent);
+  background: transparent;
+  box-shadow: none;
+}
+
+.ccmgc-template-card--premium:hover {
+  border-color: color-mix(in oklab, var(--color-border) 55%, transparent);
+  background: color-mix(in oklab, var(--color-surface-2) 45%, transparent);
+  box-shadow: none;
+  transform: none;
+}
+
+.ccmgc-template-card--premium::before {
+  display: none;
+}
+
+.ccmgc-template-card__top {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.ccmgc-template-card__scope {
+  flex-shrink: 0;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ccmgc-template-card__scope--team {
+  color: color-mix(in oklab, var(--color-accent) 85%, white 10%);
+  background: color-mix(in oklab, var(--color-accent) 14%, var(--color-surface));
+  border: 1px solid color-mix(in oklab, var(--color-accent) 22%, transparent);
+}
+
+.ccmgc-template-card__scope--personal {
+  color: var(--color-text-3);
+  background: color-mix(in oklab, var(--color-surface-3) 70%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-border) 90%, transparent);
+}
+
+.ccmgc-template-panel__empty--premium {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  border-radius: 0.65rem;
+  border: 1px dashed color-mix(in oklab, var(--color-border) 80%, transparent);
+  background: color-mix(in oklab, var(--color-surface-2) 35%, transparent);
+}
+
+.ccmgc-template-panel__empty-icon {
+  display: inline-flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.65rem;
+  color: var(--color-accent);
+  background: var(--color-accent-light);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 22%, transparent);
+}
+
+/* Modal nueva plantilla — formulario plano, sin cajas anidadas */
+.ccmgc-template-modal .ccmgc-modal-panel {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 24px 56px -20px rgba(0, 0, 0, 0.75);
+}
+
+.ccmgc-template-modal-form {
+  max-height: min(68vh, 34rem);
+  overflow-y: auto;
+  padding-right: 0.15rem;
+  scrollbar-gutter: stable;
+}
+
+.ccmgc-template-form-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding-top: 0.15rem;
+}
+
+.ccmgc-template-form-divider::before,
+.ccmgc-template-form-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in oklab, var(--color-border) 88%, transparent);
+}
+
+.ccmgc-template-form-divider__label {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+
+.ccmgc-template-modal-error {
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklab, var(--color-error) 35%, transparent);
+  background: color-mix(in oklab, var(--color-error) 8%, var(--color-surface));
+  padding: 0.5rem 0.7rem;
+  font-size: 12px;
+  color: var(--color-error);
+}
+
+.ccmgc-template-modal-footer {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.ccmgc-template-modal-footer .ccmgc-template-new-btn {
+  min-width: 8.5rem;
+  justify-content: center;
+}
+
+@media (max-width: 639px) {
+  .ccmgc-template-panel-bar {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .ccmgc-template-panel-bar__actions,
+  .ccmgc-template-panel-bar__actions .ccmgc-template-new-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Desplegable de plantillas (ticket rápido) */
+.ccmgc-quick-template-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ccmgc-quick-template-field__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.ccmgc-quick-template-field__head .ccmgc-template-new-btn {
+  flex-shrink: 0;
+}
+
+.ccmgc-quick-template-field__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+
+.ccmgc-quick-template-field .ccmgc-template-dropdown-trigger {
+  min-height: 2.85rem;
+}
+
+.ccmgc-template-dropdown-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in oklab, var(--color-surface-2) 80%, var(--color-surface));
+  text-align: left;
+  color: inherit;
+  box-shadow: none;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.ccmgc-template-dropdown-trigger--compact {
+  min-height: 2.35rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+}
+
+/* Barra de plantilla dentro del panel del formulario (Ticket completo) */
+.ticket-form-template-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-border) 85%, transparent);
+}
+
+.ticket-form-template-bar__label {
+  flex-shrink: 0;
+  min-width: 4.5rem;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ticket-form-template-bar--applied .ticket-form-template-bar__label {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.ticket-form-template-bar__select {
+  flex: 1;
+  min-width: 0;
+}
+
+.ticket-form-template-bar .ccmgc-template-dropdown-trigger {
+  min-height: 2.35rem;
+}
+
+.ticket-form-template-bar--applied .ccmgc-template-dropdown-trigger {
+  border-color: color-mix(in oklab, var(--color-accent) 42%, var(--color-border));
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-accent) 12%, transparent);
+}
+
+.ticket-form-template-bar__actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ticket-form-template-bar__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklab, var(--color-border) 92%, transparent);
+  background: color-mix(in oklab, var(--color-surface-2) 70%, transparent);
+  color: var(--color-text-2);
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.ticket-form-template-bar__icon-btn:hover:not(:disabled) {
+  color: var(--color-text-1);
+  border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
+  background: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface-2));
+}
+
+.ticket-form-template-bar__icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 639px) {
+  .ticket-form-template-bar {
+    flex-wrap: wrap;
+  }
+
+  .ticket-form-template-bar__label {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ticket-form-template-bar__select {
+    flex: 1 1 calc(100% - 5.5rem);
+  }
+}
+
+.ccmgc-template-dropdown-trigger:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
+  background: color-mix(in oklab, var(--color-surface-2) 95%, var(--color-surface));
+}
+
+.ccmgc-template-dropdown-trigger--open,
+.ccmgc-template-dropdown-trigger:focus-visible {
+  outline: none;
+  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 14%, transparent);
+}
+
+.ccmgc-template-dropdown-panel {
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  padding: 0.35rem 0;
+  box-shadow: 0 20px 48px -16px rgba(0, 0, 0, 0.75);
+}
+
+.ccmgc-template-dropdown-group + .ccmgc-template-dropdown-group {
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid color-mix(in oklab, var(--color-border) 75%, transparent);
+}
+
+.ccmgc-template-dropdown-group__label {
+  margin: 0;
+  padding: 0.35rem 0.75rem 0.25rem;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+
+.ccmgc-template-dropdown-option {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+
+.ccmgc-template-dropdown-option:hover {
+  background: color-mix(in oklab, var(--color-surface-2) 70%, transparent);
+}
+
+.ccmgc-template-dropdown-option--selected {
+  background: color-mix(in oklab, var(--color-accent) 14%, var(--color-surface));
+}
+
+.ccmgc-template-dropdown-option__row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ccmgc-template-dropdown-option__name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-1);
+}
+
+.ccmgc-template-dropdown-option__meta {
+  padding-left: 0.15rem;
+  font-size: 11px;
+  color: var(--color-text-3);
+  line-height: 1.3;
+}

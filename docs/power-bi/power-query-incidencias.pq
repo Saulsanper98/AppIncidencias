@@ -1,6 +1,16 @@
 // Power Query M — tabla Incidencias para Power BI (Fase 2)
 // Uso: Power BI Desktop → Transformar datos → Nueva consulta → Consulta en blanca → Editor avanzado
 // Ajusta BaseUrl y ApiKey. Crear parámetros Power BI es recomendable en producción.
+//
+// IMPORTANTE — credenciales del origen de datos:
+// El token va embebido a mano en el header Authorization (línea de Headers más abajo),
+// NO usa el mecanismo nativo "Clave de API web" de Power BI. Por eso, en el diálogo de
+// credenciales de Power BI Desktop/Gateway para este origen (Web.Contents a BaseUrl),
+// selecciona método de autenticación "Anónimo". Si eliges "Clave de API web" y solo
+// rellenas el valor sin el "Nombre de la clave" (o al revés), Power BI lanza el error:
+// "Una clave de la API web solo puede especificarse cuando se proporciona un nombre de
+// clave de la API web". No es un fallo de la API ni de la clave: es un método de
+// autenticación incorrecto para este origen.
 
 let
   BaseUrl = "http://192.168.12.67:3000",

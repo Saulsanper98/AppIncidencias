@@ -20,6 +20,7 @@ import { toast } from "@/components/toast-host";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { TimePickerField } from "@/components/ui/datetime-picker-field";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
 import { canaryParts, dateInCanary } from "@/lib/datetime/canary";
 import type {
   DesvioDetalle,
@@ -209,10 +210,9 @@ export function DesvioForm({ mode, initial, onCancelHref, onSavedHref }: Props) 
               )}
             </div>
             <div className="min-w-0">
-              <div className="ccmgc-eyebrow dashboard-pretitle">
-                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
+              <SectionEyebrow pulse>
                 CCMGC · {isEdit ? "Edición de desvío" : "Nuevo desvío"}
-              </div>
+              </SectionEyebrow>
               <h1 className="dashboard-hero-title mt-1 text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
                 {titulo}
               </h1>

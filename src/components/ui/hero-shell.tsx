@@ -9,6 +9,10 @@ type HeroShellProps = {
   subtitle?: ReactNode;
   actions?: ReactNode;
   kpis?: ReactNode;
+  /** Contenido bajo KPIs (filas de acción, cards embebidas, etc.). */
+  children?: ReactNode;
+  /** Decoración absoluta (siluetas, glows) detrás del contenido. */
+  overlay?: ReactNode;
   /** Modificador hero: reports-hero, desvios-hero, ccmgc-hero, etc. */
   variant?: string;
   pulse?: boolean;
@@ -24,6 +28,8 @@ export function HeroShell({
   subtitle,
   actions,
   kpis,
+  children,
+  overlay,
   variant = "ccmgc-hero",
   pulse = true,
   dotColor,
@@ -39,6 +45,7 @@ export function HeroShell({
         className,
       )}
     >
+      {overlay}
       <div className="relative z-[1] flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-2">
           <SectionEyebrow pulse={pulse} dotColor={dotColor}>
@@ -52,6 +59,7 @@ export function HeroShell({
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       {kpis ? <div className="relative z-[1] mt-4 flex flex-wrap gap-2">{kpis}</div> : null}
+      {children ? <div className="relative z-[1] mt-4">{children}</div> : null}
     </header>
   );
 }

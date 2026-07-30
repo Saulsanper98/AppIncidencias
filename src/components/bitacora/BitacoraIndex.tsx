@@ -20,18 +20,15 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  BitacoraNewEntryButton,
   BitacoraPageShell,
-  BitacoraStat,
 } from "@/components/bitacora/BitacoraUi";
-import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
+import { BitacoraHero } from "@/components/bitacora/BitacoraHero";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Input } from "@/components/ui/input";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isUiUnificationEnabled } from "@/ui-unification/feature";
-import { BitacoraHeroUnified } from "@/ui-unification/heroes/BitacoraHeroUnified";
+import { FilterPills } from "@/components/ui/ticket-filter-bar";
 import {
   entryDisplayTitle,
   entryExcerpt,
@@ -66,7 +63,7 @@ const VIEW_OPTIONS: { id: ViewMode; label: string; icon: typeof List; title: str
   { id: "lista", label: "Lista", icon: List, title: "Todas las notas recientes" },
   { id: "turno", label: "Turno", icon: CalendarDays, title: "Día del turno con actividad por hora" },
   { id: "kanban", label: "Kanban", icon: Columns3, title: "Por tipo: nota, alerta, pendiente" },
-  { id: "agrupada", label: "Por turno", icon: ListTree, title: "Agrupado mañana / tarde / noche" },
+  { id: "agrupada", label: "Grupos", icon: ListTree, title: "Agrupado mañana / tarde / noche" },
 ];
 
 function useDebouncedValue<T>(value: T, ms = 300): T {
@@ -193,43 +190,19 @@ export function BitacoraIndex() {
   return (
     <BitacoraPageShell className={cn(viewMode === "kanban" ? "max-w-5xl" : "max-w-3xl")}>
       <div className="b-log-home">
-        {isUiUnificationEnabled() ? (
-          <BitacoraHeroUnified
-            stats={stats}
-            activeShift={activeShift}
-            ShiftIcon={ShiftIcon}
-            onNewEntry={() => router.push("/bitacora/nueva")}
-          />
-        ) : (
-        <header className="b-log-home__header">
-          <div className="b-log-home__header-main">
-            <h1 className="b-log-home__title">Bitácora de turno</h1>
-            <div className="b-log-home__stats-row mt-3 flex flex-wrap items-end gap-4">
-              <BitacoraStat label="Entradas" value={stats.total} />
-              <BitacoraStat label="Alertas" value={stats.alerta} tone="error" />
-              <BitacoraStat label="Pendientes" value={stats.pendiente} tone="warning" />
-            </div>
-          </div>
+        <BitacoraHero
+          stats={stats}
+          activeShift={activeShift}
+          ShiftIcon={ShiftIcon}
+          onNewEntry={() => router.push("/bitacora/nueva?kind=nota")}
+        />
 
-          <div className="b-log-home__header-actions">
-            <div className="b-log-home__shift is-live" title="Turno en curso">
-              <ShiftIcon size={15} strokeWidth={2} aria-hidden />
-              <span>
-                {SHIFT_LABEL[activeShift]} · {shiftWindowLabel(activeShift)}
-              </span>
-            </div>
-            <BitacoraNewEntryButton onClick={() => router.push("/bitacora/nueva")} />
-            <FeedbackTargetButton id="bitacora" label="Bitácora de turno" />
-          </div>
-        </header>
-        )}
-
-        <div className="b-log-home__filters-card b-log-home__filters">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="b-log-home__filters-card b-log-home__filters-card--modern ccmgc-stagger-in ccmgc-stagger-in-2">
+          <div className="b-log-home__view-row">
             <div
               role="tablist"
               aria-label="Modo de vista"
-              className="b-log-view-toggle inline-flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-1)] p-0.5"
+              className="b-log-view-toggle"
             >
               {VIEW_OPTIONS.map(({ id, label, icon: Icon, title }) => (
                 <button
@@ -239,26 +212,20 @@ export function BitacoraIndex() {
                   aria-selected={viewMode === id}
                   title={title}
                   onClick={() => setViewMode(id)}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors",
-                    viewMode === id
-                      ? "bg-[var(--color-accent)] text-white shadow-sm"
-                      : "text-[var(--color-text-2)] hover:text-[var(--color-text-1)]",
-                  )}
+                  className={cn("b-log-view-toggle__btn", viewMode === id && "is-active")}
                 >
-                  <Icon size={11} strokeWidth={2} aria-hidden />
-                  <span className="hidden min-[420px]:inline">{label}</span>
+                  <Icon size={12} strokeWidth={2} aria-hidden />
+                  <span className="b-log-view-toggle__label">{label}</span>
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-[var(--color-text-3)]">
-              {viewMode === "lista"
-                ? "Mostrando las últimas notas"
-                : dayScoped
-                  ? formatShiftDateHuman(shiftDate)
-                  : null}
-            </p>
+            {viewMode === "lista" || dayScoped ? (
+              <p className="b-log-home__view-hint">
+                {viewMode === "lista" ? "Mostrando las últimas notas" : formatShiftDateHuman(shiftDate)}
+              </p>
+            ) : null}
           </div>
+
           <div className="b-log-home__search-wrap">
             <Search size={15} className="b-log-home__search-icon" aria-hidden />
             <Input
@@ -274,6 +241,7 @@ export function BitacoraIndex() {
               </span>
             ) : null}
           </div>
+
           <div className="b-log-home__filters-row">
             {dayScoped ? (
               <DatePickerField
@@ -298,19 +266,15 @@ export function BitacoraIndex() {
               buttonClassName="b-log-input"
               aria-label="Turno"
             />
-            <MenuSelect
-              value={kindFilter}
-              onChange={(value) => setKindFilter(value as BitacoraKind | "")}
+            <FilterPills
+              value={kindFilter === "" ? "todos" : kindFilter}
+              onChange={(v) => setKindFilter(v === "todos" ? "" : (v as BitacoraKind))}
               options={[
-                { value: "", label: "Todos los tipos" },
-                { value: "nota", label: "Notas" },
-                { value: "alerta", label: "Alertas" },
-                { value: "pendiente", label: "Pendientes" },
+                { v: "todos", label: "Todos" },
+                { v: "nota", label: "Notas" },
+                { v: "alerta", label: "Alertas" },
+                { v: "pendiente", label: "Pendientes" },
               ]}
-              placeholder="Todos los tipos"
-              className="b-log-home__filter-select b-log-home__filter-select--kind"
-              buttonClassName="b-log-input"
-              aria-label="Tipo"
             />
             <button
               type="button"
@@ -398,12 +362,12 @@ export function BitacoraIndex() {
             hint={
               hasActiveFilters
                 ? "Prueba otro criterio o limpia los filtros."
-                : viewMode === "lista"
-                  ? "Crea la primera entrada para dejar constancia del turno."
-                  : "Crea la primera entrada para el siguiente turno."
+                : "Usa una Nota para dejar constancia a jefatura (avisos, mensajes, justificación) sin abrir ticket. Alertas y pendientes cubren el relevo."
             }
-            actionLabel={hasActiveFilters ? "Limpiar filtros" : "Escribir primera entrada"}
-            onAction={() => (hasActiveFilters ? clearFilters() : router.push("/bitacora/nueva"))}
+            actionLabel={hasActiveFilters ? "Limpiar filtros" : "Escribir primera nota"}
+            onAction={() =>
+              hasActiveFilters ? clearFilters() : router.push("/bitacora/nueva?kind=nota")
+            }
           />
         ) : (
           <BitacoraEntriesBody

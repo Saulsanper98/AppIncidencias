@@ -17,6 +17,8 @@ export const REPORT_METRIC_DEFINITIONS = {
     "Cierres del técnico en el periodo (TicketStatusChange + tickets históricos sin historial, atribuidos al asignado). No es el total de tickets asignados en la bandeja.",
   topBuses:
     "Buses con más tickets creados en el periodo (no confundir con resoluciones).",
+  topConductors:
+    "Conductores con más tickets de origen «conductor» en el periodo (requiere origen del fallo y conductor informado).",
   seriesResolved:
     "Curva diaria de acciones de cierre (TicketStatusChange), alineada con el total «Tickets resueltos».",
   legacyUpdatedAt:

@@ -34,6 +34,7 @@
 # Paquetes de migración Windows→Linux y backups locales (no versionar)
 /migration-bundle/
 /backups/
+/exports/
 
 # production
 /build

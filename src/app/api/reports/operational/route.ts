@@ -148,6 +148,37 @@ export async function GET(request: Request) {
 
     const topTechnicians = await getTopTechniciansByResolutions(since, until);
 
+    const topConductorsRaw = await prisma.ticket.groupBy({
+      by: ["conductorId"],
+      where: {
+        createdAt: { gte: since, lte: until },
+        falloOrigen: "conductor",
+        conductorId: { not: null },
+        status: { not: "borrador" },
+      },
+      _count: { _all: true },
+      orderBy: { _count: { conductorId: "desc" } },
+      take: 10,
+    });
+    const conductorIds = topConductorsRaw
+      .map((g) => g.conductorId)
+      .filter((id): id is string => Boolean(id));
+    const conductorRows = conductorIds.length
+      ? await prisma.conductor.findMany({
+          where: { id: { in: conductorIds } },
+          select: { id: true, name: true, operator: true },
+        })
+      : [];
+    const conductorById = new Map(conductorRows.map((c) => [c.id, c]));
+    const topConductors = topConductorsRaw
+      .filter((g) => g.conductorId)
+      .map((g) => ({
+        conductorId: g.conductorId as string,
+        name: conductorById.get(g.conductorId as string)?.name ?? "—",
+        operator: conductorById.get(g.conductorId as string)?.operator ?? null,
+        count: g._count._all,
+      }));
+
     return NextResponse.json({
       days,
       preset,
@@ -183,6 +214,7 @@ export async function GET(request: Request) {
       byTipo: byTipoSorted,
       topBuses,
       topTechnicians,
+      topConductors,
     });
   } catch (error) {
     console.error("Error en /api/reports/operational:", error);

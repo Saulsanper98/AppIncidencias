@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { BitacoraComposeView } from "@/components/bitacora/BitacoraComposeView";
 import { prisma } from "@/lib/prisma";
@@ -19,5 +20,9 @@ export default async function BitacoraNuevaPage() {
   });
   if (!user?.isActive) redirect("/login?auth=required&next=/bitacora/nueva");
 
-  return <BitacoraComposeView />;
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-[var(--color-text-3)]">Cargando editor…</div>}>
+      <BitacoraComposeView />
+    </Suspense>
+  );
 }

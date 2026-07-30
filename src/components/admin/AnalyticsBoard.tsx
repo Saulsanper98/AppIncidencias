@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { Sparkline } from "@/components/charts/sparkline";
 import { SectionEyebrow } from "@/components/ui/section-eyebrow";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -417,7 +418,7 @@ export function AnalyticsBoard() {
                   Pico: {Math.max(...data.timeseries.map((d) => d.events))} ev/día
                 </span>
               </div>
-              <SparkLine data={data.timeseries.map((d) => d.events)} />
+              <Sparkline variant="hero" values={data.timeseries.map((d) => d.events)} />
             </div>
           ) : null}
 
@@ -1166,14 +1167,13 @@ function SlaPanel({ tickets }: { tickets: Summary["tickets"] }) {
               cx="54"
               cy="54"
               r={r}
-              className={cn("fill-none", tone.stroke)}
+              className={cn("analytics-gauge-ring fill-none", tone.stroke)}
               stroke="currentColor"
               strokeWidth="10"
               strokeLinecap="round"
               strokeDasharray={c}
               strokeDashoffset={offset}
               transform="rotate(-90 54 54)"
-              style={{ transition: "stroke-dashoffset 0.8s ease" }}
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -1901,54 +1901,6 @@ function HeroStat({
         <p className="mt-0.5 text-[10px] text-[var(--color-text-3)]">{compareLabel} · sin datos previos</p>
       ) : null}
     </motion.div>
-  );
-}
-
-/**
- * Línea sparkline simple en SVG. Sin librerías externas: renderiza un
- * polyline con un área degradada debajo. Pensado para hero compacto.
- */
-function SparkLine({ data, height = 56 }: { data: number[]; height?: number }) {
-  if (data.length === 0) return null;
-  const w = 800;
-  const max = Math.max(1, ...data);
-  const stepX = data.length > 1 ? w / (data.length - 1) : w;
-  const points = data.map((v, i) => {
-    const x = i * stepX;
-    const y = height - 4 - (v / max) * (height - 12);
-    return [x, y];
-  });
-  const path =
-    `M ${points[0][0]},${points[0][1]} ` +
-    points
-      .slice(1)
-      .map((p, i) => {
-        const prev = points[i];
-        const mx = (prev[0] + p[0]) / 2;
-        return `Q ${prev[0]},${prev[1]} ${mx},${(prev[1] + p[1]) / 2} T ${p[0]},${p[1]}`;
-      })
-      .join(" ");
-  const area = `${path} L ${w},${height} L 0,${height} Z`;
-  return (
-    <svg viewBox={`0 0 ${w} ${height}`} className="h-14 w-full" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="spark-fill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#spark-fill)" />
-      <path d={path} stroke="var(--color-accent)" strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
-      {points.map((p, i) => (
-        <circle
-          key={i}
-          cx={p[0]}
-          cy={p[1]}
-          r={i === points.length - 1 ? 4 : 0}
-          fill="var(--color-accent)"
-        />
-      ))}
-    </svg>
   );
 }
 

@@ -113,7 +113,7 @@ export async function POST(request: Request) {
     await writeAuditEvent({
       userId: actor.userId,
       action: "report.daily.generated",
-      detail: `Gener? informe diario (${reportDateIso}, ${rows.length} incidencias)`,
+      detail: `Generó informe diario (${reportDateIso}, ${rows.length} incidencias)`,
     });
 
     const filename = `informe-incidencias-${reportDateIso}.xlsx`;

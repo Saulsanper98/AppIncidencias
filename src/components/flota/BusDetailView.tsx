@@ -26,6 +26,7 @@ import { BusAvatar } from "@/components/flota/bus-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SectionCard } from "@/components/ui/section-card";
 import type { TicketStatus } from "@/lib/domain";
 import { assetTone, formatMunicipio, operatorInitials, operatorTone } from "@/lib/flota-ui";
 import {
@@ -122,33 +123,6 @@ function StatPill({
       <p className="text-[9.5px] font-semibold uppercase tracking-wider opacity-70">{label}</p>
       <p className="mt-0.5 text-lg font-bold tabular-nums leading-none">{value}</p>
     </div>
-  );
-}
-
-function SectionCard({
-  title,
-  icon: Icon,
-  action,
-  children,
-  className,
-}: {
-  title: string;
-  icon: typeof Camera;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={cn("rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]", className)}>
-      <header className="flex items-center justify-between gap-2 border-b border-[var(--color-border)]/80 px-4 py-3">
-        <h2 className="flex items-center gap-2 text-[13px] font-semibold text-[var(--color-text-1)]">
-          <Icon size={15} className="text-[var(--color-accent)]" aria-hidden />
-          {title}
-        </h2>
-        {action}
-      </header>
-      <div className="p-4">{children}</div>
-    </section>
   );
 }
 

@@ -2,23 +2,23 @@
 @import "../styles/app-charts.css";
 
 :root {
-  /* ── Paleta premium dark (iter. 3) ──
+  /* ?? Paleta premium dark (iter. 3) ??
    * Estrategia: el AZUL pasa a ser acento puntual. El esqueleto visual
    * (fondo, cards, bordes, sidebar) se construye sobre slate desaturado.
    * Las cards se diferencian del fondo por LUMINANCIA, no por tinta azul,
    * para que el ojo descanse en sesiones largas.
    */
-  --color-bg: #0c111a;          /* Casi negro slate, tinte mínimo */
+  --color-bg: #0c111a;          /* Casi negro slate, tinte m?nimo */
   --color-surface: #151c28;     /* Card base: ~2 stops por encima del bg */
   --color-surface-2: #1d2433;   /* Inputs, badges, zebra */
   --color-surface-3: #29303f;   /* Estados hover/elevados */
 
-  /* Acento azul: blue-500, más limpio y vibrante porque ahora se usa menos. */
+  /* Acento azul: blue-500, m?s limpio y vibrante porque ahora se usa menos. */
   --color-accent: #3b82f6;
   --color-accent-hover: #2563eb;
   --color-accent-light: rgba(59, 130, 246, 0.10);
 
-  /* Semánticos: tonos más cálidos y modernos (Tailwind 500). */
+  /* Sem?nticos: tonos m?s c?lidos y modernos (Tailwind 500). */
   --color-success: #10b981;
   --color-success-light: rgba(16, 185, 129, 0.10);
   --color-warning: #f59e0b;
@@ -26,16 +26,16 @@
   --color-error: #ef4444;
   --color-error-light: rgba(239, 68, 68, 0.10);
 
-  /* Texto: secundario sube a slate-300 para legibilidad larga sesión. */
+  /* Texto: secundario sube a slate-300 para legibilidad larga sesi?n. */
   --color-text-1: #f1f5f9;
   --color-text-2: #cbd5e1;
   --color-text-3: #94a3b8;
 
-  /* Bordes finos: la separación se gana por luminancia, no por trazo. */
+  /* Bordes finos: la separaci?n se gana por luminancia, no por trazo. */
   --color-border: rgba(148, 163, 184, 0.09);
   --color-border-hover: rgba(148, 163, 184, 0.20);
 
-  /* Acentos por módulo (p6) — heroes sin pisarse entre secciones. */
+  /* Acentos por m?dulo (p6) ? heroes sin pisarse entre secciones. */
   --hero-accent-operacion: var(--color-accent);
   --hero-accent-conocimiento: #38bdf8;
   --hero-accent-admin: #d946ef;
@@ -45,10 +45,10 @@
   --hero-accent-conductor: #a78bfa;
   --hero-accent-offline: #64748b;
 
-  /* Overlay modal — ver --modal-overlay más abajo si existe */
+  /* Overlay modal ? ver --modal-overlay m?s abajo si existe */
 
-  /* ── Tokens de diseño global (iter. 2: pulido fino) ──
-   * Radios, sombras y motion centralizados. Se usan vía utilidades
+  /* ?? Tokens de dise?o global (iter. 2: pulido fino) ??
+   * Radios, sombras y motion centralizados. Se usan v?a utilidades
    * .ccmgc-card / .ccmgc-table / .ccmgc-stagger-in para no acoplar la UI
    * a clases Tailwind ad-hoc en cada lugar.
    */
@@ -72,9 +72,9 @@
   --motion-normal: 0.22s;
   --motion-slow: 0.32s;
 
-  /* ── Tokens semánticos de espaciado (Fase 1, premium iter. 3) ──
-   * Reemplazan los gap-3 / gap-3.5 / gap-4 ad-hoc por escala canónica.
-   * Se usan vía utilidad `.gap-token-*` o como valores en estilos inline.
+  /* ?? Tokens sem?nticos de espaciado (Fase 1, premium iter. 3) ??
+   * Reemplazan los gap-3 / gap-3.5 / gap-4 ad-hoc por escala can?nica.
+   * Se usan v?a utilidad `.gap-token-*` o como valores en estilos inline.
    */
   --space-1: 4px;
   --space-2: 8px;
@@ -96,7 +96,7 @@
   --color-info: var(--color-accent);
   --color-info-light: var(--color-accent-light);
 
-  /* Heroes, modales y charts — escala unificada (ver bloque DESIGN SYSTEM). */
+  /* Heroes, modales y charts ? escala unificada (ver bloque DESIGN SYSTEM). */
   --hero-radius: var(--radius-xl);
   --modal-overlay: rgba(0, 0, 0, 0.55);
   --modal-radius: var(--radius-xl);
@@ -122,15 +122,15 @@
   --toast-border-error: color-mix(in oklab, var(--color-error) 35%, transparent);
   --toast-border-info: color-mix(in oklab, var(--color-accent) 35%, transparent);
 
-  /* ── Tokens semánticos de texto ──
+  /* ?? Tokens sem?nticos de texto ??
    * Mapas claros a los grises slate ya definidos para no inventar nuevos.
-   * "strong" se reserva para títulos / cifras hero.
+   * "strong" se reserva para t?tulos / cifras hero.
    */
   --color-text-strong: var(--color-text-1);
   --color-text-muted: var(--color-text-2);
   --color-text-subtle: var(--color-text-3);
 
-  /* ── Foco accesible global (WCAG 2.1 AA) ── */
+  /* ?? Foco accesible global (WCAG 2.1 AA) ?? */
   --ring-color: var(--color-accent);
   --ring-offset-color: var(--color-bg);
   --ring-width: 2px;
@@ -141,7 +141,7 @@
   --login-space-form: 12px;
   --login-space-actions: 10px;
   --login-space-footer: 12px;
-  /* Fase 4: ritmo baseline y curvas de animación unificadas */
+  /* Fase 4: ritmo baseline y curvas de animaci?n unificadas */
   --login-baseline: 4px;
   --login-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --login-motion-duration-fast: 0.18s;
@@ -161,18 +161,18 @@ body {
   background: var(--color-bg);
   color: var(--color-text-1);
   font-family: var(--font-geist-sans), system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  /* Features tipográficas de Geist: ligaturas comunes, kerning, alternativas
-   * estilísticas que afilan ñ y signos de puntuación → sensación premium. */
+  /* Features tipogr?ficas de Geist: ligaturas comunes, kerning, alternativas
+   * estil?sticas que afilan ? y signos de puntuaci?n ? sensaci?n premium. */
   font-feature-settings:
-    "ss03",  /* alternativas estilísticas Geist (cifras y formas) */
-    "cv11",  /* variante de "ñ" / "ó" más limpia */
+    "ss03",  /* alternativas estil?sticas Geist (cifras y formas) */
+    "cv11",  /* variante de "?" / "?" m?s limpia */
     "kern" 1,
     "liga" 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  /* Halo azul casi imperceptible arriba a la derecha + leve viñeta inferior
-   * para dar profundidad sin saturar. Mucho más discreto que la versión
+  /* Halo azul casi imperceptible arriba a la derecha + leve vi?eta inferior
+   * para dar profundidad sin saturar. Mucho m?s discreto que la versi?n
    * anterior con dos radiales azul+verde + barra de degradado. */
   background-image:
     radial-gradient(ellipse 60% 35% at 85% -5%, rgba(59, 130, 246, 0.05) 0%, transparent 65%),
@@ -184,17 +184,16 @@ body {
   border-color: var(--color-border);
 }
 
-/* ── Foco accesible global (Fase 1) ──
- * Aplica solo a :focus-visible (teclado / accesibilidad) para no molestar al
- * click con ratón. Outline + offset que respeta el contraste del bg.
+/* Foco accesible global (Fase 1).
+ * Solo :focus-visible (teclado). Sin border-radius fijo: el outline
+ * debe seguir la forma del control (pill, rounded-lg, etc.).
  */
 :focus-visible {
   outline: var(--ring-width) solid var(--ring-color);
   outline-offset: var(--ring-offset);
-  border-radius: 4px;
 }
 
-/* ── Selección de texto premium ── */
+/* ?? Selecci?n de texto premium ?? */
 ::selection {
   background: color-mix(in oklab, var(--color-accent) 30%, transparent);
   color: var(--color-text-1);
@@ -261,7 +260,7 @@ body {
     color: var(--color-text-2);
   }
 
-  /* ── Tipografía fina extra (Fase 1) ──
+  /* ?? Tipograf?a fina extra (Fase 1) ??
    * Conjunto de utilidades para asegurar contraste y peso consistentes.
    * "metric-*" se usan en KPIs / cifras donde el numeral debe ser tabular.
    */
@@ -317,7 +316,7 @@ body {
     font-variant-numeric: tabular-nums;
   }
 
-  /* ── kbd estilizado (Fase 5 lo aprovecha) ── */
+  /* ?? kbd estilizado (Fase 5 lo aprovecha) ?? */
   .kbd {
     display: inline-flex;
     align-items: center;
@@ -337,7 +336,7 @@ body {
     white-space: nowrap;
   }
 
-  /* ── Card base reusable ──
+  /* ?? Card base reusable ??
    * Acepta opcionalmente .ccmgc-card-accent para destacar (KPI principal,
    * tarjetas hero, etc.).
    */
@@ -370,8 +369,8 @@ body {
       var(--shadow-lg);
   }
 
-  /* ── Tabla global con zebra sutil, sticky header y hover de fila ──
-   * Patrón opt-in: las tablas que la usen se vuelven coherentes entre
+  /* ?? Tabla global con zebra sutil, sticky header y hover de fila ??
+   * Patr?n opt-in: las tablas que la usen se vuelven coherentes entre
    * pantallas sin tocar cada celda.
    */
   .ccmgc-table {
@@ -419,7 +418,7 @@ body {
   .ccmgc-table tbody tr:last-child td {
     border-bottom: 0;
   }
-  /* Filas con contenido heterogéneo (p. ej. admin usuarios): centrar verticalmente. */
+  /* Filas con contenido heterog?neo (p. ej. admin usuarios): centrar verticalmente. */
   .ccmgc-table.ccmgc-table--row-middle tbody td,
   .ccmgc-table.ccmgc-table--row-middle tbody th[scope="row"] {
     vertical-align: middle;
@@ -427,13 +426,14 @@ body {
   /* Variante densa para bandejas con muchas filas. */
   .ccmgc-table--compact thead th,
   .ccmgc-table--compact tbody td {
-    padding: 6px 8px;
+    padding: 5px 8px;
     font-size: 11px;
+    vertical-align: middle;
   }
 
-  /* ── Microanimaciones de entrada (stagger). ──
+  /* ?? Microanimaciones de entrada (stagger). ??
    * Aplicar `.ccmgc-stagger-in` al elemento y opcionalmente
-   * .ccmgc-stagger-in-N (1..6) para escalonar la aparición.
+   * .ccmgc-stagger-in-N (1..6) para escalonar la aparici?n.
    */
   @keyframes ccmgc-stagger-in {
     from {
@@ -467,7 +467,7 @@ body {
     }
   }
 
-  /* Animación de entrada de toasts (Fase 9). */
+  /* Animaci?n de entrada de toasts (Fase 9). */
   @keyframes ccmgc-toast-in {
     from {
       opacity: 0;
@@ -523,7 +523,7 @@ body {
     }
   }
 
-  /* ── Movil: anti-zoom de iOS al focusar inputs ─────────────────────────
+  /* ?? Movil: anti-zoom de iOS al focusar inputs ?????????????????????????
    * iOS Safari hace zoom automatico cuando el font-size de un input es
    * menor que 16px, lo que provoca reflows molestos y dificulta volver
    * al layout original. Forzamos 16px en movil para todos los controles
@@ -549,7 +549,7 @@ body {
   }
 
 
-  /* ── Densidad global (compacta / cómoda) ──
+  /* ?? Densidad global (compacta / c?moda) ??
    * Activada por el toggle DensityToggle (`html[data-density="compact"]`).
    * Reduce el padding interno de cards y celdas de tabla, y aprieta
    * ligeramente los gaps verticales. Se aplica con variables para que
@@ -569,8 +569,8 @@ body {
   }
 
   /* Aprieta cards: cualquier .ccmgc-card con padding utilitario p-4/p-5
-     mantendrá su layout, pero los componentes nuevos pueden consumir la
-     variable. Aquí compactamos los paddings directos de la tabla y el
+     mantendr? su layout, pero los componentes nuevos pueden consumir la
+     variable. Aqu? compactamos los paddings directos de la tabla y el
      espacio vertical entre filas de listas. */
   html[data-density="compact"] .ccmgc-card {
     box-shadow: none;
@@ -588,7 +588,7 @@ body {
   html[data-density="compact"] .ccmgc-card.p-4 { padding: 0.625rem; }
   html[data-density="compact"] .ccmgc-card.p-5 { padding: 0.875rem; }
   html[data-density="compact"] .ccmgc-card.p-6 { padding: 1rem; }
-  /* Aprieta también los `space-y-*` más comunes en listados. */
+  /* Aprieta tambi?n los `space-y-*` m?s comunes en listados. */
   html[data-density="compact"] .space-y-4 > * + * { margin-top: 0.625rem; }
   html[data-density="compact"] .space-y-5 > * + * { margin-top: 0.75rem; }
   html[data-density="compact"] .space-y-6 > * + * { margin-top: 1rem; }
@@ -596,7 +596,7 @@ body {
   html[data-density="compact"] .gap-5 { gap: 0.75rem; }
   html[data-density="compact"] .gap-6 { gap: 1rem; }
 
-  /* Tipografía levemente más densa en modo compacto. */
+  /* Tipograf?a levemente m?s densa en modo compacto. */
   html[data-density="compact"] .text-heading { font-size: 1.05rem; }
   html[data-density="compact"] .text-subheading { font-size: 0.95rem; }
 
@@ -623,7 +623,7 @@ body {
     outline-offset: 2px;
   }
 
-  /* Login: jerarquía tipográfica responsive (mejor en móvil que text-display fijo) */
+  /* Login: jerarqu?a tipogr?fica responsive (mejor en m?vil que text-display fijo) */
   .login-hero-title {
     font-size: clamp(1.35rem, 4.2vw, 1.85rem);
     font-weight: 650;
@@ -640,7 +640,7 @@ body {
     max-width: 28ch;
   }
 
-  /* Patrón tipo “mapa / tráfico” muy sutil detrás del login */
+  /* Patr?n tipo ?mapa / tr?fico? muy sutil detr?s del login */
   .ccmgc-login-pattern {
     background-image:
       linear-gradient(rgba(148, 163, 184, 0.14) 1px, transparent 1px),
@@ -649,7 +649,7 @@ body {
     mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 0%, transparent 72%);
   }
 
-  /* Modo claro futuro: el logo usa currentColor; asegurar contraste mínimo en tarjeta clara */
+  /* Modo claro futuro: el logo usa currentColor; asegurar contraste m?nimo en tarjeta clara */
   .light .login-hero-title,
   :root.light .login-hero-title {
     color: var(--color-text-1);
@@ -721,7 +721,7 @@ body {
   --color-border: rgba(186, 206, 236, 0.24);
 }
 
-/* Labels del form más legibles de noche (AA holgado sobre navy). */
+/* Labels del form m?s legibles de noche (AA holgado sobre navy). */
 [data-login-chrono="night"] .login-access-plane .text-label {
   color: color-mix(in oklab, var(--color-text-1) 78%, var(--color-text-2));
 }
@@ -731,7 +731,7 @@ body {
   color: color-mix(in oklab, var(--color-text-2) 88%, white);
 }
 
-/* Login: sin anillo azul al hacer clic con ratón; foco visible solo con teclado (WCAG) */
+/* Login: sin anillo azul al hacer clic con rat?n; foco visible solo con teclado (WCAG) */
 [data-login-page] button:focus:not(:focus-visible),
 [data-login-page] a:focus:not(:focus-visible),
 [data-login-page] select:focus:not(:focus-visible) {
@@ -790,7 +790,7 @@ body {
   will-change: auto;
 }
 
-/* Retícula baseline 4px + columnas cada 16px (solo depuración) */
+/* Ret?cula baseline 4px + columnas cada 16px (solo depuraci?n) */
 .login-baseline-grid {
   background-image:
     repeating-linear-gradient(
@@ -889,7 +889,7 @@ body {
   }
 }
 
-/* P7: atmósfera navy/azul unificada (sin orbes verdes a la derecha). */
+/* P7: atm?sfera navy/azul unificada (sin orbes verdes a la derecha). */
 .login-ambient-gradient-a {
   background: radial-gradient(ellipse 80% 55% at 32% -12%, rgba(37, 99, 235, 0.28), transparent);
 }
@@ -930,7 +930,7 @@ body {
   }
 }
 
-/* ── Scrollbars finas y discretas (Fase 1) ──
+/* ?? Scrollbars finas y discretas (Fase 1) ??
  * Webkit (Chrome/Edge): 8px, track transparente, thumb slate, hover refuerza.
  * Firefox: scrollbar-width thin + colors.
  */
@@ -1019,8 +1019,8 @@ body {
 }
 
 /* Mapa Leaflet: iconos de cluster (divIcon).
- * El cluster tiene 2 capas: un anillo translucido y el círculo central.
- * Esto permite que parezca "más vivo" y diferencia los tamaños sin
+ * El cluster tiene 2 capas: un anillo translucido y el c?rculo central.
+ * Esto permite que parezca "m?s vivo" y diferencia los tama?os sin
  * recurrir a colores planos.
  */
 .leaflet-div-icon.ccmgc-map-cluster-icon {
@@ -1051,7 +1051,7 @@ body {
     0 0 0 5px rgba(59, 130, 246, 0.18),
     0 6px 18px rgba(0, 0, 0, 0.55);
 }
-/* Variantes por prioridad dominante. El JS añade la clase correspondiente. */
+/* Variantes por prioridad dominante. El JS a?ade la clase correspondiente. */
 .ccmgc-map-cluster-inner--alta {
   background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
   box-shadow:
@@ -1071,9 +1071,9 @@ body {
     0 4px 12px rgba(0, 0, 0, 0.45);
 }
 
-/* Popover de selector de día del informe diario.
+/* Popover de selector de d?a del informe diario.
  *
- *  - Pequeña animación de entrada para que no aparezca de golpe.
+ *  - Peque?a animaci?n de entrada para que no aparezca de golpe.
  *  - El icono del picker nativo en Chrome/Edge tiende a quedar oscuro
  *    sobre el dark mode; con `filter: invert(...)` lo hacemos claro y
  *    legible. En navegadores que no soportan el pseudo, simplemente se
@@ -1098,12 +1098,12 @@ body {
   }
 }
 
-/* ──────────────────────────────────────────────────────────────────────
+/* ??????????????????????????????????????????????????????????????????????
  * LOGIN PREMIUM
  *
  * Capa visual adicional sobre el login original. Las clases base
  * (.login-card-shell, .login-card-elevation, .login-hero-title, etc.)
- * siguen vivas y aportan tamaños/sombras "estándar"; aquí refinamos
+ * siguen vivas y aportan tama?os/sombras "est?ndar"; aqu? refinamos
  * para que el conjunto se sienta mas premium y profesional:
  *  - glow exterior cinematografico detras de la tarjeta
  *  - borde con degradado y "edge highlight" superior tipo glass
@@ -1112,8 +1112,8 @@ body {
  *  - halo del logo en dos capas
  *  - CTA primario con gradiente azul y glow tintado
  *  - pill de estado "Sistema operativo" en el footer
- *  - orb ambient extra (cyan) + vi�eta vertical
- * ────────────────────────────────────────────────────────────────────── */
+ *  - orb ambient extra (cyan) + vi?eta vertical
+ * ?????????????????????????????????????????????????????????????????????? */
 
 /* Glow exterior cinematografico detras de la tarjeta */
 .login-card-glow {
@@ -1423,7 +1423,7 @@ body {
   50%      { transform: translate3d(-2rem, 1.5rem, 0); }
 }
 
-/* Viñeta uniforme (sin sesgo derecha) para profundidad */
+/* Vi?eta uniforme (sin sesgo derecha) para profundidad */
 .login-ambient-vignette {
   position: absolute;
   inset: 0;
@@ -1432,7 +1432,7 @@ body {
   pointer-events: none;
 }
 
-/* ── Login stage (split brand + access) ───────────────────────────────── */
+/* ?? Login stage (split brand + access) ????????????????????????????????? */
 .login-stage-grid {
   display: grid;
   min-height: 100dvh;
@@ -1751,7 +1751,7 @@ body {
 
 @media (min-width: 1024px) {
   .login-brand-plane__fade {
-    /* Fundido suave hacia el plano de acceso, sin tinte cromático distinto. */
+    /* Fundido suave hacia el plano de acceso, sin tinte crom?tico distinto. */
     background:
       linear-gradient(90deg, transparent 55%, color-mix(in oklab, var(--color-bg) 55%, transparent) 100%),
       linear-gradient(180deg, transparent 55%, color-mix(in oklab, var(--color-bg) 50%, transparent) 100%);
@@ -1877,7 +1877,7 @@ body {
   padding-top: 0.85rem;
 }
 
-/* CTA en el plano de acceso: menos “glow product”, más sólido */
+/* CTA en el plano de acceso: menos ?glow product?, m?s s?lido */
 .login-access-plane .login-primary-cta-premium {
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.22) inset,
@@ -1918,7 +1918,216 @@ body {
   }
 }
 
+.login-welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  cursor: pointer;
+  background: var(--color-bg);
+  overflow: hidden;
+}
+.login-welcome-overlay__ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.login-welcome-overlay__glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(8px);
+}
+.login-welcome-overlay__glow--a {
+  top: -18%;
+  left: 50%;
+  width: min(90vw, 42rem);
+  height: min(90vw, 42rem);
+  transform: translateX(-50%);
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--color-accent) 34%, transparent) 0%,
+    transparent 68%
+  );
+  animation: login-welcome-glow-a 7s ease-in-out infinite;
+}
+.login-welcome-overlay__glow--b {
+  bottom: -22%;
+  right: -8%;
+  width: min(70vw, 28rem);
+  height: min(70vw, 28rem);
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--color-accent) 12%, transparent) 0%,
+    transparent 70%
+  );
+  animation: login-welcome-glow-b 9s ease-in-out infinite;
+}
+.login-welcome-overlay__grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--color-border) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-border) 55%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 65% 55% at 50% 42%, black 20%, transparent 75%);
+}
+.login-welcome-overlay__vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 45%, transparent 35%, color-mix(in oklab, var(--color-bg) 78%, black) 100%),
+    linear-gradient(180deg, transparent 55%, color-mix(in oklab, var(--color-bg) 55%, transparent) 100%);
+}
+.login-welcome-overlay__stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(100%, 36rem);
+  text-align: center;
+  gap: 0;
+}
+.login-welcome-overlay__kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.35rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-accent) 85%, white);
+}
+.login-welcome-overlay__kicker-mark {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 1px;
+  background: var(--color-accent);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--color-accent) 70%, transparent);
+  animation: login-kicker-pulse 2.4s ease-in-out infinite;
+}
+.login-welcome-overlay__logo-wrap {
+  margin-bottom: 1.75rem;
+  filter: drop-shadow(0 12px 40px color-mix(in oklab, var(--color-accent) 22%, transparent));
+}
+.login-welcome-overlay__logo {
+  margin: 0 auto;
+}
+.login-welcome-overlay__greeting {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3.25rem);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+  color: var(--color-text-2);
+}
+.login-welcome-overlay__name {
+  color: var(--color-text-1);
+  font-weight: 750;
+}
+.login-welcome-overlay__dest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem 0.7rem;
+  margin: 0.85rem 0 0;
+}
+.login-welcome-overlay__dest-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+.login-welcome-overlay__dest-sep {
+  width: 1px;
+  height: 0.85rem;
+  background: color-mix(in oklab, var(--color-border) 80%, transparent);
+}
+.login-welcome-overlay__dest-value {
+  font-size: clamp(1.05rem, 2.4vw, 1.25rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--color-accent);
+}
+.login-welcome-overlay__shift {
+  margin: 0.7rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--color-text-3);
+}
+.login-welcome-overlay__progress {
+  width: min(100%, 11.5rem);
+  height: 2px;
+  margin: 1.85rem auto 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-border) 65%, transparent);
+}
+.login-welcome-overlay__progress-bar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-accent) 40%, transparent),
+    var(--color-accent) 55%,
+    color-mix(in oklab, var(--color-accent) 80%, white)
+  );
+  box-shadow: 0 0 12px color-mix(in oklab, var(--color-accent) 45%, transparent);
+}
+.login-welcome-overlay__skip {
+  margin: 1.35rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: color-mix(in oklab, var(--color-text-2) 72%, var(--color-text-3));
+}
+.login-welcome-overlay__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+@keyframes login-welcome-glow-a {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.06);
+  }
+}
+@keyframes login-welcome-glow-b {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.85;
+    transform: translateY(-12px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .login-welcome-overlay__glow--a,
+  .login-welcome-overlay__glow--b,
+  .login-welcome-overlay__kicker-mark {
+    animation: none !important;
+  }
   .login-welcome-flash {
     animation: none;
   }
@@ -2029,7 +2238,7 @@ body {
   color: color-mix(in oklab, var(--color-accent) 70%, white);
 }
 
-/* ── Listbox de usuario premium ──
+/* ?? Listbox de usuario premium ??
  * Trigger con dot verde "online" del lado izquierdo del avatar,
  * gradiente sutil de fondo y ring de accent al abrir.
  * Opcion activa con barra de acento a la izquierda (estilo macOS). */
@@ -2098,7 +2307,7 @@ body {
   box-shadow: 0 0 8px color-mix(in oklab, var(--color-accent) 60%, transparent);
 }
 
-/* ── Listbox de usuario (segunda pasada) ──
+/* ?? Listbox de usuario (segunda pasada) ??
  * Header, buscador, items con avatar 36, role chip a la derecha,
  * check para el activo y anim de entrada slide-down + fade. */
 
@@ -2364,7 +2573,7 @@ body {
     0 0 12px color-mix(in oklab, var(--color-accent) 35%, transparent);
 }
 
-/* ──────────────────────────────────────────────────────────────────────
+/* ??????????????????????????????????????????????????????????????????????
  * DASHBOARD PREMIUM
  *
  * Capa visual adicional sobre el dashboard operativo. No toca data ni
@@ -2372,7 +2581,7 @@ body {
  * tipografia de numero con tinte segun tone, barras de fondo en los
  * top buses, mini barras en MTTR por prioridad, y pulse del "Sin
  * asignar" cuando hay tickets en cola.
- * ────────────────────────────────────────────────────────────────────── */
+ * ?????????????????????????????????????????????????????????????????????? */
 
 /* Eyebrow EN VIVO mas premium (refuerzo del que ya hay). */
 .dashboard-live-eyebrow {
@@ -2472,7 +2681,7 @@ body {
   -webkit-text-fill-color: var(--color-text-1);
           color: var(--color-text-1);
 }
-/* En estado vacio (—) no aplicamos el gradient para mantener legibilidad. */
+/* En estado vacio (?) no aplicamos el gradient para mantener legibilidad. */
 .dashboard-kpi-value--empty {
   background: none !important;
   -webkit-background-clip: border-box !important;
@@ -2577,14 +2786,14 @@ body {
   transition: width 0.6s var(--ease-out);
 }
 
-/* ──────────────────────────────────────────────────────────────────────
+/* ??????????????????????????????????????????????????????????????????????
  * TICKETS PREMIUM
  *
  * Capa visual del modulo de tickets (la pantalla mas usada de la app).
  * Refina el hero, las KPI pills (Total / Abiertos / En proceso / ...),
  * las cards de Alertas preventivas, los dividers de seccion y el CTA
  * principal de creacion. No toca data ni APIs.
- * ────────────────────────────────────────────────────────────────────── */
+ * ?????????????????????????????????????????????????????????????????????? */
 
 /* KPI pill premium con tinte segun tone. Usa --pill-tone para colorear
  * texto, borde, glow y dot. */
@@ -2799,12 +3008,12 @@ body {
   transform: translateY(-1px);
 }
 
-/* ──────────────────────────────────────────────────────────────────────
+/* ??????????????????????????????????????????????????????????????????????
  * REPORTES PREMIUM
  *
  * Vitrina ejecutiva (gestores / direccion). Eleva el hero, los KPIs,
  * las listas con barras, los podios y el grafico de serie temporal.
- * ────────────────────────────────────────────────────────────────────── */
+ * ?????????????????????????????????????????????????????????????????????? */
 
 /* Hero del modulo Reportes: glow ambient + radial sutil en esquina. */
 .reports-hero {
@@ -3135,7 +3344,7 @@ body {
   box-shadow: 0 0 6px currentColor;
 }
 
-/* ──────────────────────────────────────────────────────────────────────
+/* ??????????????????????????????????????????????????????????????????????
  * ACCOUNT (MI CUENTA) PREMIUM
  *
  * La pagina /account era una tarjeta de perfil clasica (banner + avatar
@@ -3143,7 +3352,7 @@ body {
  * piezas para llevarla al nivel del resto: hero asimetrico con avatar
  * lateral, KPIs personales con tinte, secciones con head dot azul y un
  * podio para top tipologias.
- * ────────────────────────────────────────────────────────────────────── */
+ * ?????????????????????????????????????????????????????????????????????? */
 
 /* Card hero del perfil: banner + ambient glow */
 .account-hero {
@@ -3561,14 +3770,14 @@ body {
   opacity: 0.72;
 }
 
-/* ──────────────────────────────────────────────────────────────────────
+/* ??????????????????????????????????????????????????????????????????????
  * DESVIOS PREMIUM
  *
  * Pase visual de /desvios (lista) y /desvios/nuevo (form). Reutiliza
  * patrones existentes (dashboard-hero-title, tickets-kpi-pill,
  * account-section, login-primary-cta-premium) y solo define el hero
  * propio del modulo + ajustes para la lista.
- * ────────────────────────────────────────────────────────────────────── */
+ * ?????????????????????????????????????????????????????????????????????? */
 
 /* Hero del listado / form de desvios: glow ambient sutil. */
 .desvios-hero {
@@ -3666,16 +3875,16 @@ body {
   border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-border-hover));
 }
 
-/* ──────────────────────────────────────────────────────────────────────
- * DESIGN SYSTEM FOUNDATION (Fase 0 — premium unificado)
+/* ??????????????????????????????????????????????????????????????????????
+ * DESIGN SYSTEM FOUNDATION (Fase 0 ? premium unificado)
  *
  * Escala tipografica heroes:
  *   - pretitle / eyebrow: 10px uppercase ( .ccmgc-eyebrow )
- *   - titulo operativo:   22–24px ( .dashboard-hero-title )
- *   - titulo dashboard:   26–28px ( excepcion en /dashboard )
+ *   - titulo operativo:   22?24px ( .dashboard-hero-title )
+ *   - titulo dashboard:   26?28px ( excepcion en /dashboard )
  *
  * Clases nuevas: badge, empty, modal, segmented pill, eyebrow alias.
- * ────────────────────────────────────────────────────────────────────── */
+ * ?????????????????????????????????????????????????????????????????????? */
 
 /* Eyebrow unificado (alias de dashboard-pretitle). */
 .ccmgc-eyebrow,
@@ -3844,9 +4053,9 @@ html[data-density="compact"] .tickets-kpi-pill {
   );
 }
 
-/* ── Bandeja / Tickets Fase 5 — impacto visual en pantallas más usadas ── */
+/* ?? Bandeja / Tickets Fase 5 ? impacto visual en pantallas m?s usadas ?? */
 
-/* KPIs del hero en /bandeja: más legibles a distancia en la sala. */
+/* KPIs del hero en /bandeja: m?s legibles a distancia en la sala. */
 .tickets-kpi-hero-strip .tickets-kpi-pill {
   padding: 5px 12px;
   font-size: 11.5px;
@@ -3943,7 +4152,7 @@ html[data-density="compact"] .tickets-kpi-pill {
     inset 0 0 0 1px color-mix(in oklab, var(--color-accent) 25%, transparent) !important;
 }
 
-/* Cards móvil con borde de prioridad. */
+/* Cards m?vil con borde de prioridad. */
 .bandeja-mobile-card--alta {
   border-left-width: 3px !important;
   border-left-color: color-mix(in oklab, var(--color-error) 85%, transparent) !important;
@@ -3963,7 +4172,7 @@ html[data-density="compact"] .tickets-kpi-pill {
     inset 0 0 0 1px color-mix(in oklab, var(--color-accent) 20%, transparent);
 }
 
-/* Paneles secundarios en /tickets (preventivo + auditoría). */
+/* Paneles secundarios en /tickets (preventivo + auditor?a). */
 .tickets-secondary-panel {
   position: relative;
   overflow: hidden;
@@ -3998,10 +4207,10 @@ html[data-density="compact"] .tickets-kpi-pill {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   VISUAL PREMIUM p6–p23 — motion, microinteracciones, utilidades compartidas
-   Catálogo motion: CSS para listas/toasts; framer en modales (lib/motion.ts).
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ???????????????????????????????????????????????????????????????????????????
+   VISUAL PREMIUM p6?p23 ? motion, microinteracciones, utilidades compartidas
+   Cat?logo motion: CSS para listas/toasts; framer en modales (lib/motion.ts).
+   ??????????????????????????????????????????????????????????????????????????? */
 
 @keyframes ccmgc-pop {
   0% { opacity: 0; transform: scale(0.92); }
@@ -4076,7 +4285,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   transition-duration: 0.01ms !important;
 }
 
-/* CTA primario operativo (sustituye login-primary-cta en módulos). */
+/* CTA primario operativo (sustituye login-primary-cta en m?dulos). */
 .ccmgc-primary-cta {
   display: inline-flex;
   align-items: center;
@@ -4214,7 +4423,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   background: color-mix(in oklab, var(--color-accent) 22%, transparent);
 }
 
-/* Barra de acción premium en hero de bandeja / gestión. */
+/* Barra de acci?n premium en hero de bandeja / gesti?n. */
 .ccmgc-hero-action {
   position: relative;
   display: flex;
@@ -4384,7 +4593,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   }
 }
 
-/* ─── Apunte express: barra de acciones ─────────────────────────────────── */
+/* ??? Apunte express: barra de acciones ??????????????????????????????????? */
 .express-action-bar {
   display: flex;
   flex-wrap: wrap;
@@ -4422,11 +4631,11 @@ html[data-density="compact"] .tickets-kpi-pill {
 }
 
 .express-action-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .express-action-btn:active:not(:disabled) {
-  transform: scale(0.985);
+  transform: none;
 }
 
 .express-action-btn:disabled {
@@ -4438,43 +4647,28 @@ html[data-density="compact"] .tickets-kpi-pill {
 .express-action-btn--primary {
   flex: 1 1 11rem;
   color: #fff;
-  background: linear-gradient(
-    145deg,
-    color-mix(in oklab, var(--color-accent) 90%, white 6%) 0%,
-    color-mix(in oklab, var(--color-accent) 98%, #0f172a 8%) 100%
-  );
-  border-color: color-mix(in oklab, var(--color-accent) 70%, white 12%);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.14) inset,
-    0 10px 26px -12px color-mix(in oklab, var(--color-accent) 80%, transparent);
+  background: var(--color-accent);
+  border-color: color-mix(in oklab, var(--color-accent) 80%, black 12%);
+  box-shadow: none;
 }
 
 .express-action-btn--primary:hover:not(:disabled) {
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.16) inset,
-    0 14px 32px -10px color-mix(in oklab, var(--color-accent) 88%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 88%, white 8%);
+  box-shadow: none;
 }
 
 .express-action-btn--draft {
   flex: 1 1 10rem;
   color: var(--color-text-1);
-  background: linear-gradient(
-    145deg,
-    color-mix(in oklab, #f59e0b 14%, var(--color-surface-2)) 0%,
-    color-mix(in oklab, var(--color-surface-3) 92%, #f59e0b 8%) 100%
-  );
-  border-color: color-mix(in oklab, #fbbf24 42%, var(--color-border));
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.06) inset,
-    0 8px 22px -14px rgba(245, 158, 11, 0.35);
+  background: color-mix(in oklab, var(--color-surface-2) 88%, transparent);
+  border-color: var(--color-border);
+  box-shadow: none;
 }
 
 .express-action-btn--draft:hover:not(:disabled) {
-  border-color: color-mix(in oklab, #fbbf24 58%, var(--color-border));
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.08) inset,
-    0 0 0 3px color-mix(in oklab, #f59e0b 14%, transparent),
-    0 10px 26px -12px rgba(245, 158, 11, 0.28);
+  border-color: color-mix(in oklab, #fbbf24 45%, var(--color-border));
+  background: color-mix(in oklab, #f59e0b 12%, var(--color-surface-2));
+  box-shadow: none;
 }
 
 .express-action-btn--clear {
@@ -4773,7 +4967,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   }
 }
 
-/* Opciones del typeahead (bus / línea): dos líneas, misma elevación que .ccmgc-select-panel. */
+/* Opciones del typeahead (bus / l?nea): dos l?neas, misma elevaci?n que .ccmgc-select-panel. */
 .ccmgc-typeahead-option {
   position: relative;
   display: flex;
@@ -4818,7 +5012,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   background: color-mix(in oklab, var(--color-accent) 20%, var(--color-surface-3));
 }
 
-/* Botón limpiar formulario nuevo ticket. */
+/* Bot?n limpiar formulario nuevo ticket. */
 .ccmgc-form-clear-btn {
   display: inline-flex;
   align-items: center;
@@ -4849,7 +5043,140 @@ html[data-density="compact"] .tickets-kpi-pill {
   cursor: not-allowed;
 }
 
-/* ── Formulario nuevo ticket — layout premium ── */
+/* ?? Gesti?n: c?scara unificada (Plantillas / Express / Ticket completo) ?? */
+.manage-section-card {
+  overflow: hidden;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px color-mix(in oklab, black 12%, transparent);
+}
+
+.manage-section-card[open],
+.manage-section-card:not(details) {
+  box-shadow:
+    0 1px 2px color-mix(in oklab, black 12%, transparent),
+    0 8px 24px -18px rgba(0, 0, 0, 0.35);
+}
+
+.manage-section-card__summary,
+.manage-section-card__header {
+  display: flex;
+  cursor: default;
+  list-style: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  text-align: left;
+}
+
+.manage-section-card__summary {
+  cursor: pointer;
+}
+
+.manage-section-card__summary::-webkit-details-marker {
+  display: none;
+}
+
+.manage-section-card__summary::marker {
+  content: "";
+}
+
+.manage-section-card__lead {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.manage-section-card__icon {
+  display: inline-flex;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: var(--color-text-2);
+  background: var(--color-surface-2);
+  box-shadow: 0 0 0 1px var(--color-border);
+}
+
+.manage-section-card__copy {
+  min-width: 0;
+}
+
+.manage-section-card__title {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-1);
+}
+
+.manage-section-card__subtitle {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--color-text-3);
+}
+
+.manage-section-card__trail {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.manage-section-card__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.manage-section-card__chevron {
+  flex-shrink: 0;
+  color: var(--color-text-3);
+  transition: transform 0.2s ease;
+}
+
+.manage-section-card[open] > .manage-section-card__summary .manage-section-card__chevron {
+  transform: rotate(180deg);
+}
+
+.manage-section-card__body {
+  border-top: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
+  padding: 0.85rem 1rem 1rem;
+}
+
+.manage-section-card__header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text-2);
+  background: color-mix(in oklab, var(--color-surface-2) 88%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-border) 92%, transparent);
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.manage-section-card__header-btn:hover {
+  color: var(--color-text-1);
+  border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-border));
+  background: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface-2));
+}
+
+/* ?? Formulario nuevo ticket ? layout premium ?? */
 .ticket-form-shell {
   background: linear-gradient(
     168deg,
@@ -4860,6 +5187,12 @@ html[data-density="compact"] .tickets-kpi-pill {
   box-shadow:
     0 1px 0 color-mix(in oklab, white 5%, transparent) inset,
     0 18px 48px -32px rgba(0, 0, 0, 0.55);
+}
+
+/* Embedded: sin c?scara propia (la aporta ManageSectionCard). */
+.ticket-form-shell.bg-transparent {
+  background: transparent;
+  box-shadow: none;
 }
 
 .ticket-form-identity-row {
@@ -5055,7 +5388,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   }
 }
 
-/* ── Selector de tipología (búsqueda + resumen) ── */
+/* ?? Selector de tipolog?a (b?squeda + resumen) ?? */
 .tipologia-picker {
   display: grid;
   gap: 0.85rem;
@@ -5392,8 +5725,8 @@ html[data-density="compact"] .tickets-kpi-pill {
 }
 @media (min-width: 640px) {
   .ticket-form-impact-panel {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-    align-items: end;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
   }
 }
 .ticket-form-impact-panel__stop {
@@ -5616,7 +5949,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   backdrop-filter: blur(14px);
 }
 
-/* Plantillas de ticket — franja colapsable en cabecera del formulario. */
+/* Plantillas de ticket ? franja colapsable en cabecera del formulario. */
 .ccmgc-template-shell {
   position: relative;
   border-radius: 12px;
@@ -6025,7 +6358,7 @@ html[data-density="compact"] .tickets-kpi-pill {
 }
 
 @media (min-width: 640px) {
-  /* Flecha decorativa desactivada: el panel se posiciona vía portal + coordenadas JS. */
+  /* Flecha decorativa desactivada: el panel se posiciona v?a portal + coordenadas JS. */
   .ccmgc-notification-panel--anchored::after {
     content: "";
     position: absolute;
@@ -6136,7 +6469,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   border-bottom: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
 }
 
-/* ─── Móvil: filtros con scroll horizontal y hero de desvíos ─────────────── */
+/* ??? M?vil: filtros con scroll horizontal y hero de desv?os ??????????????? */
 @media (max-width: 639px) {
   .filter-pills-scroll {
     overflow-x: auto;
@@ -6197,7 +6530,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   }
 }
 
-/* Desvíos fila pendiente (p13). */
+/* Desv?os fila pendiente (p13). */
 .desvios-row--pendiente {
   box-shadow: inset 3px 0 0 0 color-mix(in oklab, var(--color-warning) 80%, transparent);
 }
@@ -6222,6 +6555,11 @@ html[data-density="compact"] .tickets-kpi-pill {
   outline: none;
   border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border));
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, transparent);
+}
+/* Dentro de un chrome con focus-within, el glow lo pinta el contenedor. */
+[data-field-chrome]:focus-within .ccmgc-input-focus:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
 }
 .ccmgc-input-error {
   animation: ccmgc-shake 0.35s ease;
@@ -6409,7 +6747,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   padding-right: 0.75rem;
 }
 
-/* Segmented pill sliding track placeholder — JS sets --tab-index */
+/* Segmented pill sliding track placeholder ? JS sets --tab-index */
 .section-tabs-track {
   position: relative;
 }
@@ -6440,7 +6778,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   z-index: 0;
 }
 
-/* Pestañas planas: indicador inferior sin caja contenedora */
+/* Pesta?as planas: indicador inferior sin caja contenedora */
 .section-tabs-underline-track {
   position: relative;
 }
@@ -6463,9 +6801,9 @@ html[data-density="compact"] .tickets-kpi-pill {
   box-shadow: none !important;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   VISUAL PREMIUM w24–w40 — Ola 2
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ???????????????????????????????????????????????????????????????????????????
+   VISUAL PREMIUM w24?w40 ? Ola 2
+   ??????????????????????????????????????????????????????????????????????????? */
 
 @keyframes navigation-progress {
   from { transform: scaleX(0); opacity: 1; }
@@ -6560,7 +6898,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   position: relative;
 }
 .ccmgc-confetti-burst::after {
-  content: "✦";
+  content: "?";
   position: absolute;
   top: -2px;
   right: -6px;
@@ -6578,7 +6916,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   line-height: 1.75;
 }
 
-/* Shift hero — turno según hora (w32). */
+/* Shift hero ? turno seg?n hora (w32). */
 .shift-hero {
   position: relative;
 }
@@ -6621,9 +6959,9 @@ html[data-density="compact"] .tickets-kpi-pill {
   .offline-indicator-pulse .offline-indicator-dot { animation: none !important; }
 }
 
-/* ══════════════════════════════════════════════════════════════════════
- * VISUAL PREMIUM Ola 4 — a61/a62 Foundation (#511–546)
- * ══════════════════════════════════════════════════════════════════════ */
+/* ??????????????????????????????????????????????????????????????????????
+ * VISUAL PREMIUM Ola 4 ? a61/a62 Foundation (#511?546)
+ * ?????????????????????????????????????????????????????????????????????? */
 
 :root {
   --hero-gradient-accent: color-mix(in oklab, var(--color-accent) 10%, var(--color-surface));
@@ -6695,7 +7033,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   );
 }
 
-/* Admin subpáginas (operación, salud) */
+/* Admin subp?ginas (operaci?n, salud) */
 .admin-subpage-hero {
   position: relative;
   overflow: hidden;
@@ -6772,7 +7110,7 @@ html[data-density="compact"] .tickets-kpi-pill {
   transition: width var(--motion-normal, 0.22s) var(--ease-out, ease);
 }
 
-/* Banner de error canónico. */
+/* Banner de error can?nico. */
 .ccmgc-error-banner {
   border-radius: var(--radius-lg, 12px);
   border: 1px solid color-mix(in oklab, var(--color-error) 35%, var(--color-border));
@@ -6818,7 +7156,7 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   transform: scaleX(1);
 }
 
-/* ── TipTap / Bitácora ─────────────────────────────────────────────────── */
+/* ?? TipTap / Bit?cora ??????????????????????????????????????????????????? */
 .ccmgc-tiptap-editor {
   overflow: hidden;
   border-radius: 0.75rem;
@@ -6895,7 +7233,7 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-/* ── Bitácora v2 — lectura editorial + feed limpio (b-log-*) ───────────── */
+/* ?? Bit?cora v2 ? lectura editorial + feed limpio (b-log-*) ????????????? */
 .b-log-input {
   height: 2.5rem;
   border: none !important;
@@ -6952,7 +7290,7 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   background: var(--color-accent);
 }
 
-/* — Índice — */
+/* ? ?ndice ? */
 .b-log-home {
   display: flex;
   flex-direction: column;
@@ -7280,7 +7618,7 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   }
 }
 
-/* — Detalle / lectura — */
+/* ? Detalle / lectura ? */
 .b-log-read {
   padding: 0.25rem 0 3rem;
 }
@@ -7494,27 +7832,25 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   color: var(--color-text-3);
 }
 
-/* — Compose — */
+/* ? Compose ? */
 .b-log-compose {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  padding-bottom: 2rem;
+  gap: 1.15rem;
+  padding-bottom: 1.25rem;
 }
 .b-log-compose__nav {
   margin-bottom: -0.5rem;
 }
 .b-log-compose__header {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem 1.25rem;
+  flex-direction: column;
+  gap: 0.85rem;
 }
 .b-log-compose__eyebrow {
   font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-accent);
 }
@@ -7526,80 +7862,27 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   color: var(--color-text-1);
 }
 .b-log-compose__hint {
-  margin-top: 0.375rem;
+  margin: 0;
   font-size: 0.8125rem;
+  line-height: 1.45;
   color: var(--color-text-3);
 }
 .b-log-compose__meta-row {
-  display: grid;
-  gap: 0.75rem;
-}
-@media (min-width: 640px) {
-  .b-log-compose__meta-row {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-  }
-}
-.b-log-compose__editor {
-  overflow: hidden;
-  border-radius: 0.875rem;
-  background: color-mix(in srgb, var(--color-surface-2) 35%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-border) 30%, transparent);
-}
-.b-log-compose__editor .ccmgc-tiptap-editor {
-  border: none;
-  background: transparent;
-  border-radius: 0;
-}
-.b-log-compose__editor .ccmgc-tiptap-editor__surface {
-  padding: 1rem 1.125rem;
-  font-size: 1rem;
-  line-height: 1.7;
-  min-height: 18rem;
-}
-.b-log-compose__editor .ProseMirror,
-.b-log-compose__editor .ProseMirror-focused {
-  outline: none !important;
-  box-shadow: none !important;
-}
-.b-log-compose__editor:focus-within {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-border) 42%, transparent);
-}
-.b-log-compose__footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-.b-log-compose__tips {
-  display: grid;
   gap: 0.5rem;
 }
-@media (min-width: 640px) {
-  .b-log-compose__tips {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+.b-log-compose__editor {
+  overflow: hidden;
+  border-radius: 1rem;
 }
+.b-log-compose__footer {
+  display: block;
+}
+.b-log-compose__tips,
 .b-log-compose__tip {
-  padding: 0.875rem 1rem;
-  border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--color-surface-2) 32%, transparent);
-}
-.b-log-compose__tip svg {
-  margin-bottom: 0.375rem;
-}
-.b-log-compose__tip-title {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-1);
-}
-.b-log-compose__tip-desc {
-  margin-top: 0.1875rem;
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: var(--color-text-3);
+  display: none;
 }
 
 .ccmgc-bitacora-root.ccmgc-bitacora-root--v2 {
@@ -7613,7 +7896,7 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   min-width: 9.5rem;
 }
 
-/* — TipTap: menciones, entidades y popovers — */
+/* ? TipTap: menciones, entidades y popovers ? */
 .ccmgc-tiptap-mention {
   display: inline;
   padding: 0.1rem 0.35rem;
@@ -7843,7 +8126,7 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   font-size: 0.95em;
 }
 
-/* ── Catalog admin — premium panels ───────────────────────────────────── */
+/* ?? Catalog admin ? premium panels ????????????????????????????????????? */
 .catalog-admin {
   --catalog-emerald: color-mix(in oklab, #34d399 85%, var(--color-accent));
 }
@@ -8138,7 +8421,7 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   transform: scale(1.005);
 }
 
-/* ── App chrome — sidebar + header premium ─────────────────────────────── */
+/* ?? App chrome ? sidebar + header premium ??????????????????????????????? */
 .app-sidebar-shell {
   background: linear-gradient(
     180deg,
@@ -8204,4 +8487,469 @@ html[data-reduce-motion="true"] .navigation-progress-bar {
   box-shadow:
     0 1px 0 color-mix(in oklab, white 3%, transparent) inset,
     0 10px 32px -24px rgba(0, 0, 0, 0.45);
+}
+
+/* -- Quick Search (Ctrl+K) -- */
+.qs-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: min(14vh, 6rem) 1rem 2rem;
+}
+.qs-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  cursor: pointer;
+  background: color-mix(in oklab, var(--modal-overlay, rgba(0,0,0,0.55)) 92%, black);
+  backdrop-filter: blur(8px);
+}
+.qs-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 36rem;
+  max-height: min(72vh, 36rem);
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
+  background: color-mix(in oklab, var(--color-surface) 96%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, white 3%, transparent) inset,
+    0 28px 80px -24px rgba(0, 0, 0, 0.65),
+    0 0 0 1px color-mix(in oklab, var(--color-accent) 8%, transparent);
+}
+.qs-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-border) 70%, transparent);
+  background: color-mix(in oklab, var(--color-surface) 88%, var(--color-accent) 4%);
+}
+.qs-header__icon {
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+.qs-header__input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  color: var(--color-text-1);
+  outline: none;
+}
+.qs-header__input::placeholder {
+  color: var(--color-text-3);
+}
+.qs-header__input::-webkit-search-cancel-button {
+  display: none;
+}
+.qs-header__spinner {
+  flex-shrink: 0;
+  color: var(--color-text-3);
+}
+.qs-header__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: 0.4rem;
+  color: var(--color-text-3);
+  background: color-mix(in oklab, var(--color-surface-2) 80%, transparent);
+  cursor: pointer;
+}
+.qs-header__clear:hover {
+  color: var(--color-text-1);
+  background: var(--color-surface-2);
+}
+.qs-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.4rem 0 0.55rem;
+  overscroll-behavior: contain;
+}
+.qs-section {
+  margin-bottom: 0.25rem;
+}
+.qs-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem 0.35rem;
+}
+.qs-section__title {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+.qs-section__meta {
+  font-size: 0.625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklab, var(--color-text-3) 80%, transparent);
+}
+.qs-section__list {
+  margin: 0;
+  padding: 0 0.4rem;
+  list-style: none;
+}
+.qs-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  border-radius: 0.65rem;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.qs-item:hover {
+  background: color-mix(in oklab, var(--color-surface-2) 70%, transparent);
+}
+.qs-item.is-active {
+  background: color-mix(in oklab, var(--color-accent) 14%, var(--color-surface-2));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-accent) 28%, transparent);
+}
+.qs-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  color: var(--color-text-3);
+  background: color-mix(in oklab, var(--color-surface-2) 85%, transparent);
+}
+.qs-item__icon.is-active {
+  color: var(--color-accent);
+  background: color-mix(in oklab, var(--color-accent) 16%, transparent);
+}
+.qs-item__text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.qs-item__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qs-item__hint {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--color-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qs-item__shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+.qs-item__badge {
+  flex-shrink: 0;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  background: color-mix(in oklab, var(--color-accent) 14%, transparent);
+}
+.qs-item__arrow {
+  flex-shrink: 0;
+  opacity: 0;
+  color: var(--color-text-3);
+  transition: opacity 0.12s ease;
+}
+.qs-item__arrow.is-visible {
+  opacity: 1;
+  color: var(--color-accent);
+}
+.qs-mark {
+  border-radius: 0.2rem;
+  padding: 0 0.15rem;
+  background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+  color: var(--color-text-1);
+  font-weight: 700;
+}
+.qs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 2.25rem 1.25rem;
+  color: var(--color-text-3);
+  text-align: center;
+}
+.qs-empty__title {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-2);
+}
+.qs-empty__hint {
+  margin: 0;
+  max-width: 28ch;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--color-text-3);
+}
+.qs-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  flex-shrink: 0;
+  padding: 0.55rem 0.9rem;
+  border-top: 1px solid color-mix(in oklab, var(--color-border) 70%, transparent);
+  background: color-mix(in oklab, var(--color-surface-2) 45%, transparent);
+  font-size: 0.6875rem;
+  color: var(--color-text-3);
+}
+.qs-footer__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.qs-footer__group--end {
+  margin-left: auto;
+}
+.qs-footer__meta {
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklab, var(--color-text-3) 85%, transparent);
+}
+.qs-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 0.3rem;
+  border: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
+  background: color-mix(in oklab, var(--color-surface) 90%, transparent);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-text-2);
+  box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--color-border) 60%, transparent);
+}
+
+/* -- Priority / Fallo origen segmented (Express + Ticket completo) -- */
+.priority-origin-seg {
+  display: grid;
+  gap: 0.375rem;
+}
+.priority-origin-seg--priority {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.priority-origin-seg--origen {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.priority-origin-seg__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.35rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-3);
+  color: var(--color-text-2);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.2;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease;
+}
+.priority-origin-seg__btn:hover {
+  border-color: var(--color-border-hover);
+  color: var(--color-text-1);
+  background: var(--color-surface);
+}
+.priority-origin-seg__btn:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 55%, transparent);
+  outline-offset: 2px;
+}
+.priority-origin-seg__label {
+  min-width: 0;
+  text-align: center;
+}
+.priority-origin-seg__btn--alta.is-active {
+  border-color: color-mix(in oklab, var(--color-error) 55%, transparent);
+  background: color-mix(in oklab, var(--color-error) 16%, var(--color-surface));
+  color: var(--color-error);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-error) 28%, transparent) inset;
+}
+.priority-origin-seg__btn--media.is-active {
+  border-color: color-mix(in oklab, var(--color-warning) 55%, transparent);
+  background: color-mix(in oklab, var(--color-warning) 16%, var(--color-surface));
+  color: var(--color-warning);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-warning) 28%, transparent) inset;
+}
+.priority-origin-seg__btn--baja.is-active {
+  border-color: color-mix(in oklab, var(--color-accent) 45%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 14%, var(--color-surface));
+  color: var(--color-accent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent) 25%, transparent) inset;
+}
+.priority-origin-seg__btn--origen.is-active {
+  border-color: color-mix(in oklab, var(--color-accent) 50%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 14%, var(--color-surface));
+  color: var(--color-accent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent) 22%, transparent) inset;
+}
+
+/* -- Preventivo de conductores -- */
+.preventivo-case-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid var(--color-border);
+  background:
+    linear-gradient(165deg, color-mix(in oklab, var(--color-surface) 92%, var(--color-accent) 8%) 0%, var(--color-surface) 42%),
+    var(--color-surface);
+  padding: 1rem 1.05rem 1.05rem;
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.preventivo-case-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--case-accent, var(--color-accent));
+}
+.preventivo-case-card:hover {
+  border-color: var(--color-border-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px -18px color-mix(in oklab, var(--case-accent, var(--color-accent)) 55%, transparent);
+}
+.preventivo-detail-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.15rem;
+  border: 1px solid var(--color-border);
+  background:
+    radial-gradient(ellipse 70% 90% at 100% 0%, color-mix(in oklab, var(--color-accent) 18%, transparent), transparent 55%),
+    linear-gradient(160deg, var(--color-surface) 0%, color-mix(in oklab, var(--color-surface-2) 80%, var(--color-accent) 8%) 100%);
+  padding: 1.25rem 1.35rem;
+}
+.preventivo-timeline-item {
+  position: relative;
+  padding-left: 1.35rem;
+}
+.preventivo-timeline-item::before {
+  content: "";
+  position: absolute;
+  left: 0.3rem;
+  top: 0.45rem;
+  bottom: -0.85rem;
+  width: 1.5px;
+  background: color-mix(in oklab, var(--color-border) 85%, transparent);
+}
+.preventivo-timeline-item:last-child::before {
+  display: none;
+}
+.preventivo-timeline-item::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.4rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, transparent);
+}
+
+/* -- Section card can?nico (ops: flota, preventivo, detalle?) -- */
+.ccmgc-section-card {
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.ccmgc-section-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent);
+  padding: 0.75rem 1rem;
+}
+.ccmgc-section-card__heading {
+  min-width: 0;
+}
+.ccmgc-section-card__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text-1);
+}
+.ccmgc-section-card__icon {
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+.ccmgc-section-card__subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--color-text-3);
+}
+.ccmgc-section-card__action {
+  flex-shrink: 0;
+  padding-top: 0.1rem;
+}
+.ccmgc-section-card__body {
+  padding: 1rem;
+}
+.ccmgc-section-card__body--flush {
+  padding: 0.5rem 0.75rem;
 }

@@ -31,9 +31,11 @@ import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton
 import { toast } from "@/components/toast-host";
 import { TicketTemplatePicker } from "@/components/tickets/TicketTemplatePicker";
 import { TipologiaPickerSection, applyGenericTipologiaToForm } from "@/components/tickets/TipologiaPickerSection";
+import { FalloOrigenPicker, PriorityPicker } from "@/components/tickets/PriorityOriginPickers";
 import { BusOperationalContextPanel } from "@/components/tickets/BusOperationalContextPanel";
 import { TicketDuplicateAlert } from "@/components/tickets/TicketDuplicateAlert";
 import { TypeaheadInput } from "@/components/ui/typeahead-input";
+import { DateTimePickerField } from "@/components/ui/datetime-picker-field";
 import { VoiceInputButton } from "@/components/ui/VoiceInputButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,7 +62,9 @@ import {
   normalizeAccordionOpen,
 } from "@/components/tickets/tickets-module-types";
 import type { SessionUser } from "@/lib/domain";
-import { calculatePriority, calculateSlaMinutes, toUiPriority } from "@/lib/ticketing";
+import { calculateSlaMinutes, toUiPriority } from "@/lib/ticketing";
+import { FALLO_ORIGEN_OPTIONS } from "@/lib/fallo-origen";
+import type { TicketPriority } from "@/lib/domain";
 import {
   GENERIC_TIPO,
   type TipologiaItem,
@@ -536,6 +540,8 @@ export function TicketCreateForm({
   );
 
   const applyTipologiaSelection = useCallback((item: TipologiaItem) => {
+    const suggestedPriority: TicketPriority =
+      item.nivelImpacto === "Alto" ? "alta" : item.nivelImpacto === "Bajo" ? "baja" : "media";
     setForm((prev) => ({
       ...prev,
       tipo: item.tipo,
@@ -545,6 +551,8 @@ export function TicketCreateForm({
       nivelImpacto: item.nivelImpacto,
       origenTecnico: item.origenTecnico,
       observaciones: item.observaciones,
+      // Sugerencia al elegir tipología; el técnico puede cambiarla después.
+      priority: suggestedPriority,
     }));
   }, []);
 
@@ -561,32 +569,10 @@ export function TicketCreateForm({
     }));
   }, []);
 
-  const computedPriority = useMemo(() => {
-    if (selectedAsset) {
-      return calculatePriority({
-        assetType: selectedAsset.type,
-        impactedLines: form.impactedLines,
-        serviceStopped: form.serviceStopped,
-        nivelImpacto: form.nivelImpacto,
-      });
-    }
-    // Para un bus nuevo (sin activo aún) usamos el tipo por defecto SAE para
-    // que el cálculo de prioridad y SLA tenga sentido en el preview.
-    if (isNewBus) {
-      return calculatePriority({
-        assetType: "sae",
-        impactedLines: form.impactedLines,
-        serviceStopped: form.serviceStopped,
-        nivelImpacto: form.nivelImpacto,
-      });
-    }
-    return "baja";
-  }, [selectedAsset, isNewBus, form.impactedLines, form.serviceStopped, form.nivelImpacto]);
-
   const computedSla =
     selectedAsset?.slaMinutes != null && selectedAsset.slaMinutes > 0
       ? selectedAsset.slaMinutes
-      : calculateSlaMinutes(computedPriority, slaOverride);
+      : calculateSlaMinutes(form.priority, slaOverride);
   const ticketFormProgress = useMemo(() => {
     const equipmentValid = busIdValidation.ok && lineaValidation.ok;
     const checks = [
@@ -736,6 +722,20 @@ export function TicketCreateForm({
             lineaLabel: typeof d.lineaLabel === "string" ? d.lineaLabel : "",
             servicioLabel: typeof d.servicioLabel === "string" ? d.servicioLabel : "",
             conductorLabel: typeof d.conductorLabel === "string" ? d.conductorLabel : "",
+            incidentOccurredAt:
+              typeof d.incidentOccurredAt === "string" && d.incidentOccurredAt.trim()
+                ? d.incidentOccurredAt
+                : defaultForm().incidentOccurredAt,
+            priority:
+              d.priority === "alta" || d.priority === "media" || d.priority === "baja"
+                ? d.priority
+                : "media",
+            falloOrigen:
+              d.falloOrigen === "maquina" ||
+              d.falloOrigen === "conductor" ||
+              d.falloOrigen === "externo"
+                ? d.falloOrigen
+                : "maquina",
           });
           setStagedUploadFiles([]);
           // OJO: NO restauramos `parsed.openSections`. Aunque el draft
@@ -831,6 +831,10 @@ export function TicketCreateForm({
       return;
     }
     if (!selectedTipologia || !trimmedBusId) {
+      return;
+    }
+    if (!form.incidentOccurredAt.trim() || Number.isNaN(new Date(form.incidentOccurredAt).getTime())) {
+      setError("Indica la hora de la incidencia.");
       return;
     }
     // Si el bus es nuevo o el usuario no eligió activo concreto, dejamos que el
@@ -939,8 +943,6 @@ export function TicketCreateForm({
           onJump={jumpToFormSection}
         />
 
-        <TicketTemplatePicker form={form} setForm={setForm} sessionUser={sessionUser} defaultExpanded />
-
         <FormHeaderExtras busId={trimmedBusId} lineaLabel={form.lineaLabel} />
       </header>
 
@@ -979,6 +981,12 @@ export function TicketCreateForm({
              * El activo SAE-DEFAULT se asigna automaticamente en backend.
              */}
             <div className="ticket-form-panel">
+              <TicketTemplatePicker
+                form={form}
+                setForm={setForm}
+                sessionUser={sessionUser}
+                tipologias={tipologias}
+              />
               <div className="ticket-form-equipment-grid">
               <label className="block space-y-1">
                 <span className="text-label">Bus</span>
@@ -1038,16 +1046,28 @@ export function TicketCreateForm({
               <label className="block space-y-1">
                 <span className="text-label">
                   Conductor
-                  <span className="ml-1 text-[10px] font-normal text-[var(--color-text-3)]">(opcional)</span>
+                  <span className="ml-1 text-[10px] font-normal text-[var(--color-text-3)]">(ID)</span>
                 </span>
                 <Input
                   value={form.conductorLabel}
                   onChange={(event) => setForm((prev) => ({ ...prev, conductorLabel: event.target.value }))}
-                  placeholder="Ej: Juan Pérez"
+                  placeholder="ID conductor"
                   maxLength={120}
                   autoComplete="off"
                 />
               </label>
+              <div className="block space-y-1 sm:col-span-2">
+                <label htmlFor="ticket-incident-at" className="text-label">
+                  Hora de la incidencia <span className="text-[var(--color-error)]">*</span>
+                </label>
+                <DateTimePickerField
+                  id="ticket-incident-at"
+                  value={form.incidentOccurredAt}
+                  onChange={(next) => setForm((prev) => ({ ...prev, incidentOccurredAt: next }))}
+                  ariaLabel="Hora de la incidencia"
+                />
+                <p className="text-[11px] text-[var(--color-text-3)]">Puede ser distinta a la hora de registro.</p>
+              </div>
               </div>
             </div>
 
@@ -1267,6 +1287,28 @@ export function TicketCreateForm({
             </div>
 
             <div className="ticket-form-impact-panel">
+              <div className="block space-y-1">
+                <span className="text-label">Prioridad</span>
+                <PriorityPicker
+                  value={form.priority}
+                  onChange={(priority) => setForm((prev) => ({ ...prev, priority }))}
+                  aria-label="Prioridad del ticket"
+                />
+                <p className="text-[11px] text-[var(--color-text-3)]">
+                  La elige el técnico. SLA estimado: {computedSla} min.
+                </p>
+              </div>
+              <div className="block space-y-1">
+                <span className="text-label">Origen del fallo</span>
+                <FalloOrigenPicker
+                  value={form.falloOrigen}
+                  onChange={(falloOrigen) => setForm((prev) => ({ ...prev, falloOrigen }))}
+                  aria-label="Origen del fallo"
+                />
+                <p className="text-[11px] text-[var(--color-text-3)]">
+                  {FALLO_ORIGEN_OPTIONS.find((o) => o.value === form.falloOrigen)?.hint}
+                </p>
+              </div>
               <label className="block space-y-1">
                 <span className="text-label">Líneas afectadas</span>
                 <Input
@@ -1562,10 +1604,10 @@ export function TicketCreateForm({
               SLA <span className="num-tabular font-medium text-[var(--color-text-2)]">{computedSla}m</span>
             </span>
             {(() => {
-              const pr = priorityBadgeProps(computedPriority);
+              const pr = priorityBadgeProps(form.priority);
               return (
                 <Badge
-                  key={computedPriority}
+                  key={form.priority}
                   variant={pr.variant}
                   className={cn(
                     "whitespace-nowrap transition-all duration-300",
@@ -1573,7 +1615,7 @@ export function TicketCreateForm({
                     pr.className,
                   )}
                 >
-                  {toUiPriority(computedPriority)}
+                  {toUiPriority(form.priority)}
                 </Badge>
               );
             })()}

@@ -1,17 +1,449 @@
+/* Custom Dashboard — shell de widgets y capa visual Recharts */
+
 .dashboard-widget-card {
-  background-image: linear-gradient(
-    165deg,
-    color-mix(in oklab, var(--color-surface) 92%, var(--color-accent) 8%) 0%,
-    var(--color-surface) 42%
-  );
+  background-image:
+    radial-gradient(
+      ellipse 90% 55% at 100% -10%,
+      color-mix(in oklab, var(--color-accent) 10%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      168deg,
+      color-mix(in oklab, var(--color-surface-2) 55%, var(--color-surface)) 0%,
+      var(--color-surface) 48%
+    );
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 14px 36px -28px rgba(0, 0, 0, 0.65);
+}
+
+.dashboard-widget-card:hover {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 42px -26px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 22%, rgba(0, 0, 0, 0.75));
+}
+
+/* KPI: un solo marco (WidgetCardFrame), sin caja interior ni sombra inset */
+.dashboard-widget-card--kpi,
+.dashboard-widget-card:has(.dashboard-kpi-card) {
+  box-shadow: 0 14px 36px -28px rgba(0, 0, 0, 0.65);
+}
+
+.dashboard-widget-card--kpi:hover,
+.dashboard-widget-card:has(.dashboard-kpi-card):hover {
+  box-shadow:
+    0 18px 42px -26px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 22%, rgba(0, 0, 0, 0.75));
 }
 
 .dashboard-kpi-card {
-  background-image: radial-gradient(
-    ellipse 80% 60% at 100% 0%,
-    color-mix(in oklab, var(--kpi-accent, var(--color-accent)) 12%, transparent),
-    transparent 70%
+  position: relative;
+  overflow: hidden;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+.dashboard-kpi-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -20% -40% -20%;
+  height: 55%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--kpi-accent, var(--color-accent)) 14%, transparent),
+    transparent 72%
   );
+  pointer-events: none;
+}
+
+.dashboard-kpi-card .dashboard-kpi-value {
+  letter-spacing: -0.03em;
+}
+
+.dashboard-kpi-card .dashboard-kpi-icon-wrap {
+  border-color: color-mix(in oklab, var(--kpi-accent, var(--color-accent)) 28%, var(--color-border));
+  background: color-mix(in oklab, var(--kpi-accent, var(--color-accent)) 10%, var(--color-surface-2));
+}
+
+/* Contenedor de gráfica con ambiente — glow base en app-charts.css */
+.dashboard-chart-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.dashboard-chart-shell .recharts-responsive-container,
+.dashboard-chart-shell > .recharts-wrapper {
+  position: relative;
+  z-index: 1;
+}
+
+/* Leyenda custom */
+.dashboard-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.35rem 0.65rem;
+  padding-inline: 0.15rem;
+}
+
+.dashboard-chart-legend--compact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem 0.55rem;
+  justify-items: start;
+}
+
+.dashboard-chart-legend--ultra {
+  gap: 0.15rem 0.35rem;
+  font-size: 9px;
+  line-height: 1.15;
+}
+
+.dashboard-chart-legend--ultra .dashboard-chart-legend__dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* Alta densidad: widgets estrechos o bajos */
+.dashboard-chart-shell--dense::before {
+  inset: 4% 0 0;
+  opacity: 0.65;
+}
+
+.dashboard-chart-brush .recharts-brush-slide {
+  transition: x 0.22s ease, width 0.22s ease, fill 0.18s ease;
+}
+
+.dashboard-chart-brush .recharts-brush-traveller {
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.dashboard-chart-shell--dense .recharts-radar-polygon,
+.app-chart-shell.dashboard-chart-shell--dense .recharts-radar-polygon {
+  filter: none;
+}
+
+.dashboard-chart-shell--dense .recharts-cartesian-axis-tick text {
+  font-size: 9px !important;
+}
+
+.dashboard-chart-shell--dense .recharts-legend-wrapper {
+  font-size: 9px;
+}
+
+/* Entrada escalonada en modo presentación */
+.dashboard-widget-presentation-enter {
+  animation: dashboard-widget-presentation-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes dashboard-widget-presentation-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.dashboard-chart-legend__item {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.12rem 0.45rem 0.12rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-border) 88%, transparent);
+  background: color-mix(in oklab, var(--color-surface-2) 55%, transparent);
+  animation: legend-item-in 0.32s var(--ease-out, ease) both;
+  animation-delay: calc(var(--legend-index, 0) * 40ms);
+}
+
+@keyframes legend-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-donut-center__value,
+.dashboard-donut-center__label {
+  animation: donut-center-in 0.42s var(--ease-out, ease) both;
+}
+
+@keyframes donut-center-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-kpi-value--enter {
+  animation: kpi-value-in 0.48s var(--ease-out, ease) both;
+}
+
+@keyframes kpi-value-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dashboard-chart-tooltip-wrap .recharts-tooltip-cursor {
+  transition: fill-opacity 0.15s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-chart-legend__item,
+  .dashboard-donut-center__value,
+  .dashboard-donut-center__label,
+  .dashboard-kpi-value--enter {
+    animation: none;
+  }
+}
+
+.dashboard-chart-legend__dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px color-mix(in oklab, currentColor 12%, transparent);
+}
+
+.dashboard-chart-legend__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--color-text-2);
+}
+
+/* Tooltip Recharts */
+.dashboard-chart-tooltip-wrap .recharts-default-tooltip {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.dashboard-executive-tooltip {
+  min-width: 8.5rem;
+  max-width: 17.5rem;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid color-mix(in oklab, var(--color-border) 88%, var(--chart-accent, var(--color-accent)) 12%);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in oklab, var(--color-surface-3) 92%, var(--color-surface)) 0%,
+      color-mix(in oklab, var(--color-surface) 98%, transparent) 100%
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 10%, transparent),
+    0 18px 40px -18px rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  animation: dashboard-tooltip-in 0.14s ease-out;
+}
+
+@keyframes dashboard-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dashboard-executive-tooltip__accent {
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--chart-accent, var(--color-accent)),
+    color-mix(in oklab, var(--chart-accent, var(--color-accent)) 30%, transparent)
+  );
+}
+
+.dashboard-executive-tooltip__body {
+  padding: 0.55rem 0.7rem 0.65rem;
+}
+
+.dashboard-executive-tooltip__title {
+  margin-bottom: 0.25rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
+}
+
+.dashboard-executive-tooltip__value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-1);
+}
+
+.dashboard-executive-tooltip__sparkline path {
+  filter: drop-shadow(0 1px 2px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 25%, transparent));
+}
+
+/* Overrides Recharts */
+.dashboard-chart-shell .recharts-cartesian-grid-horizontal line,
+.dashboard-chart-shell .recharts-cartesian-grid-vertical line {
+  stroke: rgba(148, 163, 184, 0.07);
+}
+
+.dashboard-chart-shell .recharts-area-area,
+.dashboard-chart-shell .recharts-area-curve {
+  filter: drop-shadow(0 6px 14px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 12%, transparent));
+}
+
+.dashboard-chart-shell .dashboard-treemap-cell {
+  transition: filter 0.16s ease, stroke-width 0.16s ease;
+}
+
+.dashboard-chart-shell g:hover .dashboard-treemap-cell {
+  filter: brightness(1.12);
+  stroke-width: 1.5;
+}
+
+.dashboard-chart-shell .recharts-radar-polygon {
+  filter: drop-shadow(0 4px 12px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 18%, transparent));
+}
+
+.dashboard-chart-shell .recharts-tooltip-cursor {
+  fill: color-mix(in oklab, var(--chart-accent, var(--color-accent)) 6%, transparent) !important;
+}
+
+/* Brush / selector de rango temporal */
+.dashboard-chart-brush {
+  cursor: crosshair;
+}
+
+.dashboard-chart-brush > rect,
+.dashboard-chart-brush .recharts-brush-bg {
+  fill: color-mix(in oklab, var(--color-surface-2) 58%, transparent) !important;
+  stroke: none !important;
+  rx: 12;
+}
+
+.dashboard-chart-brush .recharts-brush-slide {
+  fill: color-mix(in oklab, var(--chart-accent, var(--color-accent)) 16%, var(--color-surface-2)) !important;
+  stroke: none !important;
+  stroke-width: 0 !important;
+  rx: 10;
+  filter: drop-shadow(0 0 10px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 18%, transparent));
+}
+
+.dashboard-chart-brush .recharts-brush-traveller line {
+  display: none;
+}
+
+.dashboard-chart-brush-traveller rect:first-of-type {
+  filter: drop-shadow(0 2px 6px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 35%, rgba(0, 0, 0, 0.45)));
+  cursor: ew-resize;
+  transition: filter 0.15s ease, opacity 0.15s ease;
+}
+
+.dashboard-chart-brush-traveller:hover rect:first-of-type {
+  filter: drop-shadow(0 3px 10px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 45%, rgba(0, 0, 0, 0.5)));
+}
+
+.dashboard-chart-brush .recharts-curve,
+.dashboard-chart-brush .recharts-area-area {
+  opacity: 0.42;
+  stroke-width: 1.25px;
+  stroke-linecap: round;
+}
+
+.dashboard-chart-brush .recharts-brush-texts {
+  display: none;
+}
+
+.dashboard-chart-brush-hint {
+  font-size: 10px;
+  color: var(--color-text-3);
+  line-height: 1.3;
+}
+
+.dashboard-chart-shell--with-brush-hint {
+  position: relative;
+}
+
+.dashboard-chart-shell--with-brush-hint .dashboard-chart-brush-hint {
+  position: absolute;
+  right: 6px;
+  bottom: 2px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.dashboard-chart-brush {
+  animation: brush-fade-in 0.42s var(--ease-out, ease) both;
+}
+
+@keyframes brush-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-chart-brush {
+    animation: none;
+  }
+}
+
+.dashboard-chart-data-table table th,
+.dashboard-chart-data-table table td {
+  vertical-align: middle;
+}
+
+.dashboard-chart-data-table tbody tr:focus-within {
+  outline: 1px solid color-mix(in oklab, var(--color-accent) 35%, transparent);
+  outline-offset: -1px;
+}
+
+.dashboard-widget-card--alert-warn {
+  border-color: color-mix(in oklab, #f59e0b 55%, var(--color-border)) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, #f59e0b 28%, transparent),
+    0 10px 28px -18px color-mix(in oklab, #f59e0b 45%, transparent);
+}
+
+.dashboard-widget-card--alert-error {
+  border-color: color-mix(in oklab, #f43f5e 55%, var(--color-border)) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, #f43f5e 30%, transparent),
+    0 10px 28px -18px color-mix(in oklab, #f43f5e 50%, transparent);
 }
 
 .dashboard-template-card {
@@ -28,4 +460,18 @@
 
 .dashboard-preset-chip:hover {
   transform: translateY(-1px);
+}
+
+.dashboard-widget-type-chip {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.group:hover .dashboard-widget-type-chip {
+  border-color: color-mix(in oklab, var(--color-border) 70%, var(--color-accent) 30%);
+}
+
+@media (max-width: 639px) {
+  .dashboard-chart-legend--compact {
+    grid-template-columns: 1fr;
+  }
 }

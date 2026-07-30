@@ -23,16 +23,9 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
+import { TrendDualAreaChart } from "@/components/dashboard-builder/trend-dual-area-chart";
+import "@/app/(private)/dashboards/dashboard-builder.css";
 import { ConductorViewPanel } from "@/components/conductor-view-panel";
 import { DashboardHero } from "@/components/dashboard/DashboardHero";
 import { DashboardOperationalDetail } from "@/components/dashboard/DashboardOperationalDetail";
@@ -94,21 +87,21 @@ function IncidentCard({ ticket }: { ticket: ActiveIncident }) {
   const nearby = !expired && !urgent && slaMin < 120;
 
   const priorityChipClass = cn(
-    "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+    "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
     ticket.priority === "alta"
-      ? "border-[rgba(239,68,68,0.30)] bg-[var(--color-error-light)] text-[var(--color-error)]"
+      ? "bg-[var(--color-error-light)] text-[var(--color-error)]"
       : ticket.priority === "media"
-        ? "border-[rgba(245,158,11,0.30)] bg-[var(--color-warning-light)] text-[var(--color-warning)]"
-        : "border-[rgba(16,185,129,0.30)] bg-[var(--color-success-light)] text-[var(--color-success)]",
+        ? "bg-[var(--color-warning-light)] text-[var(--color-warning)]"
+        : "bg-[var(--color-success-light)] text-[var(--color-success)]",
   );
 
   return (
     <Link
       href={`/tickets/${ticket.id}`}
-      className="group flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 transition-all duration-150 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-2)]/40 sm:gap-3 sm:px-3"
+      className="group flex items-center gap-2 px-1 py-2.5 transition-colors hover:bg-[color-mix(in_oklab,var(--color-surface-2)_55%,transparent)] sm:gap-3 sm:px-1.5"
     >
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className={priorityChipClass}>
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: pm?.color }} />
             {ticket.priority}
@@ -116,11 +109,11 @@ function IncidentCard({ ticket }: { ticket: ActiveIncident }) {
           <span className="num-tabular font-mono text-[10px] font-semibold text-[var(--color-text-3)]">
             {ticket.id.slice(-8).toUpperCase()}
           </span>
-          <Badge variant={STATUS_VARIANT[ticket.status] ?? "neutral"} className="!px-1.5 !py-0 text-[10px]">
+          <Badge variant={STATUS_VARIANT[ticket.status] ?? "neutral"} className="!border-0 !px-1.5 !py-0 text-[10px]">
             {STATUS_LABEL[ticket.status] ?? ticket.status}
           </Badge>
         </div>
-        <p className="mt-0.5 truncate text-[13px] font-medium leading-snug text-[var(--color-text-1)]">
+        <p className="mt-0.5 truncate text-[13px] font-medium leading-snug text-[var(--color-text-1)] group-hover:text-[var(--color-accent)]">
           {ticket.title}
         </p>
         <p className="truncate text-[11px] text-[var(--color-text-3)]">
@@ -265,7 +258,7 @@ export function Dashboard() {
   const [kpis, setKpis] = useState<KpisData | null>(null);
   const [trend, setTrend] = useState<TrendDay[] | null>(null);
   const [trendSummary, setTrendSummary] = useState<TrendSummary | null>(null);
-  const [trendDays, setTrendDays] = useState<7 | 14 | 30>(7);
+  const [trendDays, setTrendDays] = useState<7 | 14 | 30 | 90>(7);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshOk, setRefreshOk] = useState(false);
@@ -363,7 +356,12 @@ export function Dashboard() {
 
             {/* Incidents */}
             <article className="account-section ccmgc-stagger-in ccmgc-stagger-in-5">
-              <header className="account-section-head !mb-4 !items-start sm:!items-center">
+              <FeedbackTargetButton
+                placement="corner"
+                id="dashboard/incidencias-activas"
+                label="Tabla de incidencias activas"
+              />
+              <header className="account-section-head !mb-4 !items-start pr-9 sm:!items-center">
                 <span className="account-section-icon shrink-0">
                   <AlertTriangle size={16} strokeWidth={1.6} className="text-[var(--color-error)]" />
                 </span>
@@ -376,7 +374,6 @@ export function Dashboard() {
                   <p className="mt-0.5 text-xs text-[var(--color-text-3)]">Ordenadas por prioridad SLA</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <FeedbackTargetButton id="dashboard/incidencias-activas" label="Tabla de incidencias activas" />
                   {!loading && activeCount > 0 && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-[rgba(220,38,38,0.3)] bg-[var(--color-error-light)] px-2 py-0.5 text-xs font-semibold text-[var(--color-error)]">
                       <AlertTriangle size={11} />
@@ -386,10 +383,10 @@ export function Dashboard() {
                 </div>
               </header>
 
-              <div className="space-y-1.5">
+              <div className="divide-y divide-[color-mix(in_oklab,var(--color-border)_55%,transparent)]">
                 {loading ? (
                   [1, 2, 3, 4].map((i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2">
+                    <div key={i} className="flex items-center gap-2 px-1 py-2.5">
                       <div className="flex-1 space-y-1.5">
                         <div className="flex gap-2">
                           <Skeleton className="h-3 w-16" />
@@ -398,7 +395,7 @@ export function Dashboard() {
                         <Skeleton className="h-3.5 w-3/4" />
                         <Skeleton className="h-3 w-1/2" />
                       </div>
-                      <Skeleton className="h-4 w-14 rounded-full" />
+                      <Skeleton className="h-4 w-14" />
                     </div>
                   ))
                 ) : kpis?.incidenciasActivas.length ? (
@@ -409,7 +406,7 @@ export function Dashboard() {
                     {kpis.incidenciasActivas.length > MAX_VISIBLE_INCIDENTS ? (
                       <Link
                         href="/bandeja"
-                        className="mt-1 flex items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--color-border)] py-2 text-xs font-medium text-[var(--color-accent)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-light)]/20"
+                        className="mt-1 flex items-center justify-center gap-1 py-2.5 text-xs font-medium text-[var(--color-accent)] transition-colors hover:underline"
                       >
                         Ver {kpis.incidenciasActivas.length - MAX_VISIBLE_INCIDENTS} más en bandeja
                         <ArrowRight size={12} />
@@ -448,11 +445,16 @@ export function Dashboard() {
              *  se ve siempre y no se estira con la columna vecina.
              */}
             <article className="account-section ccmgc-stagger-in ccmgc-stagger-in-5 flex h-[340px] min-w-0 flex-col overflow-hidden lg:h-[420px]">
-              <header className="account-section-head !mb-3 shrink-0">
+              <FeedbackTargetButton
+                placement="corner"
+                id="dashboard/tendencia-tickets"
+                label="Gráfico de tendencia de tickets"
+              />
+              <header className="account-section-head !mb-3 shrink-0 flex-wrap items-start gap-y-2 pr-9">
                 <span className="account-section-icon shrink-0">
                   <TrendingUp size={16} strokeWidth={1.6} className="text-[var(--color-accent)]" />
                 </span>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-[120px]">
                   <p className="account-section-pretitle">
                     <span className="account-section-pretitle-dot" aria-hidden />
                     Evolución
@@ -460,10 +462,9 @@ export function Dashboard() {
                   <h2 className="account-section-title !mt-0">Tendencia</h2>
                   <p className="mt-0.5 text-xs text-[var(--color-text-3)]">Últimos {trendDays} días</p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <FeedbackTargetButton id="dashboard/tendencia-tickets" label="Gráfico de tendencia de tickets" />
+                <div className="ml-auto flex shrink-0 items-center">
                   <div className="flex shrink-0 gap-0.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-1">
-                    {([7, 14, 30] as const).map((d) => (
+                    {([7, 14, 30, 90] as const).map((d) => (
                       <button key={d} type="button" onClick={() => setTrendDays(d)}
                         className={cn(
                           "rounded-lg px-2 py-1 text-[11px] font-medium transition-all duration-150 sm:px-2.5",
@@ -498,63 +499,13 @@ export function Dashboard() {
 
               <div className="flex min-h-0 flex-1 flex-col">
                 <div className="relative min-h-[180px] flex-1 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    {/* margin right=12: Recharts oculta el ultimo tick si
-                        este sobresale del area de dibujo. Aumentando el
-                        margen derecho damos espacio al label "Jue" / "30
-                        nov" para que se vea entero en movil. */}
-                    <AreaChart data={trend ?? []} margin={{ top: 8, right: 20, left: -24, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="gradCreados" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#DC2626" stopOpacity={0.10} />
-                          <stop offset="95%" stopColor="#DC2626" stopOpacity={0.01} />
-                        </linearGradient>
-                        <linearGradient id="gradResueltos" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#059669" stopOpacity={0.08} />
-                          <stop offset="95%" stopColor="#059669" stopOpacity={0.01} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.07)" vertical={false} />
-                      {/* interval=preserveStartEnd asegura que el primer
-                          y ultimo dia siempre se rendericen aunque haya
-                          colision con vecinos. Con 14d / 30d Recharts
-                          quitaba ticks intermedios pero al menos los
-                          extremos quedan visibles. minTickGap=4 reduce el
-                          umbral para 7d. */}
-                      <XAxis
-                        dataKey="day"
-                        tick={{ fill: "var(--color-text-3)", fontSize: 10 }}
-                        axisLine={false}
-                        tickLine={false}
-                        interval="preserveStartEnd"
-                        minTickGap={4}
-                      />
-                      <YAxis tick={{ fill: "var(--color-text-3)", fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
-                      <Tooltip
-                        contentStyle={{
-                          background: "var(--color-surface-3)",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: "10px",
-                          fontSize: "12px",
-                          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-                        }}
-                        labelStyle={{ color: "var(--color-text-1)", fontWeight: 600, marginBottom: 4 }}
-                        itemStyle={{ color: "var(--color-text-2)" }}
-                        cursor={{ stroke: "rgba(148,163,184,0.12)", strokeWidth: 1 }}
-                      />
-                      <Area type="monotone" dataKey="creados" name="Creados"
-                        stroke="#DC2626" fill="url(#gradCreados)" strokeWidth={2}
-                        dot={false} activeDot={{ r: 4, strokeWidth: 0, fill: "#DC2626" }}
-                        animationDuration={400}
-                      />
-                      <Area type="monotone" dataKey="resueltos" name="Resueltos"
-                        stroke="#059669" fill="url(#gradResueltos)" strokeWidth={2}
-                        dot={false} activeDot={{ r: 4, strokeWidth: 0, fill: "#059669" }}
-                        animationDuration={400}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  <TrendDualAreaChart data={trend ?? []} height="100%" idPrefix="dashboard-main" />
                 </div>
+                {(trend?.length ?? 0) > 16 ? (
+                  <p className="mt-1.5 shrink-0 text-[10px] text-[var(--color-text-3)]">
+                    Arrastra el selector inferior para acotar el periodo visible.
+                  </p>
+                ) : null}
                 <div className="mt-3 flex gap-4 shrink-0 text-[11px]">
                   <span className="flex items-center gap-1.5 text-[var(--color-text-3)]">
                     <span className="h-2 w-2 rounded-full bg-[#DC2626]" /> Creados
@@ -621,7 +572,12 @@ export function Dashboard() {
 
             {/* Knowledge base */}
             <article className="account-section min-h-[200px] transition-shadow hover:shadow-md">
-              <header className="account-section-head !mb-3">
+              <FeedbackTargetButton
+                placement="corner"
+                id="dashboard/base-conocimiento"
+                label="Base de conocimiento"
+              />
+              <header className="account-section-head !mb-3 pr-9">
                 <span className="account-section-icon shrink-0">
                   <Search size={14} className="text-[var(--color-text-3)]" />
                 </span>
@@ -632,7 +588,6 @@ export function Dashboard() {
                   </p>
                   <h3 className="account-section-title !mt-0">Conocimiento</h3>
                 </div>
-                <FeedbackTargetButton id="dashboard/base-conocimiento" label="Base de conocimiento" />
               </header>
               <div className="space-y-1.5">
                 {!kbShortcutsLoaded ? (

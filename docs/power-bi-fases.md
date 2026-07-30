@@ -77,6 +77,8 @@ Ejecutar el script anterior. Debe mostrar **5/5 comprobaciones OK**:
    - `Incidencias[Fecha]` → `Calendario[Date]` (muchos a uno)
 6. Guardar como `Incidencias-CCMGC.pbix`.
 
+**Credenciales del origen de datos (importante):** el token viaja como header `Authorization` embebido en el propio código M, no por el mecanismo nativo de Power BI. En el diálogo de credenciales para este origen, elige **método "Anónimo"**. Si seleccionas "Clave de API web" y solo rellenas el valor de la clave sin el "Nombre de la clave" (o viceversa), Power BI muestra el error *"Una clave de la API web solo puede especificarse cuando se proporciona un nombre de clave de la API web"*. No es un fallo de la API ni de la clave, es el método de autenticación equivocado para este origen.
+
 ### ✅ Verificación Fase 2
 
 - [ ] Tabla `Incidencias` con filas > 0
@@ -194,15 +196,15 @@ Ver [`power-bi-handover-jefatura.md`](power-bi-handover-jefatura.md).
 0 → 1 → 2 → 3 → 5 → (4 cuando pidan horas) → (6 cuando haya BI Servicios) → 7
 ```
 
-**Estado actual del código (Fase 1):** API implementada. Falta reiniciar servicio y pasar script verify en producción.
+**Estado actual del código (Fase 1):** API implementada y verificada.
 
 ### Registro de ejecución
 
 | Fase | Estado | Notas |
 |------|--------|-------|
 | **0** | Documento listo | [`power-bi-kpi-definiciones.md`](power-bi-kpi-definiciones.md) — pendiente firma Jefatura |
-| **1** | **Completada** | `power-bi-verify-api.ps1` → **5/5 OK** (10/07/2026, 576 incidencias, 158 buses) |
-| **2** | Pendiente (Power BI Desktop) | Scripts `.pq` en `docs/power-bi/` |
+| **1** | **Completada** | `power-bi:verify` → **5/5 OK** (19/07/2026, 604 incidencias, 158 buses) |
+| **2** | En curso (Power BI Desktop) | Scripts `.pq` en `docs/power-bi/` — retomar desde aquí |
 | **3** | Pendiente (Power BI Desktop) | Medidas en `power-bi-dax.md` |
 | **4** | Pendiente (Power BI Desktop) | Sección horas en `power-bi-dax.md` |
 | **5** | Pendiente | Gateway + publicar informe |

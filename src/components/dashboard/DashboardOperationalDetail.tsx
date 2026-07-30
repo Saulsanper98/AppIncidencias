@@ -1,9 +1,11 @@
 "use client";
 
-import { BarChart3, ChevronDown } from "lucide-react";
+import { BarChart3, Bus, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { EmptyState } from "@/components/ui/empty-state";
+import { SectionCard } from "@/components/ui/section-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -76,17 +78,14 @@ export function DashboardOperationalDetail({
 
       {open ? (
         <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
-              MTTR por prioridad (30d)
-            </p>
+          <SectionCard title="MTTR por prioridad (30d)">
             {(() => {
               const maxMttr = Math.max(
                 ...(["alta", "media", "baja"] as const).map((p) => mttr[p] ?? 0),
                 1,
               );
               return (
-                <ul className="mt-3 space-y-2.5">
+                <ul className="space-y-2.5">
                   {(["alta", "media", "baja"] as const).map((prio) => {
                     const dotClass =
                       prio === "alta"
@@ -126,19 +125,21 @@ export function DashboardOperationalDetail({
                 </ul>
               );
             })()}
-          </div>
+          </SectionCard>
 
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
-              Top buses (30d)
-            </p>
+          <SectionCard title="Top buses (30d)">
             {topBuses.length === 0 ? (
-              <p className="mt-3 text-sm text-[var(--color-text-3)]">Sin datos suficientes.</p>
+              <EmptyState
+                icon={Bus}
+                title="Sin datos suficientes"
+                hint="Cuando haya tickets en 30 días, aquí verás los buses con más incidencias."
+                compact
+              />
             ) : (
               (() => {
                 const maxTickets = Math.max(...topBuses.slice(0, 5).map((b) => b.ticketCount), 1);
                 return (
-                  <ol className="mt-2 space-y-1.5">
+                  <ol className="space-y-1.5">
                     {topBuses.slice(0, 5).map((b, idx) => {
                       const fillPct = Math.max(8, Math.round((b.ticketCount / maxTickets) * 100));
                       return (
@@ -169,7 +170,7 @@ export function DashboardOperationalDetail({
                 );
               })()
             )}
-          </div>
+          </SectionCard>
         </div>
       ) : null}
     </section>

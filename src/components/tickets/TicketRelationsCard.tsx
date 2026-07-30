@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { SectionCard } from "@/components/ui/section-card";
 import type { TicketStatus } from "@/lib/domain";
 import { TICKET_STATUS_LABELS } from "@/lib/ticket-labels";
 import {
@@ -186,18 +187,20 @@ export function TicketRelationsCard({ ticketId, readOnly = false }: { ticketId: 
   }, [relations]);
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-6">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-subheading">
-          <Link2 size={16} className="text-[var(--color-text-3)]" aria-hidden />
+    <SectionCard
+      title={
+        <>
           Tickets relacionados
           {relations && relations.length > 0 ? (
             <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-3)] ring-1 ring-[var(--color-border)]">
               {relations.length}
             </span>
           ) : null}
-        </h2>
-        {!readOnly ? (
+        </>
+      }
+      icon={Link2}
+      action={
+        !readOnly ? (
           <button
             type="button"
             onClick={togglePicker}
@@ -214,9 +217,9 @@ export function TicketRelationsCard({ ticketId, readOnly = false }: { ticketId: 
               </>
             )}
           </button>
-        ) : null}
-      </div>
-
+        ) : null
+      }
+    >
       {!readOnly && pickerOpen ? (
         <div className="mb-3 rounded-lg border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)]/30 p-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -376,6 +379,6 @@ export function TicketRelationsCard({ ticketId, readOnly = false }: { ticketId: 
           ))}
         </ul>
       )}
-    </div>
+    </SectionCard>
   );
 }

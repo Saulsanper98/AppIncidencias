@@ -36,10 +36,45 @@ import {
 import { currentShiftFromHour, type ShiftKey, VALID_SHIFTS } from "@/lib/shift-utils";
 import { toast } from "@/components/toast-host";
 
+/** Clave estable de la query de listado (para no refetch si ya está al día). */
+function ticketsListQueryKey(parts: {
+  status: string;
+  operator: string;
+  busId: string;
+  partCode: string;
+  priority: string;
+  mine: boolean;
+  tipo: string;
+  conductor: string;
+  dateFrom: string;
+  dateTo: string;
+}): string {
+  return [
+    parts.status,
+    parts.operator,
+    parts.busId,
+    parts.partCode.trim(),
+    parts.priority,
+    parts.mine ? "1" : "0",
+    parts.tipo,
+    parts.conductor.trim(),
+    parts.dateFrom.trim(),
+    parts.dateTo.trim(),
+  ].join("\0");
+}
+
 export function useTickets() {
   const router = useRouter();
   const pathname = usePathname();
   const slaToastShownRef = useRef(false);
+  const ticketsFetchGenRef = useRef(0);
+  const bootstrappedRef = useRef(false);
+  const lastFetchedQueryKeyRef = useRef("");
+  const loadingRef = useRef(true);
+  const sessionHeadersRef = useRef<{ userId: string; role: UserRole }>({
+    userId: "",
+    role: "conductor",
+  });
   // Ruta base sobre la que sincronizamos los filtros como query string.
   // El modulo de tickets vive en dos paginas distintas: /bandeja (vista
   // primaria del centro) y /tickets (gestion + preventivo). Cuando el
@@ -51,6 +86,9 @@ export function useTickets() {
   const busIdFromQuery = searchParams.get("busId");
   const statusFromQuery = searchParams.get("status");
   const priorityFromQuery = searchParams.get("priority");
+  const conductorFromQuery = searchParams.get("conductor")?.trim() ?? "";
+  const dateFromFromQuery = searchParams.get("from")?.trim() ?? "";
+  const dateToFromQuery = searchParams.get("to")?.trim() ?? "";
   const tipoFromQuery = searchParams.get("tipo");
   const partCodeFromQuery = searchParams.get("partCode")?.trim() ?? "";
   const mineFromQuery = searchParams.get("mine");
@@ -70,16 +108,44 @@ export function useTickets() {
   const [tipologias, setTipologias] = useState<
     import("@/lib/tipologia").TipologiaItem[]
   >([]);
-  const [statusFilter, setStatusFilter] = useState<"todos" | TicketStatus>("todos");
-  const [priorityFilter, setPriorityFilter] = useState<"todos" | TicketPriority>("todos");
-  const [operatorFilter, setOperatorFilter] = useState<"todas" | string>("todas");
-  const [busFilter, setBusFilter] = useState<"todas" | string>("todas");
-  const [tipoFilter, setTipoFilter] = useState<"todos" | string>("todos");
+  const [statusFilter, setStatusFilter] = useState<"todos" | TicketStatus>(() => {
+    const allowed: Array<TicketStatus | "todos"> = [
+      "todos",
+      "borrador",
+      "abierto",
+      "en_proceso",
+      "esperando_repuesto",
+      "resuelto",
+    ];
+    if (statusFromQuery && allowed.includes(statusFromQuery as TicketStatus | "todos")) {
+      return statusFromQuery as "todos" | TicketStatus;
+    }
+    return "todos";
+  });
+  const [priorityFilter, setPriorityFilter] = useState<"todos" | TicketPriority>(() => {
+    const allowed: Array<TicketPriority | "todos"> = ["todos", "alta", "media", "baja"];
+    if (priorityFromQuery && allowed.includes(priorityFromQuery as TicketPriority | "todos")) {
+      return priorityFromQuery as "todos" | TicketPriority;
+    }
+    return "todos";
+  });
+  const [conductorFilter, setConductorFilter] = useState(conductorFromQuery);
+  const [dateFromFilter, setDateFromFilter] = useState(dateFromFromQuery);
+  const [dateToFilter, setDateToFilter] = useState(dateToFromQuery);
+  const [operatorFilter, setOperatorFilter] = useState<"todas" | string>(
+    operatorFromQuery && operatorFromQuery !== "todas" ? operatorFromQuery : "todas",
+  );
+  const [busFilter, setBusFilter] = useState<"todas" | string>(busIdFromQuery ?? "todas");
+  const [tipoFilter, setTipoFilter] = useState<"todos" | string>(
+    tipoFromQuery && tipoFromQuery !== "todos" ? tipoFromQuery : "todos",
+  );
   // Chip "Mis tickets": inicializado desde la URL (`?mine=1`). Para técnicos
   // se activa por defecto al cargar (efecto más abajo).
   const [onlyMine, setOnlyMine] = useState<boolean>(mineFromQuery === "1");
   const [tickets, setTickets] = useState<TicketView[]>([]);
   const [loading, setLoading] = useState(true);
+  /** Se pone a true al terminar el bootstrap; dispara una reconciliación de filtros. */
+  const [ticketsReady, setTicketsReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -122,8 +188,36 @@ export function useTickets() {
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
   const [statusChangeSubmitting, setStatusChangeSubmitting] = useState(false);
   const filterSearchRef = useRef<HTMLInputElement>(null);
-  const [bandejaCompacta, setBandejaCompacta] = useState(false);
+  const [bandejaCompacta, setBandejaCompacta] = useState(true);
   const [showTicketsUiHint, setShowTicketsUiHint] = useState(false);
+
+  loadingRef.current = loading;
+  sessionHeadersRef.current = { userId: currentUserId, role };
+
+  const ticketsQueryRef = useRef({
+    statusFilter: statusFilter as "todos" | TicketStatus,
+    priorityFilter: priorityFilter as "todos" | TicketPriority,
+    operatorFilter: operatorFilter as "todas" | string,
+    busFilter: busFilter as "todas" | string,
+    tipoFilter: tipoFilter as "todos" | string,
+    partCodeFromQuery,
+    onlyMine,
+    conductorFilter,
+    dateFromFilter,
+    dateToFilter,
+  });
+  ticketsQueryRef.current = {
+    statusFilter,
+    priorityFilter,
+    operatorFilter,
+    busFilter,
+    tipoFilter,
+    partCodeFromQuery,
+    onlyMine,
+    conductorFilter,
+    dateFromFilter,
+    dateToFilter,
+  };
 
   const actionMenuTicket = useMemo(
     () => (actionMenuTicketId ? tickets.find((t) => t.id === actionMenuTicketId) ?? null : null),
@@ -156,6 +250,25 @@ export function useTickets() {
     }
   }, [busIdFromQuery]);
 
+  /** Bus en catálogo → rellena operadora; al pasar de un bus concreto a «Todos», limpia operadora. */
+  const prevBusFilterRef = useRef(busFilter);
+  useEffect(() => {
+    const prev = prevBusFilterRef.current;
+    prevBusFilterRef.current = busFilter;
+
+    if (busFilter === "todas") {
+      if (prev !== "todas") {
+        setOperatorFilter("todas");
+      }
+      return;
+    }
+    const needle = busFilter.trim().toLowerCase();
+    const bus = catalog.find((b) => b.id.trim().toLowerCase() === needle);
+    if (bus?.operator) {
+      setOperatorFilter(bus.operator);
+    }
+  }, [busFilter, catalog]);
+
   useEffect(() => {
     if (!statusFromQuery) return;
     const allowed: Array<TicketStatus | "todos"> = [
@@ -178,6 +291,15 @@ export function useTickets() {
       setPriorityFilter(priorityFromQuery as "todos" | TicketPriority);
     }
   }, [priorityFromQuery]);
+
+  useEffect(() => {
+    setConductorFilter(conductorFromQuery);
+  }, [conductorFromQuery]);
+
+  useEffect(() => {
+    setDateFromFilter(dateFromFromQuery);
+    setDateToFilter(dateToFromQuery);
+  }, [dateFromFromQuery, dateToFromQuery]);
 
   useEffect(() => {
     if (!tipoFromQuery) return;
@@ -306,7 +428,8 @@ export function useTickets() {
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(TICKETS_BANDEJA_COMPACT_KEY);
-      if (raw === "1") setBandejaCompacta(true);
+      if (raw === "0") setBandejaCompacta(false);
+      else if (raw === "1") setBandejaCompacta(true);
     } catch {
       /* ignore */
     }
@@ -361,19 +484,34 @@ export function useTickets() {
       const desiredOp = operatorFilter === "todas" ? "" : operatorFilter;
       const desiredBus = busFilter === "todas" ? "" : busFilter;
       const desiredTipo = tipoFilter === "todos" ? "" : tipoFilter;
+      const desiredConductor = conductorFilter.trim();
+      const desiredFrom = dateFromFilter.trim();
+      const desiredTo = dateToFilter.trim();
       const curStatus = searchParams.get("status") ?? "";
       const curPri = searchParams.get("priority") ?? "";
       const curOp = searchParams.get("operator") ?? "";
       const curBus = searchParams.get("busId") ?? "";
       const curTipo = searchParams.get("tipo") ?? "";
+      const curConductor = searchParams.get("conductor")?.trim() ?? "";
+      const curFrom = searchParams.get("from")?.trim() ?? "";
+      const curTo = searchParams.get("to")?.trim() ?? "";
       const curPart = searchParams.get("partCode")?.trim() ?? "";
       const curSla = searchParams.get("sla") ?? "";
+      const curHour = searchParams.get("hour");
+      const curShift = searchParams.get("shift");
+      const curQ = searchParams.get("q");
+      const curCompletar = searchParams.get("completar");
+      const curMine = searchParams.get("mine") === "1";
       if (
         curStatus === desiredStatus &&
         curPri === desiredPri &&
         curOp === desiredOp &&
         curBus === desiredBus &&
-        curTipo === desiredTipo
+        curTipo === desiredTipo &&
+        curConductor === desiredConductor &&
+        curFrom === desiredFrom &&
+        curTo === desiredTo &&
+        curMine === onlyMine
       )
         return;
       const q = new URLSearchParams();
@@ -382,11 +520,22 @@ export function useTickets() {
       if (desiredOp) q.set("operator", desiredOp);
       if (desiredBus) q.set("busId", desiredBus);
       if (desiredTipo) q.set("tipo", desiredTipo);
+      if (desiredConductor) q.set("conductor", desiredConductor);
+      if (desiredFrom) q.set("from", desiredFrom);
+      if (desiredTo) q.set("to", desiredTo);
       if (curPart) q.set("partCode", curPart);
       if (onlyMine) q.set("mine", "1");
       if (curSla === "overdue" || slaOverdueOnly) q.set("sla", "overdue");
+      if (curHour) q.set("hour", curHour);
+      if (curShift) q.set("shift", curShift);
+      if (curQ) q.set("q", curQ);
+      if (curCompletar) q.set("completar", curCompletar);
       const qs = q.toString();
-      router.replace(qs ? `${inboxPath}?${qs}` : inboxPath, { scroll: false });
+      const nextUrl = qs ? `${inboxPath}?${qs}` : inboxPath;
+      // replaceState evita remount/Suspense de router.replace al solo
+      // sincronizar query (era una fuente de parpadeo al entrar en Bandeja).
+      if (`${window.location.pathname}${window.location.search}` === nextUrl) return;
+      window.history.replaceState(window.history.state, "", nextUrl);
     }, 0);
     return () => window.clearTimeout(id);
   }, [
@@ -398,9 +547,11 @@ export function useTickets() {
     operatorFilter,
     busFilter,
     tipoFilter,
+    conductorFilter,
+    dateFromFilter,
+    dateToFilter,
     onlyMine,
     slaOverdueOnly,
-    router,
     searchParams,
   ]);
 
@@ -444,12 +595,13 @@ export function useTickets() {
     const data = JSON.parse(text) as { users: LocalUser[] };
     setUsers(data.users);
     if (data.users.length > 0) {
-      setCurrentUserId((prev) => prev || data.users[0].id);
-      if (!currentUserId) {
+      setCurrentUserId((prev) => {
+        if (prev) return prev;
         setRole(data.users[0].role);
-      }
+        return data.users[0].id;
+      });
     }
-  }, [currentUserId]);
+  }, []);
 
   const fetchSession = useCallback(async (): Promise<{ mineDefault: boolean }> => {
     const response = await fetch("/api/auth/session", { cache: "no-store" });
@@ -468,6 +620,7 @@ export function useTickets() {
         setSessionUser(retryData.user);
         setCurrentUserId(retryData.user.id);
         setRole(retryData.user.role);
+        sessionHeadersRef.current = { userId: retryData.user.id, role: retryData.user.role };
         const mineDefault = retryData.user.role === "tecnico_campo" && mineFromQuery === null;
         if (mineDefault) setOnlyMine(true);
         return { mineDefault };
@@ -482,6 +635,8 @@ export function useTickets() {
       setSessionUser(data.user);
       setCurrentUserId(data.user.id);
       setRole(data.user.role);
+      // Actualizar headers ya: el siguiente fetchTickets no puede esperar al re-render.
+      sessionHeadersRef.current = { userId: data.user.id, role: data.user.role };
       // Default por rol: si es técnico de campo y la URL no especifica el
       // filtro explícitamente, abrir la bandeja con "Solo míos" activado.
       const mineDefault = data.user.role === "tecnico_campo" && mineFromQuery === null;
@@ -501,7 +656,11 @@ export function useTickets() {
       priority: "todos" | TicketPriority = "todos",
       mine = false,
       tipo: "todos" | string = "todos",
+      conductor = "",
+      dateFrom = "",
+      dateTo = "",
     ) => {
+      const gen = ++ticketsFetchGenRef.current;
       const query = new URLSearchParams({ status, operator, busId });
       if (priority !== "todos") {
         query.set("priority", priority);
@@ -515,18 +674,42 @@ export function useTickets() {
       if (mine) {
         query.set("mine", "1");
       }
+      if (conductor.trim()) {
+        query.set("conductor", conductor.trim());
+      }
+      if (dateFrom.trim()) {
+        query.set("from", dateFrom.trim());
+      }
+      if (dateTo.trim()) {
+        query.set("to", dateTo.trim());
+      }
+      const { userId, role: hdrRole } = sessionHeadersRef.current;
       const response = await fetch(`/api/tickets?${query.toString()}`, {
         cache: "no-store",
         headers: {
-          "x-user-id": currentUserId,
-          "x-user-role": role,
+          "x-user-id": userId,
+          "x-user-role": hdrRole,
         },
       });
       const text = await response.text();
+      if (gen !== ticketsFetchGenRef.current) return;
       if (!response.ok) {
         throw new Error(text || "Error al cargar tickets");
       }
       const data = JSON.parse(text) as { tickets: TicketView[] };
+      if (gen !== ticketsFetchGenRef.current) return;
+      lastFetchedQueryKeyRef.current = ticketsListQueryKey({
+        status,
+        operator,
+        busId,
+        partCode,
+        priority,
+        mine,
+        tipo,
+        conductor,
+        dateFrom,
+        dateTo,
+      });
       setTickets(data.tickets);
       if (!slaToastShownRef.current) {
         const now = Date.now();
@@ -545,7 +728,7 @@ export function useTickets() {
         }
       }
     },
-    [currentUserId, role],
+    [],
   );
 
   const fetchAuditEvents = useCallback(async () => {
@@ -603,14 +786,21 @@ export function useTickets() {
       await fetchLineas();
       await fetchUsers();
       const session = await fetchSession();
-      const initialMine = mineFromQuery === "1" || session.mineDefault;
+      // Un solo listado: con los filtros actuales (URL/estado), nunca un
+      // bootstrap sin conductor/fechas que luego pelea con el efecto.
+      const q = ticketsQueryRef.current;
+      const initialMine = mineFromQuery === "1" || session.mineDefault || q.onlyMine;
       await fetchTickets(
-        "todos",
-        "todas",
-        busIdFromQuery ?? "todas",
-        partCodeFromQuery,
-        "todos",
+        q.statusFilter,
+        q.operatorFilter,
+        q.busFilter !== "todas" ? q.busFilter : (busIdFromQuery ?? "todas"),
+        q.partCodeFromQuery || partCodeFromQuery,
+        q.priorityFilter,
         initialMine,
+        q.tipoFilter,
+        q.conductorFilter,
+        q.dateFromFilter,
+        q.dateToFilter,
       );
       await fetchAuditEvents();
       await fetchMaintenanceAlerts();
@@ -619,6 +809,7 @@ export function useTickets() {
       console.error(bootstrapError);
       setError("No se pudo inicializar el modulo de tickets.");
     }
+    setTicketsReady(true);
     setLoading(false);
   }, [
     fetchCatalog,
@@ -635,36 +826,77 @@ export function useTickets() {
   ]);
 
   useEffect(() => {
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
     void loadData();
   }, [loadData]);
 
+  // Refetch al cambiar filtros (o al marcar ready, por si el bootstrap
+  // quedó con una query distinta a la del estado actual). Sin `loading`
+  // en deps: evitar un segundo fetch + skeleton al terminar el bootstrap.
   useEffect(() => {
-    if (!loading) {
-      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter).catch((filterError) => {
-        console.error(filterError);
-        setError("No se pudo refrescar la bandeja de tickets.");
-      });
-    }
-  }, [statusFilter, priorityFilter, operatorFilter, busFilter, tipoFilter, partCodeFromQuery, onlyMine, loading, fetchTickets, role]);
+    if (!ticketsReady) return;
+    const key = ticketsListQueryKey({
+      status: statusFilter,
+      operator: operatorFilter,
+      busId: busFilter,
+      partCode: partCodeFromQuery,
+      priority: priorityFilter,
+      mine: onlyMine,
+      tipo: tipoFilter,
+      conductor: conductorFilter,
+      dateFrom: dateFromFilter,
+      dateTo: dateToFilter,
+    });
+    if (key === lastFetchedQueryKeyRef.current) return;
+    fetchTickets(
+      statusFilter,
+      operatorFilter,
+      busFilter,
+      partCodeFromQuery,
+      priorityFilter,
+      onlyMine,
+      tipoFilter,
+      conductorFilter,
+      dateFromFilter,
+      dateToFilter,
+    ).catch((filterError) => {
+      console.error(filterError);
+      setError("No se pudo refrescar la bandeja de tickets.");
+    });
+  }, [
+    ticketsReady,
+    statusFilter,
+    priorityFilter,
+    operatorFilter,
+    busFilter,
+    tipoFilter,
+    partCodeFromQuery,
+    onlyMine,
+    conductorFilter,
+    dateFromFilter,
+    dateToFilter,
+    fetchTickets,
+  ]);
 
   const refreshTicketsAndSideData = useCallback(async () => {
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
+    const q = ticketsQueryRef.current;
+    await fetchTickets(
+      q.statusFilter,
+      q.operatorFilter,
+      q.busFilter,
+      q.partCodeFromQuery,
+      q.priorityFilter,
+      q.onlyMine,
+      q.tipoFilter,
+      q.conductorFilter,
+      q.dateFromFilter,
+      q.dateToFilter,
+    );
     await fetchAuditEvents();
     await fetchMaintenanceAlerts();
     await fetchPreventiveTasks();
-  }, [
-    statusFilter,
-    operatorFilter,
-    busFilter,
-    partCodeFromQuery,
-    priorityFilter,
-    onlyMine,
-    tipoFilter,
-    fetchTickets,
-    fetchAuditEvents,
-    fetchMaintenanceAlerts,
-    fetchPreventiveTasks,
-  ]);
+  }, [fetchTickets, fetchAuditEvents, fetchMaintenanceAlerts, fetchPreventiveTasks]);
 
   // ── Refresco en vivo desde SSE ─────────────────────────────────────────
   // Cuando otro usuario crea / cambia estado / asigna / comenta / elimina un
@@ -673,26 +905,25 @@ export function useTickets() {
   // mucho movimiento (p. ej. una migración masiva).
   const liveRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleLiveRefresh = useCallback(() => {
-    if (loading) return; // todavía no cargó la primera vez
+    if (loadingRef.current) return; // todavía no cargó la primera vez
     if (liveRefreshTimerRef.current) clearTimeout(liveRefreshTimerRef.current);
     liveRefreshTimerRef.current = setTimeout(() => {
-      fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter).catch(
-        (refreshError) => console.warn("live refresh:", refreshError),
-      );
+      const q = ticketsQueryRef.current;
+      fetchTickets(
+        q.statusFilter,
+        q.operatorFilter,
+        q.busFilter,
+        q.partCodeFromQuery,
+        q.priorityFilter,
+        q.onlyMine,
+        q.tipoFilter,
+        q.conductorFilter,
+        q.dateFromFilter,
+        q.dateToFilter,
+      ).catch((refreshError) => console.warn("live refresh:", refreshError));
       fetchAuditEvents().catch(() => {});
     }, 300);
-  }, [
-    loading,
-    fetchTickets,
-    statusFilter,
-    operatorFilter,
-    busFilter,
-    partCodeFromQuery,
-    priorityFilter,
-    onlyMine,
-    tipoFilter,
-    fetchAuditEvents,
-  ]);
+  }, [fetchTickets, fetchAuditEvents]);
 
   useSseEvent("ticket_created", scheduleLiveRefresh);
   useSseEvent("ticket_updated", scheduleLiveRefresh);
@@ -790,6 +1021,11 @@ export function useTickets() {
         ...(lineaCheck.normalized ? { lineaLabel: lineaCheck.normalized } : {}),
         ...(form.servicioLabel.trim() ? { servicioLabel: form.servicioLabel.trim() } : {}),
         ...(form.conductorLabel.trim() ? { conductorLabel: form.conductorLabel.trim() } : {}),
+        ...(form.incidentOccurredAt.trim()
+          ? { incidentOccurredAt: new Date(form.incidentOccurredAt).toISOString() }
+          : {}),
+        priority: form.priority,
+        falloOrigen: form.falloOrigen,
         ...(assignToMe ? { assignToMe: true } : {}),
         ...(createAsResolved ? { initialStatus: "resuelto" as const } : {}),
         ...(createAsResolved && resolutionNote?.trim()
@@ -963,7 +1199,7 @@ export function useTickets() {
       setNoticeTone("success");
       setNoticePlacement("toast");
       setNotice("Estado del ticket actualizado correctamente.");
-      await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
+      await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter, conductorFilter, dateFromFilter, dateToFilter);
       await fetchAuditEvents();
       await fetchMaintenanceAlerts();
       await fetchPreventiveTasks();
@@ -1136,7 +1372,7 @@ export function useTickets() {
     setNoticeTone("success");
     setNoticePlacement("toast");
     setNotice("Ticket asignado correctamente.");
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter, conductorFilter, dateFromFilter, dateToFilter);
   }, [
     assignTarget,
     sessionUser,
@@ -1165,7 +1401,7 @@ export function useTickets() {
   const handleTicketDeleted = useCallback(async () => {
     setDeleteTarget(null);
     setActionMenuTicketId(null);
-    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter);
+    await fetchTickets(statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, onlyMine, tipoFilter, conductorFilter, dateFromFilter, dateToFilter);
   }, [fetchTickets, statusFilter, operatorFilter, busFilter, partCodeFromQuery, priorityFilter, tipoFilter]);
 
   const clearPartCodeFilter = useCallback(() => {
@@ -1226,6 +1462,9 @@ export function useTickets() {
     setOperatorFilter("todas");
     setBusFilter("todas");
     setTipoFilter("todos");
+    setConductorFilter("");
+    setDateFromFilter("");
+    setDateToFilter("");
     setOnlyMine(false);
     router.replace(inboxPath);
   }, [router, inboxPath]);
@@ -1407,6 +1646,12 @@ export function useTickets() {
     setStatusFilter,
     priorityFilter,
     setPriorityFilter,
+    conductorFilter,
+    setConductorFilter,
+    dateFromFilter,
+    setDateFromFilter,
+    dateToFilter,
+    setDateToFilter,
     operatorFilter,
     setOperatorFilter,
     busFilter,

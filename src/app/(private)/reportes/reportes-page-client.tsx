@@ -2,15 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
   BarChart3,
   CalendarRange,
   ChevronDown,
@@ -28,7 +19,9 @@ import {
 } from "lucide-react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
+import { SeriesChart } from "@/components/reports/reports-series-chart";
 import { EmptyState } from "@/components/ui/empty-state";
+import { HeroShell } from "@/components/ui/hero-shell";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { DesviosReportPanel } from "@/components/reports/DesviosReportPanel";
 import { SectionTabs } from "@/components/ui/section-tabs";
@@ -87,6 +80,7 @@ type ReportPayload = {
   byTipo: { tipo: string; count: number }[];
   topBuses: { busId: string; count: number; operator: string | null; municipio: string | null }[];
   topTechnicians: { userId: string; name: string; role: string; resolved: number }[];
+  topConductors: { conductorId: string; name: string; operator: string | null; count: number }[];
 };
 
 type RangePreset = "today" | "yesterday" | "last7" | "last30" | "last90" | "last180" | "custom";
@@ -253,41 +247,41 @@ export default function ReportesPage() {
       <div className="print:hidden">
         <SectionTabs preset="dashboard" />
       </div>
-      <header className="reports-hero flex flex-col gap-4 p-5 print:border-0 print:bg-transparent print:p-0">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/25">
-              <BarChart3 size={20} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <div className="ccmgc-eyebrow dashboard-pretitle">
-                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
-                CCMGC · Análisis
-              </div>
-              <div className="mt-1 flex flex-wrap items-baseline gap-2">
-                <h1 className="dashboard-hero-title text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
-                  Reportes operativos
-                </h1>
-                <FeedbackTargetButton id="reportes/operativo" label="Reportes operativos" />
-              </div>
-              <p className="mt-1 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
-                Vista ejecutiva del centro de control. Periodo:{" "}
-                <strong className="text-[var(--color-text-2)]">{data?.label ?? "—"}</strong>
-                {data?.since && data?.until ? (
-                  <span className="text-[var(--color-text-3)]">
-                    {" "}
-                    · {data.since.slice(0, 10)} → {data.until.slice(0, 10)} · {data.days} día
-                    {data.days === 1 ? "" : "s"}
-                  </span>
-                ) : null}
-              </p>
-            </div>
-          </div>
+      <HeroShell
+        variant="reports-hero"
+        dotColor="var(--color-accent)"
+        className="print:border-0 print:bg-transparent print:p-0"
+        eyebrow={
+          <span className="inline-flex items-center gap-2">
+            <BarChart3 size={12} strokeWidth={1.8} aria-hidden />
+            CCMGC · Análisis
+          </span>
+        }
+        title={
+          <span className="inline-flex flex-wrap items-baseline gap-2">
+            Reportes operativos
+            <FeedbackTargetButton id="reportes/operativo" label="Reportes operativos" />
+          </span>
+        }
+        subtitle={
+          <>
+            Vista ejecutiva del centro de control. Periodo:{" "}
+            <strong className="text-[var(--color-text-2)]">{data?.label ?? "—"}</strong>
+            {data?.since && data?.until ? (
+              <span className="text-[var(--color-text-3)]">
+                {" "}
+                · {data.since.slice(0, 10)} → {data.until.slice(0, 10)} · {data.days} día
+                {data.days === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </>
+        }
+        actions={
           <div className="flex flex-wrap items-center gap-2 print:hidden">
             <div
               role="tablist"
               aria-label="Periodo del reporte"
-              className="inline-flex flex-wrap gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-1 backdrop-blur"
+              className="inline-flex flex-wrap items-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-1 shadow-sm backdrop-blur"
             >
               {PRESET_BUTTONS.map((p) => (
                 <button
@@ -299,8 +293,10 @@ export default function ReportesPage() {
                   }}
                   aria-pressed={preset === p.id}
                   className={cn(
-                    "filter-chip",
-                    preset === p.id && "filter-chip--active",
+                    "rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all",
+                    preset === p.id
+                      ? "bg-gradient-to-br from-[var(--color-accent)] to-violet-600 text-white shadow"
+                      : "text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
                   )}
                 >
                   {p.label}
@@ -314,8 +310,10 @@ export default function ReportesPage() {
                 }}
                 aria-pressed={preset === "custom"}
                 className={cn(
-                  "filter-chip inline-flex items-center gap-1",
-                  preset === "custom" && "filter-chip--active",
+                  "inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all",
+                  preset === "custom"
+                    ? "bg-gradient-to-br from-[var(--color-accent)] to-violet-600 text-white shadow"
+                    : "text-[var(--color-text-3)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-1)]",
                 )}
                 title="Elegir día o rango personalizado"
               >
@@ -351,9 +349,10 @@ export default function ReportesPage() {
               PDF
             </button>
           </div>
-        </div>
+        }
+      />
 
-        {customOpen ? (
+      {customOpen ? (
           <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-3 backdrop-blur print:hidden">
             <div className="flex flex-col">
               <label className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
@@ -422,7 +421,6 @@ export default function ReportesPage() {
             </div>
           </div>
         ) : null}
-      </header>
 
       {error ? (
         <p className="rounded-md border border-[var(--color-error)]/30 bg-[var(--color-error-light)] px-3 py-2 text-sm text-[var(--color-error)]">
@@ -441,14 +439,14 @@ export default function ReportesPage() {
           {/* Totales */}
           {data.metricsMeta ? (
             <ExecutiveSemaphore
-              className={reportStaggerClass(0)}
+              className={reportStaggerClass(1)}
               quality={data.metricsMeta.dataQuality}
             />
           ) : null}
 
           <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Tile
-              className={reportStaggerClass(0)}
+              className={reportStaggerClass(2)}
               label="Tickets creados"
               icon={<ClipboardList size={14} strokeWidth={1.8} aria-hidden />}
               value={String(data.totals.created)}
@@ -457,7 +455,7 @@ export default function ReportesPage() {
               badge={comparisonBadges?.created.label ? { label: comparisonBadges.created.label, tone: comparisonBadges.created.tone } : undefined}
             />
             <Tile
-              className={reportStaggerClass(1)}
+              className={reportStaggerClass(3)}
               label="Tickets resueltos"
               icon={<TrendingUp size={14} strokeWidth={1.8} aria-hidden />}
               value={String(data.totals.resolved)}
@@ -472,7 +470,7 @@ export default function ReportesPage() {
               badge={comparisonBadges?.resolved.label ? { label: comparisonBadges.resolved.label, tone: comparisonBadges.resolved.tone } : undefined}
             />
             <Tile
-              className={reportStaggerClass(2)}
+              className={reportStaggerClass(4)}
               label="SLA cumplido"
               icon={<Target size={14} strokeWidth={1.8} aria-hidden />}
               value={data.totals.slaCompliancePercent == null ? "—" : `${data.totals.slaCompliancePercent}%`}
@@ -490,7 +488,7 @@ export default function ReportesPage() {
               }
             />
             <Tile
-              className={reportStaggerClass(3)}
+              className={reportStaggerClass(5)}
               label="MTTR medio"
               icon={<Clock3 size={14} strokeWidth={1.8} aria-hidden />}
               value={formatMs(data.totals.mttrMs)}
@@ -560,8 +558,8 @@ export default function ReportesPage() {
             />
           </section>
 
-          {/* Top buses / Top técnicos */}
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Top buses / Top técnicos / Top conductores */}
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className={cn("reports-panel", reportStaggerClass(10))}>
               <h2 className="reports-panel-title">
                 <FileText size={13} className="text-[var(--color-text-3)]" aria-hidden />
@@ -613,6 +611,39 @@ export default function ReportesPage() {
                         <span className="truncate text-[13px] font-medium text-[var(--color-text-1)]">{t.name}</span>
                       </span>
                       <span className="reports-podium-count-pill">{t.resolved}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+            <div className={cn("reports-panel", reportStaggerClass(12))}>
+              <h2 className="reports-panel-title">
+                <ClipboardList size={13} className="text-[var(--color-accent)]" aria-hidden />
+                Top conductores (origen conductor)
+              </h2>
+              <p className="mb-2 text-[11px] text-[var(--color-text-3)]">
+                {data.metricsMeta?.definitions.topConductors ??
+                  "Tickets con origen del fallo = conductor."}
+              </p>
+              {(data.topConductors ?? []).length === 0 ? (
+                <p className="text-sm text-[var(--color-text-3)]">
+                  Sin datos. Marca «Origen del fallo: Conductor» al crear tickets.
+                </p>
+              ) : (
+                <ol className="space-y-0.5">
+                  {(data.topConductors ?? []).map((c, idx) => (
+                    <li key={c.conductorId} className="reports-podium-row text-sm">
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className={cn("reports-podium-rank", podiumClass(idx))}>{idx + 1}</span>
+                        <a
+                          href={`/bandeja?conductor=${encodeURIComponent(c.name)}`}
+                          className="truncate text-[13px] font-medium text-[var(--color-text-1)] hover:text-[var(--color-accent)] hover:underline"
+                          title={c.operator ?? undefined}
+                        >
+                          {c.name}
+                        </a>
+                      </span>
+                      <span className="reports-podium-count-pill">{c.count}</span>
                     </li>
                   ))}
                 </ol>
@@ -835,10 +866,10 @@ function CardList({
         />
       ) : (
         <ul className="space-y-2.5">
-          {rows.map((r) => {
+          {rows.map((r, index) => {
             const pct = typeof r.value === "number" ? Math.round((r.value / max) * 100) : 100;
             return (
-              <li key={r.label} className="space-y-1.5">
+              <li key={r.label} className={cn("space-y-1.5", reportStaggerClass(index))}>
                 <div className="flex items-center justify-between text-sm">
                   <span className="min-w-0 truncate font-medium text-[var(--color-text-2)]">{r.label}</span>
                   <span className="ml-2 shrink-0 font-bold tabular-nums text-[var(--color-text-1)]">
@@ -868,93 +899,6 @@ function CardList({
           })}
         </ul>
       )}
-    </div>
-  );
-}
-
-function SeriesChart({ series }: { series: Series[] }) {
-  if (series.length === 0) {
-    return (
-      <EmptyState
-        icon={BarChart3}
-        title="Sin datos en el periodo"
-        hint="Prueba otro rango de fechas o recarga el reporte."
-        compact
-      />
-    );
-  }
-  return (
-    <div>
-      <div className="h-60 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={series} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
-            <defs>
-              <linearGradient id="reports-area-creados" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-accent)" stopOpacity={0.28} />
-                <stop offset="95%" stopColor="var(--color-accent)" stopOpacity={0.02} />
-              </linearGradient>
-              <linearGradient id="reports-area-resueltos" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-success)" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="var(--color-success)" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.11)" vertical={false} />
-            <XAxis
-              dataKey="day"
-              tick={{ fill: "var(--color-text-3)", fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              interval="preserveStartEnd"
-              tickFormatter={(value: string) => value.slice(5)}
-            />
-            <YAxis tick={{ fill: "var(--color-text-3)", fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
-            <Tooltip
-              contentStyle={{
-                background: "var(--color-surface-3)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "10px",
-                fontSize: "12px",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-              }}
-              labelStyle={{ color: "var(--color-text-1)", fontWeight: 600 }}
-              itemStyle={{ color: "var(--color-text-2)" }}
-              cursor={{ stroke: "rgba(148,163,184,0.15)", strokeWidth: 1 }}
-            />
-            <Area
-              type="monotone"
-              dataKey="creados"
-              name="Creados"
-              stroke="var(--color-accent)"
-              fill="url(#reports-area-creados)"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4, strokeWidth: 0 }}
-              animationDuration={350}
-            />
-            <Area
-              type="monotone"
-              dataKey="resueltos"
-              name="Resueltos"
-              stroke="var(--color-success)"
-              fill="url(#reports-area-resueltos)"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4, strokeWidth: 0 }}
-              animationDuration={350}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="reports-chart-legend mt-1">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="reports-chart-legend-dot" style={{ background: "var(--color-accent)", color: "var(--color-accent)" }} aria-hidden />
-          Creados
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="reports-chart-legend-dot" style={{ background: "var(--color-success)", color: "var(--color-success)" }} aria-hidden />
-          Resueltos
-        </span>
-      </div>
     </div>
   );
 }

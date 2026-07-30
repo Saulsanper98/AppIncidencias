@@ -3,6 +3,7 @@
 import { Loader2, Route } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { SectionCard } from "@/components/ui/section-card";
 import { cn } from "@/lib/utils";
 
 type DesviosReport = {
@@ -38,17 +39,11 @@ export function DesviosReportPanel() {
   }, [load]);
 
   return (
-    <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)]">
-            <Route size={18} aria-hidden />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-[var(--color-text-1)]">Desvíos</h2>
-            <p className="text-xs text-[var(--color-text-3)]">Resumen por estado, origen y líneas más afectadas.</p>
-          </div>
-        </div>
+    <SectionCard
+      title="Desvíos"
+      icon={Route}
+      subtitle="Resumen por estado, origen y líneas más afectadas."
+      action={
         <div className="flex gap-1 rounded-lg border border-[var(--color-border)] p-1">
           {DAY_OPTIONS.map((d) => (
             <button
@@ -64,15 +59,15 @@ export function DesviosReportPanel() {
             </button>
           ))}
         </div>
-      </div>
-
+      }
+    >
       {loading ? (
-        <div className="mt-6 flex items-center gap-2 text-sm text-[var(--color-text-3)]">
+        <div className="flex items-center gap-2 text-sm text-[var(--color-text-3)]">
           <Loader2 size={14} className="animate-spin" aria-hidden />
           Cargando…
         </div>
       ) : data ? (
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Total" value={data.total} />
           <Stat label="Activos" value={data.activos} accent />
           <Stat label="Pendientes" value={data.pendientes} warn />
@@ -106,7 +101,7 @@ export function DesviosReportPanel() {
           </div>
         </div>
       ) : null}
-    </section>
+    </SectionCard>
   );
 }
 

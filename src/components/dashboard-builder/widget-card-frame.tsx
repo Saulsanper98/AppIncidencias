@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { cn } from "@/lib/utils";
 
 type WidgetCardFrameProps = {
@@ -16,6 +17,9 @@ type WidgetCardFrameProps = {
   role?: string;
   "aria-label"?: string;
   "aria-describedby"?: string;
+  feedbackTarget?: { id: string; label: string } | null;
+  hideFeedback?: boolean;
+  alertTone?: "warn" | "error" | null;
 };
 
 export function WidgetCardFrame({
@@ -30,7 +34,12 @@ export function WidgetCardFrame({
   role = "region",
   "aria-label": ariaLabel,
   "aria-describedby": ariaDescribedBy,
+  feedbackTarget,
+  hideFeedback = false,
+  alertTone = null,
 }: WidgetCardFrameProps) {
+  const showFeedback = feedbackTarget && !hideFeedback && !presentationMode;
+
   return (
     <div
       ref={exportRootRef}
@@ -39,13 +48,23 @@ export function WidgetCardFrame({
       aria-describedby={ariaDescribedBy}
       onMouseDown={onMouseDown}
       className={cn(
-        "dashboard-widget-card group/card relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm transition-shadow duration-200",
-        !presentationMode && "hover:shadow-md hover:border-[color-mix(in_oklab,var(--color-border)_70%,var(--color-accent)_30%)]",
-        isEditing && "ring-1 ring-[var(--color-accent)]/25",
+        "dashboard-widget-card group/card relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] transition-[box-shadow,border-color] duration-300",
+        !presentationMode && "hover:border-[color-mix(in_oklab,var(--color-border)_65%,var(--color-accent)_35%)]",
+        isEditing && "ring-1 ring-[var(--color-accent)]/30",
         isKeyboardFocused && "ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface)]",
+        alertTone === "warn" && "dashboard-widget-card--alert-warn",
+        alertTone === "error" && "dashboard-widget-card--alert-error",
         className,
       )}
+      style={{ ["--chart-accent" as string]: accentColor }}
     >
+      {showFeedback ? (
+        <FeedbackTargetButton
+          placement="corner"
+          id={feedbackTarget.id}
+          label={feedbackTarget.label}
+        />
+      ) : null}
       <div
         aria-hidden
         className="h-[3px] w-full shrink-0"

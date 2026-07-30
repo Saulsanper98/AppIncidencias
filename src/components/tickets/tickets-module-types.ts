@@ -60,6 +60,15 @@ export type FormState = {
   servicioLabel: string;
   /** Nombre del conductor (texto libre) en el momento de la incidencia. */
   conductorLabel: string;
+  /**
+   * Hora real de la incidencia (`yyyy-MM-ddTHH:mm`), distinta de la de registro.
+   * Mismo control que en Apunte express.
+   */
+  incidentOccurredAt: string;
+  /** Prioridad elegida por el técnico (ya no se calcula sola). */
+  priority: "alta" | "media" | "baja";
+  /** Origen del fallo declarado. */
+  falloOrigen: "maquina" | "conductor" | "externo";
 };
 
 export type CreateTicketPayload = {
@@ -151,6 +160,12 @@ export type PreventiveTaskView = {
   creatorName: string;
 };
 
+function defaultIncidentOccurredAt(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export const defaultForm = (busId = ""): FormState => ({
   busId,
   assetId: "",
@@ -172,6 +187,9 @@ export const defaultForm = (busId = ""): FormState => ({
   lineaLabel: "",
   servicioLabel: "",
   conductorLabel: "",
+  incidentOccurredAt: defaultIncidentOccurredAt(),
+  priority: "media",
+  falloOrigen: "maquina",
 });
 
 export const statusMap: Record<TicketStatus, string> = TICKET_STATUS_LABELS;

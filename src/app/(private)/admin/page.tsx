@@ -19,7 +19,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { KpiPill } from "@/components/ui/kpi-pill";
-import { SectionEyebrow } from "@/components/ui/section-eyebrow";
+import { HeroShell } from "@/components/ui/hero-shell";
 import { activeAnnouncementWhere } from "@/lib/announcements";
 import { prisma } from "@/lib/prisma";
 import {
@@ -192,48 +192,35 @@ export default async function AdminHomePage() {
 
   return (
     <div className="space-y-5">
-      {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <header className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[color-mix(in_oklab,var(--hero-accent-admin)_12%,transparent)] p-4 shadow-sm sm:p-5">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[var(--hero-accent-admin)]/15 blur-3xl"
-        />
-        {/* En movil apilamos vertical (col): titulo arriba, KPIs debajo.
-            En tablet+ volvemos al layout horizontal con flex-wrap. Esto
-            evita que los KPIs colapsen el ancho del titulo a 0 y rompan
-            el texto palabra-por-palabra. */}
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-          <div className="flex w-full min-w-0 items-start gap-3 sm:flex-1">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]/20">
-              <ShieldCheck size={18} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <SectionEyebrow pulse dotColor="var(--hero-accent-admin)">
-                Administración
-              </SectionEyebrow>
-              <h1 className="mt-0.5 text-[22px] font-semibold tracking-tight text-[var(--color-text-1)]">
-                Administración
-              </h1>
-              <p className="mt-0.5 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
-                Gestión de usuarios, catálogo de flota, feedback del equipo y base de conocimiento.
-                {user.name ? (
-                  <>
-                    {" "}
-                    Conectado como{" "}
-                    <span className="text-[var(--color-text-2)]">{user.name}</span>.
-                  </>
-                ) : null}
-              </p>
-              <p className="mt-1 text-[10.5px] text-[var(--color-text-3)]">
-                {fmtNow.format(new Date())} {"\u00B7"} hora del Centro
-              </p>
-            </div>
-          </div>
-
-          {/* KPIs globales en vivo */}
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+      <HeroShell
+        variant="ccmgc-hero admin-subpage-hero admin-subpage-hero--admin"
+        dotColor="var(--hero-accent-admin)"
+        eyebrow={
+          <span className="inline-flex items-center gap-2">
+            <ShieldCheck size={12} strokeWidth={1.7} aria-hidden />
+            CCMGC · Administración
+          </span>
+        }
+        title="Administración"
+        subtitle={
+          <>
+            Gestión de usuarios, catálogo de flota, feedback del equipo y base de conocimiento.
+            {user.name ? (
+              <>
+                {" "}
+                Conectado como <span className="text-[var(--color-text-2)]">{user.name}</span>.
+              </>
+            ) : null}
+            <span className="mt-1 block text-[10.5px] text-[var(--color-text-3)]">
+              {fmtNow.format(new Date())} {"\u00B7"} hora del Centro
+            </span>
+          </>
+        }
+        kpis={
+          <>
             <KpiPill
               layout="stacked"
+              compact
               icon={<Users size={11} strokeWidth={1.7} aria-hidden />}
               label="Activos"
               value={activeUsers}
@@ -241,6 +228,7 @@ export default async function AdminHomePage() {
             />
             <KpiPill
               layout="stacked"
+              compact
               icon={<Boxes size={11} strokeWidth={1.7} aria-hidden />}
               label="Buses"
               value={totalBuses}
@@ -248,6 +236,7 @@ export default async function AdminHomePage() {
             />
             <KpiPill
               layout="stacked"
+              compact
               icon={<Inbox size={11} strokeWidth={1.7} aria-hidden />}
               label="Pendientes"
               value={feedbackPendiente}
@@ -256,14 +245,15 @@ export default async function AdminHomePage() {
             />
             <KpiPill
               layout="stacked"
+              compact
               icon={<BookOpenCheck size={11} strokeWidth={1.7} aria-hidden />}
               label="Artículos"
               value={kbPublicados}
               hint={`${kbViews} lecturas`}
             />
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <section className="grid gap-2 sm:grid-cols-2">
         <Link

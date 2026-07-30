@@ -84,6 +84,14 @@ export function loginCopy(locale: LoginLocale) {
       isEn ? `Signed in as ${name}. Redirecting…` : `Sesión iniciada como ${name}. Redirigiendo…`,
     welcomeBack: (name: string) =>
       isEn ? `Welcome back, ${name}.` : `Hola de nuevo, ${name}.`,
+    welcomeGreeting: isEn ? "Hello," : "Hola,",
+    welcomeOpening: isEn ? "Opening" : "Abriendo",
+    welcomeSkip: isEn ? "Press Enter to skip" : "Pulsa Enter para saltar",
+    welcomeDestDashboard: isEn ? "Dashboard" : "Dashboard",
+    welcomeDestBitacora: isEn ? "Logbook" : "Bitácora",
+    welcomeDestTickets: isEn ? "Tickets" : "Tickets",
+    welcomeDestBandeja: isEn ? "Inbox" : "Bandeja",
+    welcomeDestDefault: isEn ? "Control center" : "Centro de control",
     authRequired: isEn
       ? "You need to sign in to access the ticket inbox."
       : "Necesitas iniciar sesión para acceder a la bandeja de tickets.",

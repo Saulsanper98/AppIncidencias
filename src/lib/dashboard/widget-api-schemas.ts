@@ -19,7 +19,18 @@ export const updateWidgetSchema = z.object({
   chartType: z.enum(CHART_TYPES).optional(),
   dataSource: dashboardDataSourceSchema.optional(),
   size: z.enum(["small", "medium", "large"]).optional(),
-  config: z.string().optional(),
+  config: z
+    .string()
+    .optional()
+    .refine((value) => {
+      if (value === undefined) return true;
+      try {
+        const parsed = JSON.parse(value);
+        return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed);
+      } catch {
+        return false;
+      }
+    }, "config debe ser JSON de objeto"),
 });
 
 export async function assertWidgetBelongsToDashboard(widgetId: string, dashboardId: string) {

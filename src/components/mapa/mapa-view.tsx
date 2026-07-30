@@ -29,7 +29,6 @@ import {
   useMemo,
   useRef,
   useState,
-  Fragment,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -43,10 +42,14 @@ import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EmptyState } from "@/components/ui/empty-state";
+import { HeroShell } from "@/components/ui/hero-shell";
 import { Input } from "@/components/ui/input";
-import { kpiToneValueClass, type KpiTone } from "@/components/ui/kpi-pill";
+import { KpiPill } from "@/components/ui/kpi-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select";
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
+import { FilterPills } from "@/components/ui/ticket-filter-bar";
 import type { TicketPriority, TicketStatus, UserRole } from "@/lib/domain";
 import type { TicketScopeFilter } from "@/lib/ticket-filters";
 import { formatSlaOverdueLabel } from "@/lib/ticketing";
@@ -217,80 +220,6 @@ function MapHeroBandejaCta({ href }: { href: string }) {
         <ArrowRight size={14} strokeWidth={2.2} />
       </span>
     </Link>
-  );
-}
-
-function MapHeroKpiStrip({
-  urgentCount,
-  mapCount,
-  listCount,
-  listFiltered,
-  className,
-}: {
-  urgentCount: number;
-  mapCount: number;
-  listCount: number;
-  listFiltered?: boolean;
-  className?: string;
-}) {
-  const items: { value: number; label: string; tone: KpiTone; pulse?: boolean; title?: string }[] = [
-    ...(urgentCount > 0
-      ? [
-          {
-            value: urgentCount,
-            label: "SLA",
-            tone: "error" as const,
-            pulse: true,
-            title: "Tickets fuera de SLA visibles en el mapa",
-          },
-        ]
-      : []),
-    {
-      value: mapCount,
-      label: "Mapa",
-      tone: "accent",
-      title: "Tickets visibles en el mapa",
-    },
-    {
-      value: listCount,
-      label: listFiltered ? "Lista*" : "Lista",
-      tone: "success",
-      title: listFiltered ? "Tickets en la lista filtrada (búsqueda activa)" : "Tickets en la lista filtrada",
-    },
-  ];
-
-  return (
-    <div
-      className={cn("flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-x-3", className)}
-      aria-label="Indicadores del mapa"
-    >
-      {items.map((item, index) => (
-        <Fragment key={item.label}>
-          {index > 0 ? (
-            <span className="hidden h-3 w-px shrink-0 bg-[var(--color-border)]/50 sm:inline" aria-hidden />
-          ) : null}
-          <span
-            className={cn(
-              "inline-flex items-baseline gap-1 whitespace-nowrap",
-              item.pulse && "animate-pulse",
-            )}
-            title={item.title ?? `${item.value} ${item.label}`}
-          >
-            <span
-              className={cn(
-                "text-[13px] font-bold tabular-nums leading-none sm:text-sm",
-                item.value === 0 ? "text-[var(--color-text-3)]" : kpiToneValueClass(item.tone),
-              )}
-            >
-              {item.value}
-            </span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
-              {item.label}
-            </span>
-          </span>
-        </Fragment>
-      ))}
-    </div>
   );
 }
 
@@ -1625,63 +1554,24 @@ export function MapaView() {
     // migas ya dice donde esta el usuario.
     <div className={cn("flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden", mapaMuro ? "gap-2" : "gap-2 sm:gap-3")}>
       {!mapaMuro ? (
-      <header className="ccmgc-hero mapa-hero tickets-hero-glow shrink-0 rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
-        <div
-          aria-hidden
-          className="ccmgc-hero-parallax pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
-        />
-        <svg
-          aria-hidden
-          viewBox="0 0 97.29 102.80"
-          preserveAspectRatio="xMidYMid meet"
-          className="pointer-events-none hidden sm:block"
-          style={{
-            position: "absolute",
-            right: "1%",
-            top: "50%",
-            transform: "translateY(-50%)",
-            height: "175%",
-            width: "auto",
-            color: "#7dd3fc",
-            filter: "drop-shadow(0 0 22px rgba(56,189,248,0.55))",
-          }}
-        >
-          <path
-            fill="currentColor"
-            fillOpacity="0.10"
-            stroke="currentColor"
-            strokeOpacity="0.45"
-            strokeWidth="0.45"
-            strokeLinejoin="round"
-            d={GRAN_CANARIA_HERO_PATH}
-          />
-        </svg>
-        <div className="relative flex flex-wrap items-end justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
-              <MapPinned size={20} strokeWidth={1.7} aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <div className="ccmgc-eyebrow dashboard-pretitle hidden sm:inline-flex">
-                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
-                CCMGC · Vista operativa
-              </div>
-              <h1 className="dashboard-hero-title mt-0.5 flex items-center gap-2 text-[16px] font-semibold leading-tight tracking-tight sm:mt-1 sm:text-[22px]">
-                Mapa operativo
-                <FeedbackTargetButton id="mapa/vista-operativa" label="Mapa operativo de incidencias" />
-              </h1>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {data ? (
-              <MapHeroKpiStrip
-                urgentCount={urgentCount}
-                mapCount={nVisible}
-                listCount={sortedFilteredList.length}
-                listFiltered={!!listSearch.trim()}
-                className="hidden md:flex"
-              />
-            ) : null}
+      <HeroShell
+        variant="ccmgc-hero mapa-hero tickets-hero-glow"
+        className="!mb-0 shrink-0"
+        dotColor="var(--hero-accent-conocimiento)"
+        eyebrow={
+          <span className="inline-flex items-center gap-2">
+            <MapPinned size={12} strokeWidth={1.8} aria-hidden />
+            CCMGC · Vista operativa
+          </span>
+        }
+        title={
+          <span className="inline-flex items-center gap-2">
+            Mapa operativo
+            <FeedbackTargetButton id="mapa/vista-operativa" label="Mapa operativo de incidencias" />
+          </span>
+        }
+        actions={
+          <>
             <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
               <button
                 type="button"
@@ -1729,23 +1619,82 @@ export function MapaView() {
               </div>
             </div>
             <MapHeroBandejaCta href={ticketsHref} />
-          </div>
-        </div>
-        {data ? (
-          <MapHeroKpiStrip
-            urgentCount={urgentCount}
-            mapCount={nVisible}
-            listCount={sortedFilteredList.length}
-            listFiltered={!!listSearch.trim()}
-            className="relative pt-2 md:hidden"
-          />
-        ) : null}
-        <p className="sr-only">
-          Incidencias por municipio del bus o coordenadas GPS. Pulsa un marcador o una fila para centrar.{" "}
-          {filterSummary}
-        </p>
-      </header>
+          </>
+        }
+        kpis={
+          data ? (
+            <>
+              {urgentCount > 0 ? (
+                <KpiPill
+                  compact
+                  label="SLA"
+                  value={urgentCount}
+                  tone="error"
+                  pulse
+                  title="Tickets fuera de SLA visibles en el mapa"
+                />
+              ) : null}
+              <KpiPill
+                compact
+                label="Mapa"
+                value={nVisible}
+                tone="accent"
+                title="Tickets visibles en el mapa"
+              />
+              <KpiPill
+                compact
+                label={listSearch.trim() ? "Lista*" : "Lista"}
+                value={sortedFilteredList.length}
+                tone="success"
+                title={
+                  listSearch.trim()
+                    ? "Tickets en la lista filtrada (búsqueda activa)"
+                    : "Tickets en la lista filtrada"
+                }
+              />
+            </>
+          ) : undefined
+        }
+        overlay={
+          <>
+            <div
+              aria-hidden
+              className="ccmgc-hero-parallax pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
+            />
+            <svg
+              aria-hidden
+              viewBox="0 0 97.29 102.80"
+              preserveAspectRatio="xMidYMid meet"
+              className="pointer-events-none absolute hidden sm:block"
+              style={{
+                right: "1%",
+                top: "50%",
+                transform: "translateY(-50%)",
+                height: "175%",
+                width: "auto",
+                color: "#7dd3fc",
+                filter: "drop-shadow(0 0 22px rgba(56,189,248,0.55))",
+              }}
+            >
+              <path
+                fill="currentColor"
+                fillOpacity="0.10"
+                stroke="currentColor"
+                strokeOpacity="0.45"
+                strokeWidth="0.45"
+                strokeLinejoin="round"
+                d={GRAN_CANARIA_HERO_PATH}
+              />
+            </svg>
+          </>
+        }
+      />
       ) : null}
+
+      <p className="sr-only">
+        Incidencias por municipio del bus o coordenadas GPS. Pulsa un marcador o una fila para centrar.{" "}
+        {filterSummary}
+      </p>
 
       <p className="sr-only" aria-live="polite">
         {liveSummary}
@@ -1786,43 +1735,23 @@ export function MapaView() {
         </div>
       ) : null}
 
-      {/* Tabs compactos en movil: segmented pill activo. */}
+      {/* Tabs compactos en móvil: mismo contrato FilterPills. */}
       <div
         className={cn(
-          "flex shrink-0 gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/60 p-0.5 backdrop-blur lg:hidden",
+          "flex shrink-0 lg:hidden",
           mapaMuro && "hidden",
         )}
         role="tablist"
         aria-label="Vista móvil del mapa"
       >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mobileTab === "panel"}
-          onClick={() => setMobileTab("panel")}
-          className={cn(
-            "min-h-9 flex-1 justify-center rounded-lg px-2 text-[13px] font-semibold transition-all duration-150",
-            mobileTab === "panel"
-              ? "segmented-pill--active"
-              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]",
-          )}
-        >
-          Bandeja
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mobileTab === "map"}
-          onClick={() => setMobileTab("map")}
-          className={cn(
-            "min-h-9 flex-1 justify-center rounded-lg px-2 text-[13px] font-semibold transition-all duration-150",
-            mobileTab === "map"
-              ? "segmented-pill--active"
-              : "text-[var(--color-text-2)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text-1)]",
-          )}
-        >
-          Mapa
-        </button>
+        <FilterPills
+          value={mobileTab}
+          onChange={setMobileTab}
+          options={[
+            { v: "panel", label: "Bandeja" },
+            { v: "map", label: "Mapa" },
+          ]}
+        />
       </div>
 
       <div
@@ -1847,12 +1776,7 @@ export function MapaView() {
               {/* Modo normal: pretitle premium con dot + titulo. Modo muro
                   conserva su tipografia gigante intacta (no aplica el
                   patron premium para no romper la legibilidad a 3-5m). */}
-              {!mapaMuro ? (
-                <span className="ccmgc-eyebrow dashboard-pretitle">
-                  <span className="ccmgc-eyebrow-dot dashboard-pretitle-dot" aria-hidden />
-                  Bandeja
-                </span>
-              ) : null}
+              {!mapaMuro ? <SectionEyebrow pulse={false}>Bandeja</SectionEyebrow> : null}
               <h2
                 className={cn(
                   "font-semibold leading-tight text-[var(--color-text-1)]",
@@ -1970,7 +1894,13 @@ export function MapaView() {
                   <p className="mt-2 text-caption">Usa <strong>Reintentar</strong> en el mapa si falla la carga, o <strong>Opciones</strong> → Actualizar.</p>
                 </div>
               ) : !sortedFilteredList.length ? (
-                <div className="p-4 text-sm text-[var(--color-text-2)]">Sin coincidencias en lista o filtros.</div>
+                <EmptyState
+                  compact
+                  icon={MapPinned}
+                  title="Sin coincidencias"
+                  hint="Ajusta filtros o la búsqueda de la lista."
+                  className="!py-8"
+                />
               ) : (
                 <ul className="mapa-bandeja__items" role="listbox" aria-label="Tickets en el mapa">
                   {sortedFilteredList.map((t) => {
@@ -2554,19 +2484,14 @@ export function MapaView() {
               </div>
             </div>
           ) : data && effectiveFeatures.length === 0 ? (
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-              <MapPinned className="text-[var(--color-text-3)]" size={44} aria-hidden />
-              <p className="text-base font-medium text-[var(--color-text-1)]">Sin tickets en el mapa</p>
-              <p className="max-w-sm text-pretty text-caption text-[var(--color-text-3)]">
-                Prueba otros filtros o crea tickets desde la bandeja.
-              </p>
-              <Link
-                href={ticketsHref}
-                className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-accent-light)] px-4 py-2 text-sm font-medium text-[var(--color-text-1)] hover:bg-[var(--color-surface-2)]"
-              >
-                Abrir bandeja
-              </Link>
-            </div>
+            <EmptyState
+              icon={MapPinned}
+              title="Sin tickets en el mapa"
+              hint="Prueba otros filtros o crea tickets desde la bandeja."
+              actionLabel="Abrir bandeja"
+              onAction={() => router.push(ticketsHref)}
+              className="min-h-0 flex-1 justify-center"
+            />
           ) : data ? (
             <MapContainer
               center={GRAN_CANARIA_CENTER}

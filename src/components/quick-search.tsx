@@ -27,6 +27,7 @@ import {
   Command,
   Inbox,
   LayoutDashboard,
+  Loader2,
   MapPinned,
   NotebookPen,
   Route,
@@ -34,6 +35,7 @@ import {
   Shield,
   UserCircle2,
   Wrench,
+  X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -44,9 +46,6 @@ import { fadeScale } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { trackUxEvent } from "@/lib/ux-telemetry";
 
-// Tipos duplicados local-mente para evitar arrastrar el route handler al
-// bundle del cliente (Next.js permite importar tipos pero queremos cero
-// acoplamiento con el módulo server-side de `/api/search/global`).
 export type GlobalSearchKind =
   | "ticket"
   | "kb"
@@ -85,15 +84,15 @@ type Suggestion = StaticTarget | RemoteSuggestion;
 const ROUTES: StaticTarget[] = [
   { kind: "route", id: "dashboard", label: "Dashboard", hint: "Panel operativo", href: "/dashboard", Icon: LayoutDashboard, shortcut: "G D" },
   { kind: "route", id: "bandeja", label: "Bandeja", hint: "Listado de tickets", href: "/bandeja", Icon: Inbox, shortcut: "G B" },
-  { kind: "route", id: "tickets", label: "Tickets", hint: "Nuevo ticket y mantenimiento preventivo", href: "/tickets", Icon: ClipboardList, shortcut: "G T" },
+  { kind: "route", id: "tickets", label: "Tickets", hint: "Nuevo ticket y preventivo", href: "/tickets", Icon: ClipboardList, shortcut: "G T" },
   { kind: "route", id: "preventivo", label: "Preventivo", hint: "Buses anómalos", href: "/preventivo", Icon: Wrench, shortcut: "G P" },
   { kind: "route", id: "mapa", label: "Mapa", hint: "Vista geográfica", href: "/mapa", Icon: MapPinned, shortcut: "G M" },
-  { kind: "route", id: "novedades", label: "Novedades", hint: "Avisos y cambios de versión", href: "/novedades", Icon: Bell },
+  { kind: "route", id: "desvios", label: "Desvíos", hint: "Listado y nuevo desvío", href: "/desvios", Icon: AlertTriangle, shortcut: "G V" },
+  { kind: "route", id: "bitacora", label: "Bitácora", hint: "Notas entre turnos", href: "/bitacora", Icon: NotebookPen, shortcut: "G L" },
   { kind: "route", id: "kb", label: "Base de conocimiento", hint: "Manuales y FAQs", href: "/kb", Icon: BookOpen, shortcut: "G K" },
-  { kind: "route", id: "bitacora", label: "Bitácora", hint: "Notas entre turnos M/T/N", href: "/bitacora", Icon: NotebookPen },
-  { kind: "route", id: "desvios", label: "Desvíos", hint: "Listado y nuevo desvío", href: "/desvios", Icon: AlertTriangle },
+  { kind: "route", id: "novedades", label: "Novedades", hint: "Avisos y cambios", href: "/novedades", Icon: Bell, shortcut: "G N" },
   { kind: "route", id: "account", label: "Mi cuenta", hint: "Perfil y contraseña", href: "/account", Icon: UserCircle2, shortcut: "G A" },
-  { kind: "route", id: "admin", label: "Administración", hint: "Usuarios, catálogo, feedback", href: "/admin", Icon: Shield },
+  { kind: "route", id: "admin", label: "Administración", hint: "Usuarios, catálogo, feedback", href: "/admin", Icon: Shield, shortcut: "G C" },
 ];
 
 type GlobalSearchPayload = {
@@ -112,10 +111,6 @@ const KIND_META: Record<GlobalSearchKind, { title: string; Icon: typeof LayoutDa
 
 const KIND_ORDER: GlobalSearchKind[] = ["ticket", "kb", "desvio", "bus", "linea", "announcement"];
 
-function staggerClass(index: number): string {
-  return `ccmgc-stagger-in ccmgc-stagger-in-${(index % 6) + 1}`;
-}
-
 function highlightMatch(text: string, query: string): ReactNode {
   const q = query.trim();
   if (!q) return text;
@@ -125,12 +120,14 @@ function highlightMatch(text: string, query: string): ReactNode {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="quick-search-mark rounded-sm bg-[var(--color-accent-light)] px-0.5 text-[var(--color-accent)]">
-        {text.slice(idx, idx + q.length)}
-      </mark>
+      <mark className="qs-mark">{text.slice(idx, idx + q.length)}</mark>
       {text.slice(idx + q.length)}
     </>
   );
+}
+
+function Kbd({ children }: { children: ReactNode }) {
+  return <kbd className="qs-kbd">{children}</kbd>;
 }
 
 export function QuickSearch() {
@@ -147,11 +144,14 @@ export function QuickSearch() {
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const activeItemRef = useRef<HTMLButtonElement | null>(null);
   const router = useRouter();
   const fetchAbortRef = useRef<AbortController | null>(null);
   const transition = useFramerTransition();
   const trimmedQuery = query.trim();
   const hasHighlight = trimmedQuery.length >= 2;
+  const isBrowsing = trimmedQuery.length === 0;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -180,18 +180,21 @@ export function QuickSearch() {
 
   useEffect(() => {
     if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
-  // Búsqueda remota con debounce.
   useEffect(() => {
     if (!open) return;
     const handle = window.setTimeout(async () => {
-      // Cancelamos cualquier fetch anterior si seguía en vuelo.
       if (fetchAbortRef.current) fetchAbortRef.current.abort();
       const controller = new AbortController();
       fetchAbortRef.current = controller;
@@ -209,9 +212,6 @@ export function QuickSearch() {
         }
         const data = (await res.json()) as GlobalSearchPayload;
         setRemote(data.results);
-        // Telemetría: registramos cada consulta para saber qué busca la gente,
-        // cuántos resultados obtiene y si la query tiene texto suficiente.
-        // Solo trackeamos queries con >=2 caracteres para evitar ruido.
         const trimmed = query.trim();
         if (trimmed.length >= 2) {
           const counts = data.results;
@@ -244,11 +244,14 @@ export function QuickSearch() {
   const filteredRoutes = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return ROUTES;
-    return ROUTES.filter((r) => r.label.toLowerCase().includes(q) || r.hint.toLowerCase().includes(q));
+    return ROUTES.filter(
+      (r) =>
+        r.label.toLowerCase().includes(q) ||
+        r.hint.toLowerCase().includes(q) ||
+        r.id.toLowerCase().includes(q),
+    );
   }, [query]);
 
-  // Lista plana en el ORDEN en que se renderizan, para mapear flecha ↓/↑ con
-  // los `realIdx`.
   const flatList: Suggestion[] = useMemo(() => {
     const flat: Suggestion[] = filteredRoutes.map((r) => r);
     for (const kind of KIND_ORDER) {
@@ -262,6 +265,10 @@ export function QuickSearch() {
   useEffect(() => {
     setActive((current) => Math.min(current, Math.max(0, flatList.length - 1)));
   }, [flatList.length]);
+
+  useEffect(() => {
+    activeItemRef.current?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
 
   const handleSelect = useCallback(
     (s: Suggestion | undefined) => {
@@ -286,7 +293,6 @@ export function QuickSearch() {
   };
 
   let cursor = filteredRoutes.length;
-  let staggerCursor = 0;
   const remoteSections = KIND_ORDER.map((kind) => {
     const items = remote[kind];
     if (items.length === 0) return null;
@@ -296,169 +302,217 @@ export function QuickSearch() {
   }).filter(Boolean) as Array<{ kind: GlobalSearchKind; items: GlobalSearchResult[]; start: number }>;
 
   const hasAnyResult = flatList.length > 0;
+  const remoteCount = remoteSections.reduce((n, s) => n + s.items.length, 0);
 
   return (
     <AnimatePresence>
       {open ? (
-    <motion.div
-      className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-[18vh]"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Búsqueda rápida"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={transition}
-    >
-      <button
-        type="button"
-        aria-label="Cerrar"
-        onClick={() => setOpen(false)}
-        className="absolute inset-0 bg-[var(--modal-overlay)] backdrop-blur-[var(--modal-backdrop-blur,6px)]"
-      />
-      <motion.div
-        className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
-        variants={fadeScale}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        transition={transition}
-      >
-        <div className="flex items-center gap-3 border-b border-[var(--color-border)] px-4 py-3">
-          <Search size={16} className="text-[var(--color-text-3)]" strokeWidth={1.5} />
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Buscar tickets, KB, desvíos, buses, líneas, avisos…"
-            className="flex-1 bg-transparent text-[15px] text-[var(--color-text-1)] outline-none placeholder:text-[var(--color-text-3)]"
-            autoComplete="off"
-            spellCheck={false}
+        <motion.div
+          className="qs-root"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Búsqueda rápida"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={transition}
+        >
+          <button
+            type="button"
+            aria-label="Cerrar"
+            onClick={() => setOpen(false)}
+            className="qs-backdrop"
           />
-          {loading ? (
-            <span className="text-[11px] uppercase tracking-wider text-[var(--color-text-3)]">…</span>
-          ) : null}
-          <span className="kbd">Esc</span>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto py-2">
-          {filteredRoutes.length > 0 ? (
-            <Section title="Ir a">
-              {filteredRoutes.map((r, idx) => {
-                const staggerIndex = staggerCursor++;
-                return (
-                <Item
-                  key={r.id}
-                  active={idx === active}
-                  staggerClassName={staggerClass(staggerIndex)}
-                  onMouseEnter={() => setActive(idx)}
-                  onClick={() => handleSelect(r)}
+          <motion.div
+            className="qs-panel"
+            variants={fadeScale}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={transition}
+          >
+            <div className="qs-header">
+              <Search size={17} className="qs-header__icon" strokeWidth={1.7} aria-hidden />
+              <input
+                ref={inputRef}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Buscar tickets, buses, desvíos, KB…"
+                className="qs-header__input"
+                autoComplete="off"
+                spellCheck={false}
+                aria-autocomplete="list"
+                aria-controls="qs-results"
+              />
+              {loading ? (
+                <Loader2 size={14} className="qs-header__spinner animate-spin" aria-hidden />
+              ) : null}
+              {query ? (
+                <button
+                  type="button"
+                  className="qs-header__clear"
+                  aria-label="Limpiar búsqueda"
+                  onClick={() => {
+                    setQuery("");
+                    inputRef.current?.focus();
+                  }}
                 >
-                  <r.Icon size={16} strokeWidth={1.5} className="text-[var(--color-text-3)]" />
-                  <span className="flex-1 min-w-0">
-                    <span
-                      className={cn("text-[14px] text-[var(--color-text-1)]", hasHighlight && "search-mark-flash")}
-                    >
-                      {hasHighlight ? highlightMatch(r.label, trimmedQuery) : r.label}
-                    </span>
-                    <span className="ml-2 text-[12px] text-[var(--color-text-3)]">
-                      {hasHighlight ? highlightMatch(r.hint, trimmedQuery) : r.hint}
-                    </span>
-                  </span>
-                  {r.shortcut ? <span className="kbd shrink-0">{r.shortcut}</span> : null}
-                </Item>
-                );
-              })}
-            </Section>
-          ) : null}
+                  <X size={14} strokeWidth={2} aria-hidden />
+                </button>
+              ) : null}
+              <Kbd>Esc</Kbd>
+            </div>
 
-          {remoteSections.map(({ kind, items, start }) => {
-            const meta = KIND_META[kind];
-            return (
-              <Section key={kind} title={meta.title}>
-                {items.map((item, idx) => {
-                  const realIdx = start + idx;
-                  const staggerIndex = staggerCursor++;
-                  return (
+            <div id="qs-results" ref={listRef} className="qs-body" role="listbox">
+              {filteredRoutes.length > 0 ? (
+                <Section
+                  title="Ir a"
+                  meta={isBrowsing ? `${filteredRoutes.length}` : `${filteredRoutes.length} coincidencia${filteredRoutes.length === 1 ? "" : "s"}`}
+                >
+                  {filteredRoutes.map((r, idx) => (
                     <Item
-                      key={`${kind}-${item.id}`}
-                      active={realIdx === active}
-                      staggerClassName={staggerClass(staggerIndex)}
-                      onMouseEnter={() => setActive(realIdx)}
-                      onClick={() => handleSelect({ kind: "remote", data: item, href: item.href })}
+                      key={r.id}
+                      active={idx === active}
+                      buttonRef={idx === active ? activeItemRef : undefined}
+                      onMouseEnter={() => setActive(idx)}
+                      onClick={() => handleSelect(r)}
                     >
-                      <meta.Icon size={16} strokeWidth={1.5} className="text-[var(--color-text-3)]" />
-                      <span className="flex-1 min-w-0">
-                        <span
-                          className={cn(
-                            "block truncate text-[14px] text-[var(--color-text-1)]",
-                            hasHighlight && "search-mark-flash",
-                          )}
-                        >
-                          {hasHighlight ? highlightMatch(item.title, trimmedQuery) : item.title}
+                      <span className={cn("qs-item__icon", idx === active && "is-active")}>
+                        <r.Icon size={15} strokeWidth={1.7} aria-hidden />
+                      </span>
+                      <span className="qs-item__text">
+                        <span className="qs-item__title">
+                          {hasHighlight ? highlightMatch(r.label, trimmedQuery) : r.label}
                         </span>
-                        {item.subtitle ? (
-                          <span
-                            className={cn(
-                              "block truncate text-[12px] text-[var(--color-text-3)]",
-                              hasHighlight && "search-mark-flash",
-                            )}
-                          >
-                            {hasHighlight ? highlightMatch(item.subtitle, trimmedQuery) : item.subtitle}
-                          </span>
-                        ) : null}
-                        <span className="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--color-text-3)]">
-                          <span className="rounded-full border border-[var(--color-border)] px-1.5 py-px uppercase tracking-wider">
-                            {meta.title}
-                          </span>
-                          {item.badge ? (
-                            <span className="rounded-full bg-[var(--color-accent-light)] px-1.5 py-px text-[var(--color-accent)]">
-                              {item.badge}
-                            </span>
-                          ) : null}
+                        <span className="qs-item__hint">
+                          {hasHighlight ? highlightMatch(r.hint, trimmedQuery) : r.hint}
                         </span>
                       </span>
-                      <ArrowRight size={14} className="text-[var(--color-text-3)]" />
+                      {r.shortcut ? (
+                        <span className="qs-item__shortcut" aria-hidden>
+                          {r.shortcut.split(" ").map((part) => (
+                            <Kbd key={part}>{part}</Kbd>
+                          ))}
+                        </span>
+                      ) : (
+                        <ArrowRight
+                          size={14}
+                          className={cn("qs-item__arrow", idx === active && "is-visible")}
+                          aria-hidden
+                        />
+                      )}
                     </Item>
-                  );
-                })}
-              </Section>
-            );
-          })}
+                  ))}
+                </Section>
+              ) : null}
 
-          {!hasAnyResult ? (
-            <p className="px-4 py-6 text-center text-[13px] text-[var(--color-text-3)]">
-              {loading ? "Buscando…" : query ? `Sin resultados para "${query}"` : "Sin sugerencias"}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-4 py-2 text-[11px] text-[var(--color-text-3)]">
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">UP</span><span className="kbd">DN</span> navegar
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="kbd">Enter</span> abrir
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Command size={12} strokeWidth={1.5} />
-            <span className="kbd">K</span> abrir / cerrar
-          </span>
-        </div>
-      </motion.div>
-    </motion.div>
+              {remoteSections.map(({ kind, items, start }) => {
+                const meta = KIND_META[kind];
+                return (
+                  <Section
+                    key={kind}
+                    title={isBrowsing && kind === "ticket" ? "Recientes" : meta.title}
+                    meta={`${items.length}`}
+                  >
+                    {items.map((item, idx) => {
+                      const realIdx = start + idx;
+                      const isActive = realIdx === active;
+                      return (
+                        <Item
+                          key={`${kind}-${item.id}`}
+                          active={isActive}
+                          buttonRef={isActive ? activeItemRef : undefined}
+                          onMouseEnter={() => setActive(realIdx)}
+                          onClick={() => handleSelect({ kind: "remote", data: item, href: item.href })}
+                        >
+                          <span className={cn("qs-item__icon", isActive && "is-active")}>
+                            <meta.Icon size={15} strokeWidth={1.7} aria-hidden />
+                          </span>
+                          <span className="qs-item__text">
+                            <span className="qs-item__title">
+                              {hasHighlight ? highlightMatch(item.title, trimmedQuery) : item.title}
+                            </span>
+                            {item.subtitle ? (
+                              <span className="qs-item__hint">
+                                {hasHighlight
+                                  ? highlightMatch(item.subtitle, trimmedQuery)
+                                  : item.subtitle}
+                              </span>
+                            ) : null}
+                          </span>
+                          {item.badge ? <span className="qs-item__badge">{item.badge}</span> : null}
+                          <ArrowRight
+                            size={14}
+                            className={cn("qs-item__arrow", isActive && "is-visible")}
+                            aria-hidden
+                          />
+                        </Item>
+                      );
+                    })}
+                  </Section>
+                );
+              })}
+
+              {!hasAnyResult ? (
+                <div className="qs-empty">
+                  <Search size={22} strokeWidth={1.5} aria-hidden />
+                  <p className="qs-empty__title">
+                    {loading ? "Buscando…" : query ? `Sin resultados para «${query}»` : "Sin sugerencias"}
+                  </p>
+                  {!loading && query ? (
+                    <p className="qs-empty__hint">Prueba un código de ticket, bus o un tramo de desvío.</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="qs-footer">
+              <span className="qs-footer__group">
+                <Kbd>↑</Kbd>
+                <Kbd>↓</Kbd>
+                <span>navegar</span>
+              </span>
+              <span className="qs-footer__group">
+                <Kbd>↵</Kbd>
+                <span>abrir</span>
+              </span>
+              <span className="qs-footer__meta">
+                {loading
+                  ? "Buscando…"
+                  : remoteCount > 0
+                    ? `${remoteCount} resultado${remoteCount === 1 ? "" : "s"}`
+                    : null}
+              </span>
+              <span className="qs-footer__group qs-footer__group--end">
+                <Command size={11} strokeWidth={1.8} aria-hidden />
+                <Kbd>K</Kbd>
+              </span>
+            </div>
+          </motion.div>
+        </motion.div>
       ) : null}
     </AnimatePresence>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mb-1">
-      <p className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-3)]/70">
-        {title}
-      </p>
-      <ul>{children}</ul>
+    <div className="qs-section">
+      <div className="qs-section__head">
+        <p className="qs-section__title">{title}</p>
+        {meta ? <span className="qs-section__meta">{meta}</span> : null}
+      </div>
+      <ul className="qs-section__list">{children}</ul>
     </div>
   );
 }
@@ -467,29 +521,25 @@ function Item({
   active,
   onClick,
   onMouseEnter,
-  staggerClassName,
+  buttonRef,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   onMouseEnter: () => void;
-  staggerClassName?: string;
+  buttonRef?: React.RefObject<HTMLButtonElement | null>;
   children: React.ReactNode;
 }) {
   return (
     <li>
       <button
+        ref={buttonRef}
         type="button"
+        role="option"
         aria-selected={active}
         onMouseEnter={onMouseEnter}
         onClick={onClick}
-        className={cn(
-          "group flex w-full items-center gap-3 px-4 py-2 text-left transition-colors",
-          staggerClassName,
-          active
-            ? "bg-[var(--color-accent-light)]/55 ring-1 ring-inset ring-[var(--color-accent)]/25"
-            : "hover:bg-[var(--color-surface-2)]/70",
-        )}
+        className={cn("qs-item", active && "is-active")}
       >
         {children}
       </button>

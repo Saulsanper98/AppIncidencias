@@ -49,6 +49,7 @@ import {
   Upload,
   User as UserIcon,
   UserCheck,
+  UserPlus,
 } from "lucide-react";
 
 import { toast } from "@/components/toast-host";
@@ -57,12 +58,20 @@ import { DeleteTicketDialog } from "@/components/tickets/DeleteTicketDialog";
 import { RequestTicketDeletionDialog } from "@/components/tickets/RequestTicketDeletionDialog";
 import { TicketEditDialog } from "@/components/tickets/TicketEditDialog";
 import { TicketRelationsCard } from "@/components/tickets/TicketRelationsCard";
+import { TicketStatusTimeline } from "@/components/tickets/TicketStatusTimeline";
+import { TicketWatchButton } from "@/components/tickets/TicketWatchButton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { Select } from "@/components/ui/input";
+import { SectionCard } from "@/components/ui/section-card";
 import { VoiceInputButton } from "@/components/ui/VoiceInputButton";
 import { useSseEvent } from "@/hooks/use-sse-event";
 import type { SessionUser, Ticket, TicketStatus, UserRole } from "@/lib/domain";
 import {
   canAddTicketComment,
+  canAssignTicket,
   canDeleteAttachment,
   canRequestTicketDeletion,
   canShowTicketEdit,
@@ -335,6 +344,10 @@ export default function TicketDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [requestDeletionOpen, setRequestDeletionOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignTechnicianId, setAssignTechnicianId] = useState("");
+  const [technicians, setTechnicians] = useState<{ id: string; name: string }[]>([]);
   const router = useRouter();
   const reduceMotion = useReducedMotion();
 
@@ -374,7 +387,7 @@ export default function TicketDetailPage() {
   }, [ticket]);
 
   const loadTicket = useCallback(async () => {
-    const response = await fetch("/api/tickets?status=todos&operator=todas&busId=todas", {
+    const response = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}`, {
       cache: "no-store",
       headers: {
         "x-user-id": sessionUser?.id ?? "",
@@ -382,17 +395,21 @@ export default function TicketDetailPage() {
       },
     });
     const text = await response.text();
-    if (!response.ok) {
-      throw new Error(text || "No se pudo cargar ticket.");
-    }
-    const data = JSON.parse(text) as { tickets: TicketView[] };
-    const found = data.tickets.find((entry) => entry.id === ticketId) ?? null;
-    if (!found) {
+    if (response.status === 404) {
       setTicket(null);
       setError("Ticket no encontrado");
       return;
     }
-    setTicket(found);
+    if (!response.ok) {
+      throw new Error(text || "No se pudo cargar ticket.");
+    }
+    const data = JSON.parse(text) as { ticket: TicketView };
+    if (!data.ticket) {
+      setTicket(null);
+      setError("Ticket no encontrado");
+      return;
+    }
+    setTicket(data.ticket);
   }, [role, sessionUser?.id, ticketId]);
 
   // Re-cargable: lo extraemos para poder llamarlo también desde eventos SSE
@@ -404,7 +421,7 @@ export default function TicketDetailPage() {
         setError(null);
       }
       try {
-        const ticketsResponse = await fetch("/api/tickets?status=todos&operator=todas&busId=todas", {
+        const ticketsResponse = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}`, {
           cache: "no-store",
           headers: {
             "x-user-id": sessionUser?.id ?? "",
@@ -412,18 +429,24 @@ export default function TicketDetailPage() {
           },
         });
         const ticketsText = await ticketsResponse.text();
+        if (ticketsResponse.status === 404) {
+          if (!silent) {
+            setError("Ticket no encontrado");
+            setTicket(null);
+          }
+          return;
+        }
         if (!ticketsResponse.ok) {
           throw new Error(ticketsText || "No se pudo cargar ticket.");
         }
-        const data = JSON.parse(ticketsText) as { tickets: TicketView[] };
-        const found = data.tickets.find((entry) => entry.id === ticketId) ?? null;
-        if (!found) {
+        const data = JSON.parse(ticketsText) as { ticket: TicketView };
+        if (!data.ticket) {
           if (!silent) {
             setError("Ticket no encontrado");
             setTicket(null);
           }
         } else {
-          setTicket(found);
+          setTicket(data.ticket);
         }
       } catch (reloadError) {
         if (!silent) {
@@ -436,6 +459,57 @@ export default function TicketDetailPage() {
     },
     [role, sessionUser?.id, ticketId],
   );
+
+  useEffect(() => {
+    if (!canAssignTicket(role)) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/users", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { users?: { id: string; name: string; role: string }[] };
+        if (cancelled) return;
+        setTechnicians(
+          (data.users ?? [])
+            .filter((u) => u.role === "tecnico_campo" && u.id)
+            .map((u) => ({ id: u.id, name: u.name })),
+        );
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
+
+  const openAssignModal = useCallback(() => {
+    if (!ticket) return;
+    setAssignTechnicianId(ticket.assignedToUserId ?? "");
+    setAssignOpen(true);
+  }, [ticket]);
+
+  const handleAssignFromDetail = useCallback(async () => {
+    if (!ticket) return;
+    setAssignBusy(true);
+    try {
+      const response = await fetch(`/api/tickets/${ticket.id}/assign`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedToUserId: assignTechnicianId || null }),
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { message?: string };
+        setNotice(data.message ?? "No se pudo asignar el ticket.");
+        return;
+      }
+      setAssignOpen(false);
+      setNotice("Ticket asignado correctamente.");
+      await reloadTicket(true);
+    } finally {
+      setAssignBusy(false);
+    }
+  }, [ticket, assignTechnicianId, reloadTicket]);
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -864,6 +938,18 @@ export default function TicketDetailPage() {
             <Copy size={12} strokeWidth={1.8} aria-hidden />
             {copyLinkFeedback ? "Enlace copiado" : "Copiar enlace"}
           </button>
+          <TicketWatchButton ticketId={ticket.id} />
+          {canAssignTicket(role) && ticket.status !== "resuelto" && !(sessionUser?.isReadOnly ?? false) ? (
+            <button
+              type="button"
+              onClick={openAssignModal}
+              className="desvios-action-chip"
+              title="Asignar técnico"
+            >
+              <UserPlus size={12} strokeWidth={1.8} aria-hidden />
+              Asignar
+            </button>
+          ) : null}
           {sessionUser &&
           ticket &&
           canShowTicketEdit(
@@ -921,6 +1007,51 @@ export default function TicketDetailPage() {
           router.replace("/bandeja");
         }}
       />
+
+      <ModalShell
+        open={assignOpen}
+        onClose={() => {
+          if (!assignBusy) setAssignOpen(false);
+        }}
+        title="Asignar técnico"
+        maxWidth="28rem"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={assignBusy}
+              onClick={() => setAssignOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" size="sm" disabled={assignBusy} onClick={() => void handleAssignFromDetail()}>
+              {assignBusy ? "Guardando…" : "Guardar"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-xs text-[var(--color-text-3)]">
+          Ticket #{ticket.id.slice(-8).toUpperCase()}
+        </p>
+        <label className="mt-4 block text-xs font-medium text-[var(--color-text-2)]" htmlFor="detail-assign-tech">
+          Técnico
+        </label>
+        <Select
+          id="detail-assign-tech"
+          value={assignTechnicianId}
+          onChange={(event) => setAssignTechnicianId(event.target.value)}
+          wrapperClassName="mt-1.5"
+        >
+          <option value="">Sin asignar</option>
+          {technicians.map((technician) => (
+            <option key={technician.id} value={technician.id}>
+              {technician.name}
+            </option>
+          ))}
+        </Select>
+      </ModalShell>
 
       <RequestTicketDeletionDialog
         ticketId={requestDeletionOpen ? ticket.id : null}
@@ -1025,6 +1156,15 @@ export default function TicketDetailPage() {
                           ? "Usuario (sin nombre en catálogo)"
                           : "Sin asignar"}
                     </span>
+                    {canAssignTicket(role) && ticket.status !== "resuelto" && !(sessionUser?.isReadOnly ?? false) ? (
+                      <button
+                        type="button"
+                        onClick={openAssignModal}
+                        className="ml-0.5 text-[11px] font-semibold text-[var(--color-accent)] hover:underline"
+                      >
+                        Cambiar
+                      </button>
+                    ) : null}
                   </span>
                   <span className="text-[var(--color-border)]" aria-hidden>·</span>
                   <span className="inline-flex items-center gap-1.5">
@@ -1156,55 +1296,33 @@ export default function TicketDetailPage() {
             </div>
           </div>
 
-          <div
+          <SectionCard
             className={cn(
-              "flex flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-6",
               !activityFew && "min-h-[14rem]",
               activityFew && ticket.comments.length > 0 && "min-h-0",
             )}
+            title={
+              <>
+                Actividad
+                {ticket.comments.length > 0 ? (
+                  <span className="inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full bg-[var(--color-surface-2)] px-1.5 text-[11px] font-semibold text-[var(--color-text-2)]">
+                    {ticket.comments.length}
+                  </span>
+                ) : null}
+              </>
+            }
+            icon={MessageSquare}
+            subtitle="Cambios de estado, notas y eventos"
+            bodyClassName="flex flex-col gap-4"
           >
-            <div className="mb-4 flex items-center justify-between gap-2 border-b border-[var(--color-border)] pb-3">
-              <header className="account-section-head !mb-0 flex-1">
-                <span
-                  className="account-section-icon"
-                  style={{ ["--section-tone" as string]: "var(--color-accent)" }}
-                  aria-hidden
-                >
-                  <MessageSquare size={16} strokeWidth={1.7} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="account-section-pretitle">
-                    <span
-                      className="account-section-pretitle-dot"
-                      style={{ ["--section-tone" as string]: "var(--color-accent)" }}
-                      aria-hidden
-                    />
-                    Timeline
-                  </p>
-                  <h2 className="account-section-title flex items-center gap-2">
-                    Actividad
-                    {ticket.comments.length > 0 ? (
-                      <span className="inline-flex h-5 min-w-[1.5rem] items-center justify-center rounded-full bg-[var(--color-surface-2)] px-1.5 text-[11px] font-semibold text-[var(--color-text-2)]">
-                        {ticket.comments.length}
-                      </span>
-                    ) : null}
-                  </h2>
-                </div>
-              </header>
-              <p className="hidden text-[10.5px] uppercase tracking-wider text-[var(--color-text-3)] sm:inline">
-                Cambios de estado, notas y eventos
-              </p>
-            </div>
+            <TicketStatusTimeline ticketId={ticket.id} />
             {ticket.comments.length === 0 ? (
-              <div className="flex min-h-[10rem] flex-1 flex-col items-center justify-center gap-2.5 py-6 text-center">
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[var(--color-text-3)] ring-1 ring-[var(--color-border)]">
-                  <MessageSquare size={20} aria-hidden />
-                </span>
-                <p className="text-sm font-medium text-[var(--color-text-1)]">Sin actividad todavía</p>
-                <p className="max-w-xs text-[11.5px] leading-relaxed text-[var(--color-text-3)]">
-                  Los cambios de estado y las notas del equipo aparecerán aquí en orden cronológico.
-                </p>
-              </div>
+              <EmptyState
+                icon={MessageSquare}
+                title="Sin actividad todavía"
+                hint="Los cambios de estado y las notas del equipo aparecerán aquí en orden cronológico."
+                compact
+              />
             ) : (
               <div className={cn("relative space-y-3", !activityFew && "min-h-[12rem]", activityFew && "min-h-0")}>
                 {/* Línea continua del timeline; los nodos la cubren a su altura. */}
@@ -1404,34 +1522,20 @@ export default function TicketDetailPage() {
                 ) : null}
               </div>
             ) : null}
-          </div>
+          </SectionCard>
 
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-6">
-            <header className="account-section-head">
-              <span
-                className="account-section-icon"
-                style={{ ["--section-tone" as string]: "var(--color-warning)" }}
-                aria-hidden
-              >
-                <Paperclip size={16} strokeWidth={1.7} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="account-section-pretitle">
-                  <span
-                    className="account-section-pretitle-dot"
-                    style={{ ["--section-tone" as string]: "var(--color-warning)" }}
-                    aria-hidden
-                  />
-                  Archivos
-                </p>
-                <h2 className="account-section-title flex items-center gap-2">
-                  Adjuntos
-                  <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--color-surface-2)] px-1.5 text-[10px] font-semibold text-[var(--color-text-2)]">
-                    {ticket.attachments.length}
-                  </span>
-                </h2>
-              </div>
-              {canUploadAttachment(role) ? (
+          <SectionCard
+            title={
+              <>
+                Adjuntos
+                <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--color-surface-2)] px-1.5 text-[10px] font-semibold text-[var(--color-text-2)]">
+                  {ticket.attachments.length}
+                </span>
+              </>
+            }
+            icon={Paperclip}
+            action={
+              canUploadAttachment(role) ? (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -1442,7 +1546,9 @@ export default function TicketDetailPage() {
                   <Upload size={12} strokeWidth={1.8} aria-hidden />
                   {uploading ? "Subiendo…" : "Subir"}
                 </button>
-              ) : null}
+              ) : null
+            }
+          >
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1451,7 +1557,6 @@ export default function TicketDetailPage() {
                 className="hidden"
                 onChange={handleFileInputChange}
               />
-            </header>
             {uploadError ? (
               <p
                 className="mb-3 flex items-start gap-1.5 rounded-md border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-3 py-2 text-xs text-[var(--color-error)]"
@@ -1462,13 +1567,12 @@ export default function TicketDetailPage() {
               </p>
             ) : null}
             {ticket.attachments.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-4 py-8 text-center">
-                <ImageIcon size={28} className="text-[var(--color-text-3)]" aria-hidden />
-                <p className="text-sm text-[var(--color-text-2)]">Sin archivos adjuntos</p>
-                <p className="max-w-xs text-[12px] leading-relaxed text-[var(--color-text-3)]">
-                  Las imágenes u otros documentos asociados al ticket aparecerán aquí con vista previa y enlace de descarga.
-                </p>
-              </div>
+              <EmptyState
+                icon={ImageIcon}
+                title="Sin archivos adjuntos"
+                hint="Las imágenes u otros documentos asociados al ticket aparecerán aquí."
+                compact
+              />
             ) : (
               <div
                 className={cn(
@@ -1622,29 +1726,9 @@ export default function TicketDetailPage() {
                 })}
               </div>
             )}
-          </div>
+          </SectionCard>
 
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-6">
-            <header className="account-section-head">
-              <span
-                className="account-section-icon"
-                style={{ ["--section-tone" as string]: "#38bdf8" }}
-                aria-hidden
-              >
-                <BusIcon size={16} strokeWidth={1.7} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="account-section-pretitle">
-                  <span
-                    className="account-section-pretitle-dot"
-                    style={{ ["--section-tone" as string]: "#38bdf8" }}
-                    aria-hidden
-                  />
-                  Trazabilidad
-                </p>
-                <h2 className="account-section-title">Historial por bus</h2>
-              </div>
-            </header>
+          <SectionCard title="Historial por bus" icon={BusIcon} subtitle="Otros tickets del mismo vehículo">
             {busHistory.length <= 1 ? (
               <p className="text-sm text-[var(--color-text-3)]">Aún no hay historial suficiente para este bus.</p>
             ) : (
@@ -1669,7 +1753,7 @@ export default function TicketDetailPage() {
                   ))}
               </ul>
             )}
-          </div>
+          </SectionCard>
 
           {/* Tickets relacionados: permite vincular tickets ya resueltos (u otros)
               al actual para mantener trazabilidad cuando una incidencia tiene
@@ -1679,27 +1763,7 @@ export default function TicketDetailPage() {
 
         <div className="flex min-h-0 flex-col gap-3 overflow-visible lg:sticky lg:top-16 lg:max-h-[calc(100vh-4.75rem)]">
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain pb-8 pr-0.5 [scrollbar-gutter:stable]">
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-shadow duration-200 hover:shadow-md sm:p-5">
-              <header className="account-section-head !mb-3">
-                <span
-                  className="account-section-icon"
-                  style={{ ["--section-tone" as string]: "var(--color-accent)" }}
-                  aria-hidden
-                >
-                  <Layers size={16} strokeWidth={1.7} />
-                </span>
-                <div className="min-w-0">
-                  <p className="account-section-pretitle">
-                    <span
-                      className="account-section-pretitle-dot"
-                      style={{ ["--section-tone" as string]: "var(--color-accent)" }}
-                      aria-hidden
-                    />
-                    Ficha
-                  </p>
-                  <h2 className="account-section-title">Detalles</h2>
-                </div>
-              </header>
+            <SectionCard title="Detalles" icon={Layers} subtitle="Ficha del ticket">
               {/* "Vehicle hero card": resaltamos el bus afectado como dato
                    principal con icono prominente, y abajo operadora/municipio
                    como contexto secundario en una sola línea. */}
@@ -1876,52 +1940,21 @@ export default function TicketDetailPage() {
                   </div>
                 </details>
               </div>
-            </div>
+            </SectionCard>
 
             {(() => {
               const mins = slaMinsRemaining;
               const overdue = mins <= 0;
               return (
-                <div
+                <SectionCard
+                  title="SLA"
+                  icon={overdue ? AlertTriangle : Timer}
+                  subtitle="Tiempo de respuesta"
                   className={cn(
-                    "rounded-xl border p-4 transition-shadow duration-200 hover:shadow-md sm:p-5",
-                    overdue
-                      ? "border-[var(--color-error)]/35 bg-gradient-to-br from-[var(--color-error-light)]/40 via-[var(--color-surface)] to-[var(--color-surface)] shadow-[inset_3px_0_0_var(--color-error)]"
-                      : "border-[var(--color-border)] bg-[var(--color-surface)]",
+                    overdue &&
+                      "border-[var(--color-error)]/35 bg-gradient-to-br from-[var(--color-error-light)]/40 via-[var(--color-surface)] to-[var(--color-surface)] shadow-[inset_3px_0_0_var(--color-error)]",
                   )}
                 >
-                  <header className="account-section-head !mb-3">
-                    <span
-                      className="account-section-icon"
-                      style={{
-                        ["--section-tone" as string]: overdue
-                          ? "var(--color-error)"
-                          : "var(--color-warning)",
-                      }}
-                      aria-hidden
-                    >
-                      {overdue ? (
-                        <AlertTriangle size={16} strokeWidth={1.8} />
-                      ) : (
-                        <Timer size={16} strokeWidth={1.8} />
-                      )}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="account-section-pretitle">
-                        <span
-                          className="account-section-pretitle-dot"
-                          style={{
-                            ["--section-tone" as string]: overdue
-                              ? "var(--color-error)"
-                              : "var(--color-warning)",
-                          }}
-                          aria-hidden
-                        />
-                        Tiempo de respuesta
-                      </p>
-                      <h2 className="account-section-title">SLA</h2>
-                    </div>
-                  </header>
                   {overdue ? (
                     <div className="space-y-3">
                       <div className="flex items-start gap-3">
@@ -2002,33 +2035,18 @@ export default function TicketDetailPage() {
                       </p>
                     </div>
                   )}
-                </div>
+                </SectionCard>
               );
             })()}
           </div>
 
           {sessionUser ? (
-            <div className="relative z-10 min-h-[8.5rem] shrink-0 overflow-visible rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[0_-4px_24px_rgba(0,0,0,0.12)] transition-shadow duration-200 hover:shadow-md sm:p-5 lg:shadow-sm">
-              <header className="account-section-head !mb-3">
-                <span
-                  className="account-section-icon"
-                  style={{ ["--section-tone" as string]: "var(--color-success)" }}
-                  aria-hidden
-                >
-                  <MoreHorizontal size={16} strokeWidth={1.7} />
-                </span>
-                <div className="min-w-0">
-                  <p className="account-section-pretitle">
-                    <span
-                      className="account-section-pretitle-dot"
-                      style={{ ["--section-tone" as string]: "var(--color-success)" }}
-                      aria-hidden
-                    />
-                    Operativa
-                  </p>
-                  <h2 className="account-section-title">Acciones</h2>
-                </div>
-              </header>
+            <SectionCard
+              title="Acciones"
+              icon={MoreHorizontal}
+              subtitle="Operativa del ticket"
+              className="relative z-10 min-h-[8.5rem] shrink-0 overflow-visible shadow-[0_-4px_24px_rgba(0,0,0,0.12)] lg:shadow-sm"
+            >
               {error && (
                 <div
                   role="alert"
@@ -2110,17 +2128,18 @@ export default function TicketDetailPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </SectionCard>
           ) : null}
 
           {!sessionUser ? (
-            <div className="shrink-0 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-center sm:p-5">
-              <Lock size={24} className="mx-auto mb-2 text-[var(--color-text-3)]" />
-              <p className="text-sm text-[var(--color-text-2)]">Inicia sesión para gestionar este ticket</p>
-              <Link href="/login" className="mt-3 inline-block text-sm text-[var(--color-accent)] hover:underline">
-                Ir al login →
-              </Link>
-            </div>
+            <SectionCard title="Acciones" icon={Lock}>
+              <div className="py-2 text-center">
+                <p className="text-sm text-[var(--color-text-2)]">Inicia sesión para gestionar este ticket</p>
+                <Link href="/login" className="mt-3 inline-block text-sm text-[var(--color-accent)] hover:underline">
+                  Ir al login →
+                </Link>
+              </div>
+            </SectionCard>
           ) : null}
         </div>
       </div>

@@ -351,7 +351,10 @@ export function BusEditModal({
                 Líneas / servicios cubiertos
               </label>
 
-              <div className="mt-1.5 flex flex-wrap gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-2 focus-within:border-sky-400/60 focus-within:ring-2 focus-within:ring-sky-400/15">
+              <div
+                data-field-chrome
+                className="mt-1.5 flex flex-wrap gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-2 focus-within:border-sky-400/60 focus-within:ring-2 focus-within:ring-sky-400/15"
+              >
                 {lineas.map((l) => (
                   <span
                     key={l}

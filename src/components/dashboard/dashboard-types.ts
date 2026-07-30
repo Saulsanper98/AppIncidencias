@@ -22,6 +22,9 @@ export type KpisData = {
   unassignedAgedCount?: number;
   topBuses?: { busId: string; ticketCount: number; operator: string | null; municipio: string | null }[];
   shiftLoadToday?: { M: number; T: number; N: number };
+  /** Conteo global (no limitado al top de incidenciasActivas). */
+  slaVencidosCount?: number;
+  altaPrioridadCount?: number;
 };
 
 export type TrendDay = { day: string; creados: number; resueltos: number };

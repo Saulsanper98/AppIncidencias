@@ -2,11 +2,14 @@
 
 import {
   Activity,
+  AlertTriangle,
   Clock3,
   Gauge,
+  Layers,
   Ticket,
   Truck,
   Users,
+  Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -33,7 +36,10 @@ function formatDurationMs(ms: number | null): string {
 
 const KPI_ICONS: Record<string, LucideIcon> = {
   kpi_open_tickets: Ticket,
+  kpi_active_incidents: Layers,
   kpi_sla_percent: Gauge,
+  kpi_sla_vencidos: AlertTriangle,
+  kpi_alta_prioridad: Zap,
   kpi_mttr: Clock3,
   kpi_fleet_availability: Truck,
   kpi_unassigned: Users,
@@ -80,6 +86,27 @@ function resolveKpi(
       return { label: "Resueltos", value: formatMetric(kpis.resolved30d, "integer"), hint: "Cerrados · 30 días" };
     case "kpi_created_today":
       return { label: "Hoy", value: formatMetric(kpis.createdToday, "integer"), hint: "Registrados hoy" };
+    case "kpi_active_incidents":
+      return {
+        label: "Activas",
+        value: formatMetric(kpis.activeIncidents, "integer"),
+        hint: "No resueltas ahora",
+        tone: kpis.activeIncidents > 30 ? "warn" : undefined,
+      };
+    case "kpi_sla_vencidos":
+      return {
+        label: "SLA vencidos",
+        value: formatMetric(kpis.slaVencidos, "integer"),
+        hint: "Fuera de plazo · activos",
+        tone: kpis.slaVencidos > 0 ? "warn" : "ok",
+      };
+    case "kpi_alta_prioridad":
+      return {
+        label: "Alta prioridad",
+        value: formatMetric(kpis.altaPrioridad, "integer"),
+        hint: "Activos · prioridad alta",
+        tone: kpis.altaPrioridad > 0 ? "warn" : undefined,
+      };
     default:
       return { label: "KPI", value: "—", hint: "KPI no configurado" };
   }
@@ -95,35 +122,48 @@ export function KpiWidgetCard({
   const kpi = resolveKpi(dataSource, kpis);
   const Icon = KPI_ICONS[dataSource] ?? Gauge;
   const toneColor = kpi.tone === "warn" ? "#F59E0B" : kpi.tone === "ok" ? "#059669" : accentColor;
+  const isEmpty = kpi.value === "—";
 
   return (
     <div
-      className="dashboard-kpi-card flex h-full min-h-[140px] flex-col justify-between rounded-xl p-1"
-      style={{ ["--kpi-accent" as string]: accentColor }}
+      className={cn(
+        "dashboard-kpi-card group flex h-full min-h-[140px] flex-col justify-between",
+        presentationMode ? "p-5" : "p-4",
+      )}
+      style={{
+        ["--kpi-accent" as string]: accentColor,
+        ["--kpi-tone" as string]: toneColor,
+      }}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="relative flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className={cn("truncate text-[11px] font-medium uppercase tracking-wide text-[var(--color-text-3)]", presentationMode && "text-[10px]")}>
+          <p
+            className={cn(
+              "truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-3)]",
+              presentationMode && "text-[10px]",
+            )}
+          >
             {title || kpi.label}
           </p>
           <p
+            key={kpi.value}
             className={cn(
-              "mt-2 font-semibold tabular-nums tracking-tight text-[var(--color-text-1)]",
-              presentationMode ? "text-4xl" : "text-3xl",
+              "dashboard-kpi-value dashboard-kpi-value--enter mt-2 font-semibold tabular-nums tracking-tight",
+              presentationMode ? "text-4xl" : "text-[2rem] leading-none",
+              isEmpty && "dashboard-kpi-value--empty",
             )}
-            style={{ color: toneColor }}
           >
             {kpi.value}
           </p>
         </div>
         <div
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)]/80"
-          style={{ color: accentColor }}
+          className="dashboard-kpi-icon-wrap flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+          style={{ color: toneColor }}
         >
-          <Icon size={16} strokeWidth={1.8} aria-hidden />
+          <Icon size={17} strokeWidth={1.85} aria-hidden />
         </div>
       </div>
-      <p className="mt-3 text-[11px] leading-snug text-[var(--color-text-3)]">{kpi.hint}</p>
+      <p className="relative mt-3 text-[11px] leading-snug text-[var(--color-text-3)]">{kpi.hint}</p>
     </div>
   );
 }

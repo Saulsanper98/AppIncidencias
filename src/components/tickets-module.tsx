@@ -8,12 +8,13 @@ import {
   CalendarCheck,
   CheckCircle2,
   ClipboardList,
-  ChevronDown,
   Download,
+  GraduationCap,
   Inbox,
   Keyboard,
   Link2,
   Lock,
+  NotebookPen,
   PackageSearch,
   Plus,
   Search,
@@ -26,11 +27,12 @@ import {
   Zap,
   ArrowRight,
 } from "lucide-react";
-import { createPortal } from "react-dom";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { useMemo, useState, useEffect, useRef, Fragment } from "react";
 
 import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { StatusChangeModal } from "@/components/status-change-modal";
 import { TicketActionMenu } from "@/components/tickets/TicketActionMenu";
@@ -45,26 +47,21 @@ import { SavedViewsBar } from "@/components/tickets/SavedViewsBar";
 import { BandejaHandoverBanner } from "@/components/tickets/BandejaHandoverBanner";
 import { ShiftHealthBanner } from "@/components/operations/ShiftHealthBanner";
 import { ExpressTicketPanel } from "@/components/tickets/ExpressTicketPanel";
+import { ManageSectionCard } from "@/components/tickets/ManageSectionCard";
 import { isUiUnificationEnabled } from "@/ui-unification/feature";
 import { TicketsModuleHeroUnified } from "@/ui-unification/heroes/TicketsModuleHeroUnified";
 import { TicketCreateForm } from "@/components/tickets/TicketCreateForm";
 import { TicketTemplatesPanel } from "@/components/tickets/TicketTemplatesPanel";
 import { TicketsBandeja } from "@/components/tickets/TicketsBandeja";
-import type {
-  AuditEventView,
-  MaintenanceAlertView,
-} from "@/components/tickets/tickets-module-types";
-import {
-  preventiveTaskTone,
-  statusMap,
-} from "@/components/tickets/tickets-module-types";
+import type { AuditEventView } from "@/components/tickets/tickets-module-types";
+import { statusMap } from "@/components/tickets/tickets-module-types";
 import { ticketNeedsCompletion } from "@/lib/tickets/pending-completion";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { KpiPill, kpiToneValueClass, type KpiTone } from "@/components/ui/kpi-pill";
 import { Input, Select } from "@/components/ui/input";
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
 import {
   FilterActiveTag,
   FilterDivider,
@@ -78,7 +75,6 @@ import { BandejaViewSkeleton, TicketsManageViewSkeleton } from "@/components/ui/
 import { useTickets } from "@/hooks/use-tickets";
 import type { TicketPriority, TicketStatus } from "@/lib/domain";
 import { canUseFilters, canReviewTicketDeletion } from "@/lib/rbac";
-import { toUiPriority } from "@/lib/ticketing";
 import { cn } from "@/lib/utils";
 
 /** Tiempo relativo en español, formato uniforme:
@@ -216,87 +212,6 @@ function AuditPanel({ events }: { events: AuditEventView[] }) {
   );
 }
 
-function MaintenanceAlertsPanel({
-  alerts,
-  windowDays,
-  onCreateTask,
-}: {
-  alerts: MaintenanceAlertView[];
-  /**
-   * Ventana real en días con la que el backend agrupó los fallos. Antes
-   * estaba hardcoded a 30 en los textos; ahora viene de la config
-   * (Admin → Buses anómalos) para que el texto del panel coincida con la
-   * realidad ("X fallos en N días").
-   */
-  windowDays: number;
-  onCreateTask: (alert: MaintenanceAlertView) => void;
-}) {
-  if (alerts.length === 0) {
-    return (
-      <EmptyState
-        icon={CheckCircle2}
-        title="Todos los activos en buen estado"
-        hint={`Sin tendencias de fallo en ${windowDays} días en el conjunto monitorizado.`}
-        compact
-      />
-    );
-  }
-  return (
-    <div className="space-y-2.5">
-      {alerts.slice(0, 4).map((alert, index) => {
-        const isCritical = alert.severity === "critical";
-        // Variables CSS para tintar borde lateral, glow y badge segun
-        // severidad sin tener que ramificar en el HTML.
-        const toneStyle = isCritical
-          ? {
-              ["--alert-tone" as string]: "var(--color-error)",
-              ["--alert-tone-light" as string]: "var(--color-error-light)",
-            }
-          : {
-              ["--alert-tone" as string]: "var(--color-warning)",
-              ["--alert-tone-light" as string]: "var(--color-warning-light)",
-            };
-        return (
-          <div
-            key={`${alert.busId}-${alert.assetType}`}
-            className={cn(
-              "tickets-alert-card text-xs",
-              ticketStaggerClass(index),
-              isCritical && "tickets-alert-card--critical",
-            )}
-            style={toneStyle}
-          >
-            <div className="mb-1 flex items-center justify-between gap-2 pl-2">
-              <p className="font-semibold text-[var(--color-text-1)]">
-                {alert.busId} · {alert.assetType}
-              </p>
-              <Badge variant={isCritical ? "error" : "warning"}>
-                {isCritical ? "Critico" : "Warning"}
-              </Badge>
-            </div>
-            <p className="mb-2 pl-2 text-[var(--color-text-2)]">
-              {alert.failuresInWindow} fallos en {windowDays} días · {alert.municipio}
-            </p>
-            {alert.hasOpenPreventiveTask ? (
-              <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-medium text-[var(--color-accent)]">
-                <CheckCircle2 size={11} />
-                Tarea abierta ({alert.preventiveTaskId})
-              </span>
-            ) : (
-              <button
-                onClick={() => onCreateTask(alert)}
-                className="tickets-alert-create-cta ml-2"
-              >
-                <span aria-hidden>+</span> Crear tarea preventiva
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function ticketStaggerClass(index: number) {
   return `ccmgc-stagger-in ccmgc-stagger-in-${(index % 6) + 1}`;
 }
@@ -381,7 +296,7 @@ function TicketBandejaKpiStrip({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--color-border)]/45 pt-2.5 sm:gap-x-3"
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-x-3"
       aria-label="Resumen de tickets"
     >
       {items.map((item, index) => (
@@ -447,8 +362,6 @@ function TicketsHeroHeader({
   esperandoRepuesto,
   resueltosHoy,
   slaVencidos,
-  maintenanceAlertsCount = 0,
-  preventiveTasksCount = 0,
   onSlaKpiClick,
 }: {
   view: TicketsModuleView;
@@ -459,8 +372,6 @@ function TicketsHeroHeader({
   esperandoRepuesto: number;
   resueltosHoy: number;
   slaVencidos: number;
-  maintenanceAlertsCount?: number;
-  preventiveTasksCount?: number;
   onSlaKpiClick?: () => void;
 }) {
   if (isUiUnificationEnabled()) {
@@ -474,8 +385,6 @@ function TicketsHeroHeader({
         esperandoRepuesto={esperandoRepuesto}
         resueltosHoy={resueltosHoy}
         slaVencidos={slaVencidos}
-        maintenanceAlertsCount={maintenanceAlertsCount}
-        preventiveTasksCount={preventiveTasksCount}
       />
     );
   }
@@ -495,7 +404,7 @@ function TicketsHeroHeader({
       : view === "bandeja"
         ? {
             title: "Bandeja de tickets",
-            subtitle: "Sigue, asigna y cierra incidencias del centro de control.",
+            subtitle: "Asigna y cierra. Sin incidencia → bitácora.",
             showKpis: true,
             showManageKpis: false,
             bandejaCta: false,
@@ -512,7 +421,12 @@ function TicketsHeroHeader({
           };
 
   return (
-    <header className="tickets-hero-glow relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 p-4 shadow-sm sm:p-5">
+    <header
+      className={cn(
+        "tickets-hero-glow relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-accent-light)]/30 shadow-sm",
+        view === "bandeja" ? "p-3 sm:p-4" : "p-4 sm:p-5",
+      )}
+    >
       <div
         aria-hidden
         className="ccmgc-hero-parallax pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[var(--color-accent)]/15 blur-3xl"
@@ -578,10 +492,7 @@ function TicketsHeroHeader({
             <TicketIcon size={20} strokeWidth={1.7} className="text-[var(--color-accent)]" aria-hidden />
           </div>
           <div className="min-w-0">
-            <div className="ccmgc-eyebrow dashboard-pretitle">
-              <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
-              CCMGC · Operación
-            </div>
+            <SectionEyebrow pulse>CCMGC · Operación</SectionEyebrow>
             {view === "manage" ? (
               <SectionTabs
                 preset="tickets"
@@ -607,12 +518,14 @@ function TicketsHeroHeader({
             />
           ) : null}
           {copy.nuevoTicketCta ? (
-            <TicketsModuleCta
+            <Link
               href="/tickets"
-              icon={Plus}
-              label="Nuevo ticket"
-              hint="Alta de incidencia"
-            />
+              className="desvios-action-chip desvios-action-chip--accent"
+              title="Alta de incidencia"
+            >
+              <Plus size={14} strokeWidth={1.7} aria-hidden />
+              <span>Nuevo</span>
+            </Link>
           ) : null}
           {copy.bandejaCta ? (
             <TicketsModuleCta
@@ -626,8 +539,13 @@ function TicketsHeroHeader({
           {copy.showManageKpis ? (
             <div className="flex flex-wrap items-center gap-1.5" aria-label="Indicadores de gestión">
               <KpiPill label="Abiertos" value={abiertos} tone="info" compact />
-              <KpiPill label="Alertas" value={maintenanceAlertsCount} tone="warning" compact />
-              <KpiPill label="Preventivas" value={preventiveTasksCount} tone="accent" compact />
+              <TicketsModuleCta
+                href="/preventivo"
+                icon={GraduationCap}
+                label="Preventivo"
+                hint="Conductores"
+                variant="secondary"
+              />
             </div>
           ) : copy.showKpis && view !== "bandeja" ? (
             <div className="flex flex-wrap items-center gap-1.5">
@@ -686,6 +604,19 @@ export type TicketsModuleView = "full" | "bandeja" | "manage";
  */
 export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = {}) {
   const t = useTickets();
+  const [conductorDraft, setConductorDraft] = useState(t.conductorFilter);
+
+  useEffect(() => {
+    setConductorDraft(t.conductorFilter);
+  }, [t.conductorFilter]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      if (conductorDraft.trim() === t.conductorFilter.trim()) return;
+      t.setConductorFilter(conductorDraft.trim());
+    }, 450);
+    return () => window.clearTimeout(id);
+  }, [conductorDraft, t.conductorFilter, t.setConductorFilter]);
   const [requestDeletionTarget, setRequestDeletionTarget] = useState<{ id: string; title: string } | null>(null);
   const showForm = view !== "bandeja";
   const showInbox = view !== "manage";
@@ -760,7 +691,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
   }
 
   return (
-    <div className="space-y-4">
+    <div className={cn(view === "bandeja" ? "flex flex-col gap-4" : "space-y-4")}>
       {canReviewTicketDeletion(t.role) ? <TicketDeletionRequestsPanel /> : null}
       <TicketsHeroHeader
         view={view}
@@ -771,11 +702,9 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
         esperandoRepuesto={heroKpis.esperandoRepuesto}
         resueltosHoy={heroKpis.resueltosHoy}
         slaVencidos={heroKpis.slaVencidos}
-        maintenanceAlertsCount={t.maintenanceAlerts.length}
-        preventiveTasksCount={t.preventiveTasks.length}
         onSlaKpiClick={() => t.setSlaOverdueOnly(true)}
       />
-      {view === "bandeja" ? <ShiftHealthBanner className="mb-3" /> : null}
+      {view === "bandeja" ? <ShiftHealthBanner className="!gap-1.5 !px-3 !py-2" /> : null}
       {view === "bandeja" ? <BandejaHandoverBanner /> : null}
       <section
         className={cn(
@@ -790,6 +719,19 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
         {showForm ? (
           view === "manage" ? (
             <div className="space-y-4">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5 text-xs text-[var(--color-text-2)]">
+                <NotebookPen size={12} className="shrink-0 text-[var(--color-accent)]" aria-hidden />
+                <span>
+                  Si solo necesitas dejar un aviso o justificación (sin incidencia), usa la{" "}
+                  <Link
+                    href="/bitacora/nueva?kind=nota"
+                    className="font-semibold text-[var(--color-accent)] underline-offset-2 hover:underline"
+                  >
+                    bitácora · nota
+                  </Link>
+                  .
+                </span>
+              </p>
               <TicketTemplatesPanel sessionUser={t.sessionUser} tipologias={t.tipologias} />
               <ExpressTicketPanel
                 catalog={t.catalog}
@@ -799,41 +741,26 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                 embedded
                 onCreated={() => void t.loadData()}
               />
-              <details className="group rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm open:shadow-md">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-semibold text-[var(--color-text-1)] marker:content-none [&::-webkit-details-marker]:hidden">
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-2)] text-[var(--color-text-2)] ring-1 ring-[var(--color-border)]">
-                      <ClipboardList size={15} strokeWidth={1.7} aria-hidden />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block">Ticket completo</span>
-                      <span className="mt-0.5 block text-[11px] font-normal text-[var(--color-text-3)]">
-                        Tipología, ubicación, adjuntos y todos los campos operativos
-                      </span>
-                    </span>
-                  </span>
-                  <ChevronDown
-                    size={16}
-                    className="shrink-0 text-[var(--color-text-3)] transition-transform group-open:rotate-180"
-                    aria-hidden
-                  />
-                </summary>
-                <div className="border-t border-[var(--color-border)]/80 px-1 pb-1 pt-2 sm:px-2">
-                  <TicketCreateForm
-                    catalog={t.catalog}
-                    lineas={t.lineas}
-                    tipologias={t.tipologias}
-                    sessionUser={t.sessionUser}
-                    saving={t.saving}
-                    onCreateTicket={t.handleCreateTicket}
-                    setError={t.setError}
-                    setNotice={t.setNotice}
-                    setNoticeTone={t.setNoticeTone}
-                    setNoticePlacement={t.setNoticePlacement}
-                    embedded
-                  />
-                </div>
-              </details>
+              <ManageSectionCard
+                icon={<ClipboardList size={15} strokeWidth={1.7} />}
+                title="Ticket completo"
+                subtitle="Tipología, ubicación, adjuntos y todos los campos operativos"
+                collapsible
+              >
+                <TicketCreateForm
+                  catalog={t.catalog}
+                  lineas={t.lineas}
+                  tipologias={t.tipologias}
+                  sessionUser={t.sessionUser}
+                  saving={t.saving}
+                  onCreateTicket={t.handleCreateTicket}
+                  setError={t.setError}
+                  setNotice={t.setNotice}
+                  setNoticeTone={t.setNoticeTone}
+                  setNoticePlacement={t.setNoticePlacement}
+                  embedded
+                />
+              </ManageSectionCard>
             </div>
           ) : (
             <TicketCreateForm
@@ -937,15 +864,12 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
             className={cn(
               "bandeja-toolbar-sticky space-y-2",
               toolbarStuck && "is-stuck",
-              view === "bandeja" && "bandeja-toolbar-sticky--embedded px-4 pt-4 sm:px-5",
+              view === "bandeja" && "bandeja-toolbar-sticky--embedded px-3 pt-3 sm:px-4",
             )}
           >
-          <div className="flex items-center justify-end">
-            <FeedbackTargetButton id="tickets/bandeja" label="Bandeja de tickets" />
-          </div>
-
           {canUseFilters(t.role) ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
               <SavedViewsBar
                 currentQuery={(() => {
                   const q = new URLSearchParams();
@@ -961,9 +885,13 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                 })()}
                 onApply={t.applyView}
               />
+                <div className="ml-auto">
+                  <FeedbackTargetButton id="tickets/bandeja" label="Bandeja de tickets" />
+                </div>
+              </div>
 
-              <div className="space-y-3">
-                {/* Búsqueda + KPIs + vista compartible */}
+              <div className="space-y-2">
+                {/* Búsqueda + vista compartible */}
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="relative min-w-0 w-full basis-full sm:min-w-[12rem] sm:flex-1">
                     <Search
@@ -977,7 +905,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                       value={t.searchQuery}
                       onChange={(e) => t.setSearchQuery(e.target.value)}
                       placeholder="Buscar título, bus, tipo, pieza…"
-                      className="h-9 w-full rounded-lg border-[var(--color-border)] bg-[var(--color-surface)] py-1 pl-9 pr-8 text-[12.5px] shadow-sm"
+                      className="h-8 w-full rounded-lg border-[var(--color-border)] bg-[var(--color-surface)] py-1 pl-9 pr-8 text-[12.5px] shadow-sm"
                       aria-label="Buscar tickets"
                     />
                     {t.searchQuery ? (
@@ -991,24 +919,19 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                       </button>
                     ) : null}
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {t.filtersInUrl ? (
-                      <span
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[var(--color-accent)]/10 px-2 py-1 text-[10px] font-semibold text-[var(--color-accent)]"
-                        title="La URL incluye los filtros activos; cópiala para compartir esta vista."
-                      >
-                        <Link2 size={10} strokeWidth={1.8} className="shrink-0" aria-hidden />
-                        Compartible
-                      </span>
-                    ) : null}
-                    <KpiPill label="Alta" value={t.ticketCountByPriority.alta} tone="error" compact />
-                    <KpiPill label="Media" value={t.ticketCountByPriority.media} tone="warning" compact />
-                    <KpiPill label="Baja" value={t.ticketCountByPriority.baja} tone="success" compact />
-                  </div>
+                  {t.filtersInUrl ? (
+                    <span
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[var(--color-accent)]/10 px-2 py-1 text-[10px] font-semibold text-[var(--color-accent)]"
+                      title="La URL incluye los filtros activos; cópiala para compartir esta vista."
+                    >
+                      <Link2 size={10} strokeWidth={1.8} className="shrink-0" aria-hidden />
+                      Compartible
+                    </span>
+                  ) : null}
                 </div>
 
                 {/* Estado + prioridad + atajos */}
-                <div className="flex flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-2">
+                <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-4 lg:gap-y-1.5">
                   <FilterLabeledGroup label="Estado">
                     <FilterPills
                       value={t.statusFilter}
@@ -1066,7 +989,7 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                 </div>
 
                 {/* Refinamiento + acciones */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg bg-[var(--color-surface-2)]/40 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg bg-[var(--color-surface-2)]/40 px-2.5 py-1.5">
                   <FilterSelect
                     Icon={Tags}
                     label="Tipo"
@@ -1101,14 +1024,52 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                     ]}
                   />
 
-                  <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--color-text-3)]">
+                    <UserCheck size={12} aria-hidden />
+                    <span className="sr-only sm:not-sr-only">Conductor</span>
+                    <input
+                      type="search"
+                      value={conductorDraft}
+                      onChange={(e) => setConductorDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          t.setConductorFilter(conductorDraft.trim());
+                        }
+                      }}
+                      placeholder="ID conductor…"
+                      title="Filtra por ID de conductor (tal como aparece en el ticket)"
+                      className="h-7 w-[8.5rem] rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[12px] text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)]"
+                    />
+                  </label>
+
+                  <div className="inline-flex items-center gap-1.5">
+                    <CalendarCheck size={12} className="text-[var(--color-text-3)]" aria-hidden />
+                    <DatePickerField
+                      compact
+                      ariaLabel="Día o desde"
+                      placeholder="Día / desde"
+                      value={t.dateFromFilter}
+                      onChange={t.setDateFromFilter}
+                      className="!min-w-[8.5rem]"
+                    />
+                  </div>
+                  <DatePickerField
+                    compact
+                    ariaLabel="Hasta (opcional)"
+                    placeholder="Hasta (opc.)"
+                    value={t.dateToFilter}
+                    onChange={t.setDateToFilter}
+                    minDateStr={t.dateFromFilter || undefined}
+                    className="!min-w-[8.5rem]"
+                  />
+
+                  <div className="ml-auto flex flex-wrap items-center gap-1.5">
                     <span className="text-[11px] text-[var(--color-text-3)]">
-                      Mostrando{" "}
                       <strong className="font-semibold tabular-nums text-[var(--color-text-1)]">
                         {t.filteredTickets.length}
-                      </strong>{" "}
-                      de{" "}
-                      <span className="tabular-nums text-[var(--color-text-2)]">{t.tickets.length}</span>
+                      </strong>
+                      <span className="tabular-nums text-[var(--color-text-2)]">/{t.tickets.length}</span>
                     </span>
                     <button
                       type="button"
@@ -1182,27 +1143,38 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                   </div>
                 </div>
 
-                {/* Tags activos */}
-                {t.statusFilter !== "todos" ||
-                t.priorityFilter !== "todos" ||
-                t.operatorFilter !== "todas" ||
+                {/* Tags activos: solo filtros profundos (pills ya cubren estado/prioridad/atajos) */}
+                {t.operatorFilter !== "todas" ||
                 t.busFilter !== "todas" ||
                 t.tipoFilter !== "todos" ||
-                t.onlyMine ||
-                t.slaOverdueOnly ||
+                t.conductorFilter.trim() ||
+                t.dateFromFilter ||
+                t.dateToFilter ||
                 t.searchQuery.trim() ||
                 t.partCodeFromQuery ? (
                   <div className="flex flex-wrap items-center gap-1.5" aria-label="Filtros activos">
-                    {t.statusFilter !== "todos" ? (
+                    {t.conductorFilter.trim() ? (
                       <FilterActiveTag
-                        label={`Estado: ${statusMap[t.statusFilter]}`}
-                        onClear={() => t.setStatusFilter("todos")}
+                        label={`Conductor ID: ${t.conductorFilter.trim()}`}
+                        onClear={() => {
+                          setConductorDraft("");
+                          t.setConductorFilter("");
+                        }}
                       />
                     ) : null}
-                    {t.priorityFilter !== "todos" ? (
+                    {t.dateFromFilter || t.dateToFilter ? (
                       <FilterActiveTag
-                        label={`Prioridad: ${toUiPriority(t.priorityFilter)}`}
-                        onClear={() => t.setPriorityFilter("todos")}
+                        label={
+                          t.dateFromFilter && !t.dateToFilter
+                            ? `Día: ${t.dateFromFilter}`
+                            : !t.dateFromFilter && t.dateToFilter
+                              ? `Día: ${t.dateToFilter}`
+                              : `Fechas: ${t.dateFromFilter} → ${t.dateToFilter}`
+                        }
+                        onClear={() => {
+                          t.setDateFromFilter("");
+                          t.setDateToFilter("");
+                        }}
                       />
                     ) : null}
                     {t.operatorFilter !== "todas" ? (
@@ -1221,20 +1193,6 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
                       <FilterActiveTag
                         label={`Tipo: ${t.tipoFilter}`}
                         onClear={() => t.setTipoFilter("todos")}
-                      />
-                    ) : null}
-                    {t.onlyMine ? (
-                      <FilterActiveTag
-                        label="Mis tickets"
-                        icon={<UserCheck size={10} aria-hidden />}
-                        onClear={() => t.setOnlyMine(false)}
-                      />
-                    ) : null}
-                    {t.slaOverdueOnly ? (
-                      <FilterActiveTag
-                        label="SLA vencidos"
-                        icon={<Timer size={10} aria-hidden />}
-                        onClear={() => t.setSlaOverdueOnly(false)}
                       />
                     ) : null}
                     {t.searchQuery.trim() ? (
@@ -1348,242 +1306,36 @@ export function TicketsModule({ view = "full" }: { view?: TicketsModuleView } = 
             * (bandeja + form). Header con título + divider para separar
             * jerarquía. */}
           <div className="mt-2 mb-3 flex items-center gap-3">
-            <span className="tickets-section-eyebrow">
-              <span className="tickets-section-eyebrow-dot" aria-hidden />
-              Operativa secundaria
-            </span>
+            <SectionEyebrow>Operativa secundaria</SectionEyebrow>
             <span className="tickets-section-divider" aria-hidden />
             <span className="hidden text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]/70 sm:inline">
               Contexto del centro
             </span>
           </div>
-          {/*
-           * Distribución del contexto operativo:
-           *   - Fila principal: Alertas preventivas + Tareas preventivas, en
-           *     pareja (50/50 en desktop) por ser las dos vistas que todo el
-           *     personal usa a diario.
-           *   - Auditoría: solo visible para `gestor_centro_control`; ocupa el
-           *     ancho completo abajo, porque sus filas son más anchas y se
-           *     beneficia de hacerse panorámica.
-           */}
-          <div className="mb-4 grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2 md:items-stretch">
-            {/* Alertas preventivas */}
-            <div className="tickets-secondary-panel tickets-secondary-panel--warning flex min-h-[min(220px,32vh)] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-[var(--color-border-hover)] hover:shadow-md md:min-h-[260px]">
-              <div className="mb-3 flex shrink-0 items-center gap-2.5">
-                <span
-                  className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1",
-                    t.maintenanceAlerts.length > 0
-                      ? "bg-[var(--color-warning-light)] text-[var(--color-warning)] ring-[var(--color-warning)]/25"
-                      : "bg-[var(--color-success-light)] text-[var(--color-success)] ring-[var(--color-success)]/25",
-                  )}
-                >
-                  <AlertTriangle size={13} strokeWidth={1.7} aria-hidden />
+          {/* Preventivo de conductores: sustituye alertas/tareas de buses. */}
+          <Link
+            href="/preventivo"
+            className="tickets-secondary-panel group mb-4 flex items-start gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-[var(--color-accent)]/40 hover:shadow-md"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
+              <GraduationCap size={18} strokeWidth={1.7} aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-[14px] font-semibold text-[var(--color-text-1)]">Preventivo de conductores</span>
+                <span className="rounded-full border border-[var(--color-accent)]/30 bg-[var(--color-accent-light)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--color-accent)]">
+                  Formación
                 </span>
-                <h4 className="text-[13px] font-semibold text-[var(--color-text-1)]">Alertas preventivas</h4>
-                {t.maintenanceAlerts.length > 0 ? (
-                  <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--color-warning-light)] px-1.5 text-[10px] font-semibold text-[var(--color-warning)]">
-                    {t.maintenanceAlerts.length}
-                  </span>
-                ) : null}
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
-                <MaintenanceAlertsPanel
-                  alerts={t.maintenanceAlerts}
-                  windowDays={t.maintenanceWindowDays}
-                  onCreateTask={t.handleCreatePreventiveTask}
-                />
-              </div>
-            </div>
-
-            {/* Tareas preventivas */}
-            <div className="tickets-secondary-panel flex min-h-[min(220px,32vh)] flex-col rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-[var(--color-border-hover)] hover:shadow-md md:min-h-[240px]">
-              <div className="mb-1 flex shrink-0 items-center gap-2.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/20">
-                  <CalendarCheck size={13} strokeWidth={1.7} aria-hidden />
-                </span>
-                <h4 className="text-[13px] font-semibold text-[var(--color-text-1)]">Tareas preventivas</h4>
-                {t.preventiveTasks.length > 0 ? (
-                  <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--color-surface)] px-1.5 text-[10px] font-semibold text-[var(--color-text-2)]">
-                    {t.preventiveTasks.length}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mb-3 ml-[2.375rem] shrink-0 text-[10px] text-[var(--color-text-3)]">
-                Mantenimiento programado y seguimiento por bus / activo.
-              </p>
-              <div className="min-h-0 flex-1 max-h-[min(320px,42vh)] space-y-2 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch]">
-                {t.preventiveTasks.slice(0, 6).map((task) => (
-                  <div
-                    key={task.id}
-                    className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-xs transition-colors hover:border-[var(--color-border-hover)]"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium text-[var(--color-text-1)]">
-                        {task.busId} · {task.assetType} <span className="text-caption font-normal">({task.creatorName})</span>
-                      </p>
-                      <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium", preventiveTaskTone[task.status])}>
-                        {task.status}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[var(--color-text-2)]">{task.reason}</p>
-                    <p className="mt-1 text-caption text-[var(--color-text-3)]">
-                      Técnico: {task.assignedToUserName ?? "Sin asignar"} · Programada:{" "}
-                      {task.scheduledAt ? new Date(task.scheduledAt).toLocaleString("es-ES") : "Sin fecha"}
-                    </p>
-                    {(t.role === "tecnico_campo" || t.role === "gestor_centro_control") && (
-                      <div className="mt-2 space-y-2">
-                        {/* Acciones de cambio de estado. Antes se renderizaban
-                         * como botones con el texto literal del estado
-                         * ("pendiente", "programada", "cancelada") y todos
-                         * compartian el mismo estilo gris neutro, por lo que
-                         * el usuario no entendia que "cancelada" era una
-                         * accion (lo confundia con un chip de estado).
-                         *
-                         * Ahora cada accion tiene:
-                         *   - Verbo explicito en la etiqueta ("Cancelar tarea"
-                         *     en vez de "cancelada").
-                         *   - Tono visual propio (rojo para destructivo, azul
-                         *     para programar, neutro para reabrir).
-                         *   - Confirmacion al cancelar para evitar clicks
-                         *     accidentales sobre acciones destructivas. */}
-                        <div className="flex flex-wrap gap-1.5">
-                          {(
-                            [
-                              { status: "pendiente" as const, label: "Reabrir como pendiente", tone: "neutral" as const },
-                              { status: "programada" as const, label: "Marcar como programada", tone: "accent" as const },
-                              { status: "cancelada" as const, label: "Cancelar tarea", tone: "danger" as const },
-                            ]
-                          )
-                            .filter(({ status }) => status !== task.status)
-                            .map(({ status, label, tone }) => (
-                              <button
-                                key={`${task.id}-${status}`}
-                                onClick={() => {
-                                  if (
-                                    tone === "danger" &&
-                                    !window.confirm(
-                                      `¿Cancelar esta tarea preventiva (${task.busId} · ${task.assetType})? Podrás reabrirla más tarde si fue por error.`,
-                                    )
-                                  ) {
-                                    return;
-                                  }
-                                  void t.handleUpdatePreventiveTaskStatus(task.id, status);
-                                }}
-                                className={cn(
-                                  "rounded-md border px-2 py-1 text-[11px] font-medium transition-all duration-150",
-                                  tone === "neutral" &&
-                                    "border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-text-2)] hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text-1)]",
-                                  tone === "accent" &&
-                                    "border-[var(--color-accent)]/35 bg-[var(--color-accent-light)] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/15",
-                                  tone === "danger" &&
-                                    "border-[var(--color-error)]/35 bg-[var(--color-error-light)] text-[var(--color-error)] hover:bg-[var(--color-error)]/15",
-                                )}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          {task.status !== "completada" && (
-                            <button
-                              onClick={() => {
-                                t.setCompletingTaskId(t.completingTaskId === task.id ? null : task.id);
-                                t.setCompletionNote("");
-                              }}
-                              className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-400 transition-all duration-150 hover:bg-emerald-500/20"
-                            >
-                              Completar…
-                            </button>
-                          )}
-                        </div>
-                        {t.completingTaskId === task.id && (
-                          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-2.5 space-y-2">
-                            <textarea
-                              value={t.completionNote}
-                              onChange={(e) => t.setCompletionNote(e.target.value)}
-                              placeholder="Notas de cierre (opcional)…"
-                              rows={2}
-                              className="w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[11px] text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
-                            />
-                            <div className="flex gap-1.5">
-                              <button
-                                onClick={() => void t.handleCompleteTask(task.id)}
-                                className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-emerald-500"
-                              >
-                                Confirmar
-                              </button>
-                              <button
-                                onClick={() => {
-                                  t.setCompletingTaskId(null);
-                                  t.setCompletionNote("");
-                                }}
-                                className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-1 text-[11px] text-[var(--color-text-2)] transition-colors hover:bg-[var(--color-surface)]"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {t.role === "gestor_centro_control" && (
-                      <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_auto]">
-                        <Select
-                          value={t.taskPlans[task.id]?.assignedToUserId ?? ""}
-                          onChange={(event) =>
-                            t.setTaskPlans((prev) => ({
-                              ...prev,
-                              [task.id]: {
-                                assignedToUserId: event.target.value,
-                                scheduledAt: prev[task.id]?.scheduledAt ?? "",
-                              },
-                            }))
-                          }
-                          className="!min-h-9 rounded-md px-2 py-1.5 text-[11px]"
-                          placeholder="Asignar tecnico"
-                          aria-label="Asignar tecnico"
-                        >
-                          <option value="">Asignar tecnico</option>
-                          {t.technicians.map((technician) => (
-                            <option key={technician.id} value={technician.id}>
-                              {technician.name}
-                            </option>
-                          ))}
-                        </Select>
-                        <input
-                          type="datetime-local"
-                          value={t.taskPlans[task.id]?.scheduledAt ?? ""}
-                          onChange={(event) =>
-                            t.setTaskPlans((prev) => ({
-                              ...prev,
-                              [task.id]: {
-                                assignedToUserId: prev[task.id]?.assignedToUserId ?? "",
-                                scheduledAt: event.target.value,
-                              },
-                            }))
-                          }
-                          className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-3)] px-2 py-1.5 text-[11px] text-[var(--color-text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                        />
-                        <button
-                          onClick={() => void t.handlePlanPreventiveTask(task.id)}
-                          className="rounded-md border border-[var(--color-accent)]/35 bg-[var(--color-accent-light)] px-2 py-1.5 text-[11px] font-medium text-[var(--color-accent)] transition-all duration-150 hover:bg-[var(--color-accent)]/15"
-                        >
-                          Planificar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {t.preventiveTasks.length === 0 && (
-                  <EmptyState
-                    icon={CalendarCheck}
-                    title="Sin tareas preventivas activas"
-                    hint="No hay mantenimientos programados."
-                    compact
-                  />
-                )}
-              </div>
-            </div>
-          </div>
+              </span>
+              <span className="mt-1 block text-[12.5px] leading-relaxed text-[var(--color-text-2)]">
+                Casos abiertos cuando un conductor acumula tickets de origen conductor. Aquí los técnicos forman, hacen seguimiento y cierran el preventivo.
+              </span>
+              <span className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--color-accent)] group-hover:underline">
+                Abrir preventivo
+                <ArrowRight size={13} aria-hidden />
+              </span>
+            </span>
+          </Link>
 
           {/*
            * Auditoría reciente: panel reservado a gestores del centro. Va

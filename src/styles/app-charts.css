@@ -1,0 +1,244 @@
+/* Capa Recharts compartida en toda la app (dashboard, reportes, builder) */
+
+.dashboard-chart-shell,
+.app-chart-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.dashboard-chart-shell::before,
+.app-chart-shell::before {
+  content: "";
+  position: absolute;
+  inset: 8% 0 0;
+  background: radial-gradient(
+    ellipse 75% 55% at 50% 100%,
+    color-mix(in oklab, var(--chart-accent, var(--color-accent)) 10%, transparent) 0%,
+    transparent 72%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dashboard-chart-shell .recharts-responsive-container,
+.dashboard-chart-shell > .recharts-wrapper,
+.app-chart-shell .recharts-responsive-container,
+.app-chart-shell > .recharts-wrapper {
+  position: relative;
+  z-index: 1;
+}
+
+/* Suavizado global de capas Recharts */
+.dashboard-chart-shell .recharts-surface,
+.app-chart-shell .recharts-surface {
+  overflow: visible;
+}
+
+.dashboard-chart-shell .recharts-area-area,
+.app-chart-shell .recharts-area-area {
+  transition: opacity 0.18s ease;
+}
+
+.dashboard-chart-shell .recharts-bar-rectangle,
+.app-chart-shell .recharts-bar-rectangle {
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18));
+  transition: filter 0.18s ease, opacity 0.16s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+
+.dashboard-chart-shell .recharts-bar-rectangle:hover,
+.app-chart-shell .recharts-bar-rectangle:hover,
+.dashboard-chart-shell .recharts-active-bar .recharts-bar-rectangle,
+.app-chart-shell .recharts-active-bar .recharts-bar-rectangle {
+  filter: brightness(1.12) drop-shadow(0 6px 14px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 22%, rgba(0, 0, 0, 0.35)));
+  transform: scaleY(1.02);
+}
+
+.dashboard-chart-shell .recharts-pie-sector,
+.app-chart-shell .recharts-pie-sector {
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.22));
+  transition: filter 0.18s ease, opacity 0.16s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-box: fill-box;
+  transform-origin: center;
+  cursor: pointer;
+}
+
+.dashboard-chart-shell .recharts-pie-sector:hover,
+.app-chart-shell .recharts-pie-sector:hover {
+  filter: brightness(1.1) drop-shadow(0 5px 12px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 20%, rgba(0, 0, 0, 0.35)));
+  transform: scale(1.03);
+}
+
+.dashboard-chart-shell .recharts-scatter-symbol,
+.app-chart-shell .recharts-scatter-symbol {
+  transition: opacity 0.15s ease;
+}
+
+.dashboard-scatter-point circle:last-child {
+  transition: r 0.18s ease, filter 0.18s ease;
+}
+
+.dashboard-chart-shell g:hover .dashboard-scatter-point circle:last-child,
+.app-chart-shell g:hover .dashboard-scatter-point circle:last-child {
+  filter: brightness(1.12) drop-shadow(0 3px 8px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 25%, transparent));
+}
+
+.dashboard-chart-shell .recharts-funnel-trapezoid,
+.app-chart-shell .recharts-funnel-trapezoid {
+  transition: filter 0.18s ease, opacity 0.16s ease;
+  cursor: pointer;
+}
+
+.dashboard-chart-shell .recharts-funnel-trapezoid:hover,
+.app-chart-shell .recharts-funnel-trapezoid:hover {
+  filter: brightness(1.1) drop-shadow(0 4px 12px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 20%, rgba(0, 0, 0, 0.35)));
+}
+
+.dashboard-funnel-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dashboard-funnel-legend {
+  flex-shrink: 0;
+  padding: 4px 2px 0;
+  gap: 0.35rem 0.55rem;
+}
+
+.dashboard-funnel-label {
+  pointer-events: none;
+}
+
+.dashboard-chart-shell .recharts-sankey-link,
+.app-chart-shell .recharts-sankey-link {
+  transition: stroke-opacity 0.2s ease, filter 0.18s ease;
+}
+
+.dashboard-chart-shell .recharts-sankey-node,
+.app-chart-shell .recharts-sankey-node {
+  transition: filter 0.18s ease, opacity 0.16s ease;
+  cursor: pointer;
+}
+
+.dashboard-chart-shell .recharts-sankey-link:hover,
+.app-chart-shell .recharts-sankey-link:hover {
+  stroke-opacity: 0.72 !important;
+  filter: drop-shadow(0 2px 8px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 22%, transparent));
+}
+
+.dashboard-chart-shell .recharts-sankey-node:hover,
+.app-chart-shell .recharts-sankey-node:hover {
+  filter: brightness(1.12);
+}
+
+.dashboard-chart-shell .recharts-radial-bar-sector,
+.app-chart-shell .recharts-radial-bar-sector {
+  transition: filter 0.18s ease, opacity 0.16s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-box: fill-box;
+  transform-origin: center;
+  cursor: pointer;
+}
+
+.dashboard-chart-shell .recharts-radial-bar-sector:hover,
+.app-chart-shell .recharts-radial-bar-sector:hover {
+  filter: brightness(1.12) drop-shadow(0 4px 10px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 22%, rgba(0, 0, 0, 0.35)));
+  transform: scale(1.03);
+}
+
+.dashboard-chart-shell .recharts-radar-polygon,
+.app-chart-shell .recharts-radar-polygon {
+  transition: fill-opacity 0.18s ease, stroke-width 0.18s ease, filter 0.18s ease;
+}
+
+.dashboard-chart-shell .recharts-radar-polygon:hover,
+.app-chart-shell .recharts-radar-polygon:hover {
+  fill-opacity: 0.28 !important;
+  filter: drop-shadow(0 2px 8px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 20%, transparent));
+}
+
+.dashboard-chart-shell .recharts-pie-sector,
+.app-chart-shell .recharts-pie-sector {
+  transition: filter 0.16s ease, opacity 0.16s ease;
+  cursor: pointer;
+}
+
+.dashboard-pie-sector--active,
+.dashboard-chart-shell .recharts-pie-sector:hover,
+.app-chart-shell .recharts-pie-sector:hover {
+  filter: brightness(1.1) drop-shadow(0 2px 8px color-mix(in oklab, var(--chart-accent, var(--color-accent)) 22%, transparent));
+}
+
+.dashboard-chart-tooltip-wrap {
+  pointer-events: auto !important;
+  z-index: 40;
+  max-width: min(17.5rem, calc(100% - 12px));
+}
+
+.dashboard-chart-shell .recharts-tooltip-wrapper {
+  z-index: 40 !important;
+  /* Evita que animaciones/transform empujen fuera del contenedor. */
+  will-change: transform;
+}
+
+/* Leyenda unificada (reportes + dashboards) */
+.dashboard-chart-legend,
+.reports-chart-legend,
+.app-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem 0.65rem;
+  padding-inline: 0.15rem;
+}
+
+.reports-chart-legend {
+  justify-content: flex-end;
+  font-size: 11px;
+  color: var(--color-text-3);
+}
+
+.reports-chart-legend-dot,
+.dashboard-chart-legend__dot {
+  box-shadow: 0 0 6px color-mix(in oklab, currentColor 35%, transparent);
+}
+
+/* SVG analytics (admin) — coherente con reduced motion */
+.analytics-sparkline path,
+.analytics-gauge-ring {
+  transition: stroke-dashoffset 0.65s ease, opacity 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-chart-shell .recharts-layer,
+  .dashboard-chart-shell .recharts-bar-rectangle,
+  .dashboard-chart-shell .recharts-pie-sector,
+  .dashboard-chart-shell .recharts-area-area,
+  .dashboard-chart-shell .recharts-scatter-symbol,
+  .dashboard-chart-shell .recharts-radial-bar-sector,
+  .dashboard-chart-shell .recharts-sankey-link,
+  .dashboard-chart-shell .recharts-sankey-node,
+  .dashboard-chart-shell .recharts-funnel-trapezoid,
+  .dashboard-chart-brush-traveller rect,
+  .app-chart-shell .recharts-layer,
+  .app-chart-shell .recharts-bar-rectangle,
+  .app-chart-shell .recharts-pie-sector,
+  .app-chart-shell .recharts-area-area,
+  .app-chart-shell .recharts-scatter-symbol,
+  .app-chart-shell .recharts-radial-bar-sector,
+  .app-chart-shell .recharts-sankey-link,
+  .app-chart-shell .recharts-sankey-node,
+  .app-chart-shell .recharts-funnel-trapezoid,
+  .dashboard-executive-tooltip,
+  .dashboard-widget-card .transition-all,
+  .dashboard-widget-presentation-enter,
+  .dashboard-template-card,
+  .dashboard-preset-chip,
+  .analytics-sparkline path,
+  .analytics-gauge-ring {
+    animation: none !important;
+    transition: none !important;
+  }
+}

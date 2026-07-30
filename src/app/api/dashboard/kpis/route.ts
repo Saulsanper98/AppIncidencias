@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveRequestActor } from "@/lib/auth-context";
+import { countOpenSlaMetrics } from "@/lib/operations/ticker-data";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request) {
@@ -129,7 +130,7 @@ export async function GET(request: Request) {
         ? Math.round(((allBuses.length - busesWithOpenTickets.length) / allBuses.length) * 100)
         : 100;
 
-    const [activeTickets, allOpenForMap] = await Promise.all([
+    const [activeTickets, allOpenForMap, slaMetrics] = await Promise.all([
       prisma.ticket.findMany({
         where: { status: { not: "resuelto" } },
         orderBy: [{ slaDeadline: "asc" }],
@@ -143,6 +144,7 @@ export async function GET(request: Request) {
         where: { status: { not: "resuelto" } },
         select: { mapPlaceMunicipio: true, bus: { select: { municipio: true } } },
       }),
+      countOpenSlaMetrics(now),
     ]);
 
     const municipioMap = new Map<string, number>();
@@ -198,6 +200,8 @@ export async function GET(request: Request) {
       municipioStats,
       statusCounts,
       shiftLoadToday,
+      slaVencidosCount: slaMetrics.slaVencidosCount,
+      altaPrioridadCount: slaMetrics.altaPrioridadCount,
     });
   } catch (error) {
     console.error("Error loading dashboard KPIs:", error);

@@ -1,7 +1,7 @@
 import { Settings2 } from "lucide-react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AdminSubpageHero } from "@/components/admin/AdminSubpageHero";
 import { OperacionAutomaticaPanel } from "@/components/admin/OperacionAutomaticaPanel";
 import { canManageCatalog } from "@/lib/rbac";
 import { requireActiveUser } from "@/lib/server-session";
@@ -16,23 +16,12 @@ export default async function AdminOperacionPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-3)]">
-            Administración
-          </p>
-          <h1 className="mt-1 flex items-center gap-2 text-xl font-semibold text-[var(--color-text-1)]">
-            <Settings2 size={20} strokeWidth={1.6} aria-hidden />
-            Operación automática
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-3)]">
-            Reglas de asignación y umbrales de escalado para el centro de control.
-          </p>
-        </div>
-        <Link href="/admin" className="text-xs text-[var(--color-accent)] hover:underline">
-          ← Volver al panel
-        </Link>
-      </header>
+      <AdminSubpageHero
+        tone="operacion"
+        icon={Settings2}
+        title="Operación automática"
+        subtitle="Reglas de asignación y umbrales de escalado para el centro de control."
+      />
       <OperacionAutomaticaPanel />
     </div>
   );

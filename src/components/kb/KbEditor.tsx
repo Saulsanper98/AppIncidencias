@@ -594,7 +594,10 @@ export function KbEditor({
           {/* Tags */}
           <section className="ccmgc-card space-y-2 p-4">
             <FieldLabel icon={<Tag size={11} strokeWidth={1.7} aria-hidden />}>Etiquetas</FieldLabel>
-            <div className="flex flex-wrap items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-1.5 transition-colors focus-within:border-[var(--color-accent)]/40 focus-within:ring-2 focus-within:ring-[var(--color-accent-light)]">
+            <div
+              data-field-chrome
+              className="flex flex-wrap items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] p-1.5 transition-colors focus-within:border-[var(--color-accent)]/40 focus-within:ring-2 focus-within:ring-[var(--color-accent-light)]"
+            >
               {tags.map((t) => (
                 <span
                   key={t}

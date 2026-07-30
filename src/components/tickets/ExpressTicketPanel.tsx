@@ -5,6 +5,7 @@ import { CheckCircle2, ClipboardPen, Loader2, RotateCcw, Zap } from "lucide-reac
 import Link from "next/link";
 
 import type { CatalogBus } from "@/components/tickets/tickets-module-types";
+import { ManageSectionCard } from "@/components/tickets/ManageSectionCard";
 import { TipologiaPickerSection, applyGenericTipologiaToForm } from "@/components/tickets/TipologiaPickerSection";
 import { HeroShell } from "@/components/ui/hero-shell";
 import { Button } from "@/components/ui/button";
@@ -14,11 +15,13 @@ import { KpiPill } from "@/components/ui/kpi-pill";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { TypeaheadInput } from "@/components/ui/typeahead-input";
 import { VoiceInputButton } from "@/components/ui/VoiceInputButton";
+import { FalloOrigenPicker, PriorityPicker } from "@/components/tickets/PriorityOriginPickers";
 import {
   collectOperatorPrefixes,
   formatPrefixHint,
 } from "@/lib/catalog-id-format";
-import type { SessionUser } from "@/lib/domain";
+import type { SessionUser, TicketPriority } from "@/lib/domain";
+import type { FalloOrigen } from "@/lib/fallo-origen";
 import { GENERIC_TIPO, type TipologiaItem } from "@/lib/tipologia";
 import { resolveBusIdForForm } from "@/lib/ticket-bus-asset";
 import { cn } from "@/lib/utils";
@@ -87,6 +90,8 @@ export function ExpressTicketPanel({ catalog, tipologias, sessionUser, draftCoun
   const [tipologiaTipo, setTipologiaTipo] = useState("");
   const [tipologiaSubtipo, setTipologiaSubtipo] = useState("");
   const [tipologiaSubsubtipo, setTipologiaSubsubtipo] = useState("");
+  const [priority, setPriority] = useState<TicketPriority>("media");
+  const [falloOrigen, setFalloOrigen] = useState<FalloOrigen>("maquina");
   const [saving, setSaving] = useState(false);
   const [savingMode, setSavingMode] = useState<"borrador" | "resuelto" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +141,7 @@ export function ExpressTicketPanel({ catalog, tipologias, sessionUser, draftCoun
     setTipologiaTipo(item.tipo);
     setTipologiaSubtipo(item.subtipo);
     setTipologiaSubsubtipo(item.subsubtipo);
+    setPriority(item.nivelImpacto === "Alto" ? "alta" : item.nivelImpacto === "Bajo" ? "baja" : "media");
   }, []);
 
   const resetForm = useCallback((focusBus = true) => {
@@ -186,6 +192,8 @@ export function ExpressTicketPanel({ catalog, tipologias, sessionUser, draftCoun
           note: trimmedNote,
           incidentOccurredAt: new Date(incidentAt).toISOString(),
           mode,
+          priority,
+          falloOrigen,
           ...(selectedTipologia
             ? {
                 tipologia: {
@@ -225,6 +233,187 @@ export function ExpressTicketPanel({ catalog, tipologias, sessionUser, draftCoun
 
   const canSubmit = sessionUser && busValidation.ok && note.trim().length > 0 && !saving;
 
+  const expressForm = (
+    <>
+      {!sessionUser ? (
+        <p className="mb-3 rounded-lg border border-[var(--color-warning)]/35 bg-[var(--color-warning-light)] px-3 py-2 text-sm text-[var(--color-text-2)]">
+          Inicia sesión para registrar apuntes express durante la llamada.
+        </p>
+      ) : null}
+      {catalog.length === 0 ? (
+        <div className="mb-4 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/50 px-3 py-3">
+          <p className="text-sm font-medium text-[var(--color-text-2)]">Sin catálogo disponible en este momento</p>
+          <p className="mt-1 text-xs text-[var(--color-text-3)]">
+            Si estás en ruta y no ves buses, anota el ID por teléfono y deja un borrador en bandeja para completarlo en cuanto recupere conexión.
+          </p>
+          <Link
+            href="/bandeja?status=borrador"
+            className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-accent)] hover:underline"
+          >
+            Ir a bandeja de borradores
+          </Link>
+        </div>
+      ) : null}
+      {error ? (
+        <p role="alert" className="mb-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error-light)] px-3 py-2 text-sm text-[var(--color-error)]">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+          <label htmlFor="express-bus" className="text-label">
+            Bus <span className="text-[var(--color-error)]">*</span>
+          </label>
+          <TypeaheadInput
+            ref={busRef}
+            id="express-bus"
+            value={busId}
+            onValueChange={setBusId}
+            options={busOptions}
+            placeholder="Ej. TIL-1234"
+            autoComplete="off"
+            aria-invalid={busId.trim() !== "" && !busValidation.ok}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && busValidation.ok) {
+                e.preventDefault();
+                noteRef.current?.focus();
+              }
+            }}
+          />
+          {busId.trim() && !busValidation.ok ? (
+            <p className="text-[11px] text-[var(--color-error)]">{busValidation.message}</p>
+          ) : (
+            <p className="text-[11px] text-[var(--color-text-3)]">Prefijo operadora ({formatPrefixHint(catalogPrefixes)})</p>
+          )}
+        </div>
+
+        <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+          <label htmlFor="express-incident-at" className="text-label">
+            Hora de la incidencia <span className="text-[var(--color-error)]">*</span>
+          </label>
+          <DateTimePickerField
+            id="express-incident-at"
+            value={incidentAt}
+            onChange={setIncidentAt}
+            ariaLabel="Hora de la incidencia"
+          />
+          <p className="text-[11px] text-[var(--color-text-3)]">Puede ser distinta a la hora de registro.</p>
+        </div>
+
+        <div className="sm:col-span-2">
+          <p className="mb-2 text-label">
+            Incidencia{" "}
+            <span className="text-[10px] font-normal normal-case tracking-normal text-[var(--color-text-3)]">
+              (opcional)
+            </span>
+          </p>
+          <TipologiaPickerSection
+            tipologias={tipologias}
+            isGenericTipo={isGenericTipo}
+            tipo={tipologiaTipo}
+            subtipo={tipologiaSubtipo}
+            availableTipos={availableTipos}
+            availableSubtipos={availableSubtipos}
+            selectedTipologia={selectedTipologia}
+            onSelect={applyTipologiaSelection}
+            onSearchStart={resetTipologia}
+            onTipoChange={(nextTipo) => {
+              setTipologiaTipo(nextTipo);
+              setTipologiaSubtipo("");
+              setTipologiaSubsubtipo("");
+            }}
+            onSubtipoChange={(nextSubtipo) => {
+              setTipologiaSubtipo(nextSubtipo);
+              setTipologiaSubsubtipo("");
+            }}
+            onGenericTipoSelect={() => {
+              const generic = applyGenericTipologiaToForm();
+              setTipologiaTipo(generic.tipo);
+              setTipologiaSubtipo(generic.subtipo);
+              setTipologiaSubsubtipo(generic.subsubtipo);
+            }}
+            showGuide={false}
+          />
+        </div>
+
+        <div className="grid gap-5 sm:col-span-2 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-3">
+          <div className="block space-y-1.5">
+            <span className="text-label">Prioridad</span>
+            <PriorityPicker value={priority} onChange={setPriority} aria-label="Prioridad" />
+          </div>
+          <div className="block space-y-1.5 sm:border-l sm:border-[var(--color-border)] sm:pl-8">
+            <span className="text-label">Origen del fallo</span>
+            <FalloOrigenPicker
+              value={falloOrigen}
+              onChange={setFalloOrigen}
+              aria-label="Origen del fallo"
+              compact
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5 sm:col-span-2">
+          <label htmlFor="express-note" className="text-label">
+            Apunte <span className="text-[var(--color-error)]">*</span>
+          </label>
+          <div className="flex gap-2">
+            <Input
+              ref={noteRef}
+              id="express-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Ej. Validadora sin lectura en parada X"
+              className="h-10 flex-1"
+              maxLength={4000}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && canSubmit) {
+                  e.preventDefault();
+                  void submit("resuelto");
+                }
+              }}
+            />
+            <VoiceInputButton
+              onTranscript={(text) => setNote((prev) => `${prev} ${text}`.trim())}
+              className="shrink-0"
+              size="md"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="express-action-bar">
+        <div className="express-action-bar__group">
+          <ExpressActionBtn
+            variant="primary"
+            label="Crear y cerrar"
+            hint="Registro al instante · datos pendientes"
+            icon={<Zap size={18} strokeWidth={2.2} />}
+            disabled={!canSubmit}
+            loading={saving && savingMode === "resuelto"}
+            onClick={() => void submit("resuelto")}
+          />
+          <ExpressActionBtn
+            variant="draft"
+            label="Guardar borrador"
+            hint={selectedTipologia ? "Completar adjuntos después" : "Completar tipología después"}
+            icon={<ClipboardPen size={17} strokeWidth={2} />}
+            disabled={!canSubmit}
+            loading={saving && savingMode === "borrador"}
+            onClick={() => void submit("borrador")}
+          />
+        </div>
+        <ExpressActionBtn
+          variant="clear"
+          label="Limpiar"
+          icon={<RotateCcw size={15} strokeWidth={2} />}
+          disabled={saving}
+          onClick={() => resetForm()}
+        />
+      </div>
+    </>
+  );
+
   return (
     <div className="space-y-4">
       {embedded ? null : (
@@ -252,193 +441,27 @@ export function ExpressTicketPanel({ catalog, tipologias, sessionUser, draftCoun
       />
       )}
 
-      <section className={cn(
-        "rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm",
-        embedded ? "p-4 sm:p-5" : "p-4 sm:p-5",
-      )}>
-        {embedded ? (
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--color-border)]/80 pb-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
-                  <Zap size={15} strokeWidth={2} aria-hidden />
-                </span>
-                <h3 className="text-base font-semibold text-[var(--color-text-1)]">Apunte express</h3>
-              </div>
-              <p className="mt-1.5 text-[12.5px] leading-snug text-[var(--color-text-3)]">
-                Bus, hora, incidencia (opcional) y una línea de texto. Cierra al instante o deja borrador en bandeja.
-              </p>
-            </div>
-            {draftCount > 0 ? (
-              <Link
-                href="/bandeja?status=borrador"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-500/20"
-              >
-                <ClipboardPen size={14} aria-hidden />
+      {embedded ? (
+        <ManageSectionCard
+          icon={<Zap size={15} strokeWidth={1.7} />}
+          title="Apunte express"
+          subtitle="Bus, hora, incidencia (opcional) y una línea de texto. Cierra al instante o deja borrador."
+          actions={
+            draftCount > 0 ? (
+              <Link href="/bandeja?status=borrador" className="manage-section-card__header-btn">
+                <ClipboardPen size={13} aria-hidden />
                 {draftCount} borrador{draftCount === 1 ? "" : "es"}
               </Link>
-            ) : null}
-          </div>
-        ) : null}
-        {!sessionUser ? (
-          <p className="mb-3 rounded-lg border border-[var(--color-warning)]/35 bg-[var(--color-warning-light)] px-3 py-2 text-sm text-[var(--color-text-2)]">
-            Inicia sesión para registrar apuntes express durante la llamada.
-          </p>
-        ) : null}
-        {catalog.length === 0 ? (
-          <div className="mb-4 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/50 px-3 py-3">
-            <p className="text-sm font-medium text-[var(--color-text-2)]">Sin catálogo disponible en este momento</p>
-            <p className="mt-1 text-xs text-[var(--color-text-3)]">
-              Si estás en ruta y no ves buses, anota el ID por teléfono y deja un borrador en bandeja para completarlo en cuanto recupere conexión.
-            </p>
-            <Link
-              href="/bandeja?status=borrador"
-              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-accent)] hover:underline"
-            >
-              Ir a bandeja de borradores
-            </Link>
-          </div>
-        ) : null}
-        {error ? (
-          <p role="alert" className="mb-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error-light)] px-3 py-2 text-sm text-[var(--color-error)]">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
-            <label htmlFor="express-bus" className="text-xs font-semibold text-[var(--color-text-2)]">
-              Bus <span className="text-[var(--color-error)]">*</span>
-            </label>
-            <TypeaheadInput
-              ref={busRef}
-              id="express-bus"
-              value={busId}
-              onValueChange={setBusId}
-              options={busOptions}
-              placeholder="Ej. TIL-1234"
-              autoComplete="off"
-              aria-invalid={busId.trim() !== "" && !busValidation.ok}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && busValidation.ok) {
-                  e.preventDefault();
-                  noteRef.current?.focus();
-                }
-              }}
-            />
-            {busId.trim() && !busValidation.ok ? (
-              <p className="text-[11px] text-[var(--color-error)]">{busValidation.message}</p>
-            ) : (
-              <p className="text-[11px] text-[var(--color-text-3)]">Prefijo operadora ({formatPrefixHint(catalogPrefixes)})</p>
-            )}
-          </div>
-
-          <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
-            <label htmlFor="express-incident-at" className="text-xs font-semibold text-[var(--color-text-2)]">
-              Hora de la incidencia <span className="text-[var(--color-error)]">*</span>
-            </label>
-            <DateTimePickerField
-              id="express-incident-at"
-              value={incidentAt}
-              onChange={setIncidentAt}
-              ariaLabel="Hora de la incidencia"
-            />
-            <p className="text-[11px] text-[var(--color-text-3)]">Puede ser distinta a la hora de registro.</p>
-          </div>
-
-          <div className="sm:col-span-2">
-            <p className="mb-2 text-xs font-semibold text-[var(--color-text-2)]">
-              Incidencia{" "}
-              <span className="text-[10px] font-normal text-[var(--color-text-3)]">(opcional)</span>
-            </p>
-            <TipologiaPickerSection
-              tipologias={tipologias}
-              isGenericTipo={isGenericTipo}
-              tipo={tipologiaTipo}
-              subtipo={tipologiaSubtipo}
-              availableTipos={availableTipos}
-              availableSubtipos={availableSubtipos}
-              selectedTipologia={selectedTipologia}
-              onSelect={applyTipologiaSelection}
-              onSearchStart={resetTipologia}
-              onTipoChange={(nextTipo) => {
-                setTipologiaTipo(nextTipo);
-                setTipologiaSubtipo("");
-                setTipologiaSubsubtipo("");
-              }}
-              onSubtipoChange={(nextSubtipo) => {
-                setTipologiaSubtipo(nextSubtipo);
-                setTipologiaSubsubtipo("");
-              }}
-              onGenericTipoSelect={() => {
-                const generic = applyGenericTipologiaToForm();
-                setTipologiaTipo(generic.tipo);
-                setTipologiaSubtipo(generic.subtipo);
-                setTipologiaSubsubtipo(generic.subsubtipo);
-              }}
-              showGuide={false}
-            />
-          </div>
-
-          <div className="space-y-1.5 sm:col-span-2">
-            <label htmlFor="express-note" className="text-xs font-semibold text-[var(--color-text-2)]">
-              Apunte <span className="text-[var(--color-error)]">*</span>
-            </label>
-            <div className="flex gap-2">
-              <Input
-                ref={noteRef}
-                id="express-note"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Ej. Validadora sin lectura en parada X"
-                className="h-10 flex-1"
-                maxLength={4000}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && canSubmit) {
-                    e.preventDefault();
-                    void submit("resuelto");
-                  }
-                }}
-              />
-              <VoiceInputButton
-                onTranscript={(text) => setNote((prev) => `${prev} ${text}`.trim())}
-                className="shrink-0"
-                size="md"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="express-action-bar">
-          <div className="express-action-bar__group">
-            <ExpressActionBtn
-              variant="primary"
-              label="Crear y cerrar"
-              hint="Registro al instante · datos pendientes"
-              icon={<Zap size={18} strokeWidth={2.2} />}
-              disabled={!canSubmit}
-              loading={saving && savingMode === "resuelto"}
-              onClick={() => void submit("resuelto")}
-            />
-            <ExpressActionBtn
-              variant="draft"
-              label="Guardar borrador"
-              hint={selectedTipologia ? "Completar adjuntos después" : "Completar tipología después"}
-              icon={<ClipboardPen size={17} strokeWidth={2} />}
-              disabled={!canSubmit}
-              loading={saving && savingMode === "borrador"}
-              onClick={() => void submit("borrador")}
-            />
-          </div>
-          <ExpressActionBtn
-            variant="clear"
-            label="Limpiar"
-            icon={<RotateCcw size={15} strokeWidth={2} />}
-            disabled={saving}
-            onClick={() => resetForm()}
-          />
-        </div>
-      </section>
+            ) : null
+          }
+        >
+          {expressForm}
+        </ManageSectionCard>
+      ) : (
+        <section className="manage-section-card">
+          <div className="manage-section-card__body !border-t-0">{expressForm}</div>
+        </section>
+      )}
 
       <ModalShell
         open={Boolean(chain)}

@@ -10,19 +10,21 @@ import StarterKit from "@tiptap/starter-kit";
 import {
   AtSign,
   Bold,
+  Heading2,
   Highlighter,
   Italic,
   Link2,
   List,
   ListChecks,
   ListOrdered,
-  Paperclip,
+  Ticket,
   Unlink,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BitacoraEntityPicker, type EntityPick } from "@/components/bitacora/tiptap/BitacoraEntityPicker";
 import { BitacoraLinkPopover } from "@/components/bitacora/tiptap/BitacoraLinkPopover";
+import { AtomicBitacoraChips } from "@/components/bitacora/tiptap/atomic-bitacora-chips";
 import { createBitacoraMentionExtension } from "@/components/bitacora/tiptap/create-mention-extension";
 import type { MentionUser } from "@/components/bitacora/tiptap/MentionList";
 import { cn } from "@/lib/utils";
@@ -157,8 +159,22 @@ export function TipTapEditor({
       try {
         const res = await fetch("/api/users", { cache: "no-store" });
         if (!res.ok) return;
-        const data = (await res.json()) as { users: { id: string; name: string }[] };
-        usersRef.current = (data.users ?? []).map((u) => ({ id: u.id, name: u.name }));
+        const data = (await res.json()) as {
+          users: {
+            id: string;
+            name: string;
+            role?: string;
+            position?: string | null;
+            avatarUrl?: string | null;
+          }[];
+        };
+        usersRef.current = (data.users ?? []).map((u) => ({
+          id: u.id,
+          name: u.name,
+          role: u.role ?? null,
+          position: u.position ?? null,
+          avatarUrl: u.avatarUrl ?? null,
+        }));
       } catch {
         /* ignore */
       }
@@ -181,6 +197,7 @@ export function TipTapEditor({
       TaskList,
       TaskItem.configure({ nested: true }),
       createBitacoraMentionExtension(usersRef),
+      AtomicBitacoraChips,
     ],
     [placeholder, editable],
   );
@@ -243,7 +260,7 @@ export function TipTapEditor({
                 },
               },
             ],
-            text: entity.label,
+            text: entity.kind === "ticket" ? entity.label.split(" · ")[0] || entity.label : entity.label,
           },
           { type: "text", text: " " },
         ])
@@ -328,6 +345,13 @@ export function TipTapEditor({
             >
               <Highlighter size={15} strokeWidth={2} aria-hidden />
             </ToolbarButton>
+            <ToolbarButton
+              title="Título (H2)"
+              active={editor.isActive("heading", { level: 2 })}
+              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            >
+              <Heading2 size={15} strokeWidth={2} aria-hidden />
+            </ToolbarButton>
             <span className="b-log-editor__sep" aria-hidden />
             <ToolbarButton
               title="Lista con viñetas"
@@ -359,10 +383,16 @@ export function TipTapEditor({
               onClick={() => editor.chain().focus().insertContent("@").run()}
             />
             <ToolbarLabelButton
+              title="Vincular ticket, desvío, KB o bus"
+              icon={Ticket}
+              label="Vincular"
+              onClick={() => setEntityOpen(true)}
+            />
+            <ToolbarLabelButton
               buttonRef={linkBtnRef}
-              title="Enlace web"
+              title="Enlace web externo"
               icon={Link2}
-              label="Enlace"
+              label="URL"
               active={editor.isActive("link")}
               onClick={() => setLinkOpen(true)}
             />
@@ -371,12 +401,6 @@ export function TipTapEditor({
                 <Unlink size={15} strokeWidth={2} aria-hidden />
               </ToolbarButton>
             ) : null}
-            <ToolbarLabelButton
-              title="Vincular ticket, desvío, KB o bus"
-              icon={Paperclip}
-              label="Vincular"
-              onClick={() => setEntityOpen(true)}
-            />
           </div>
         </div>
       ) : null}

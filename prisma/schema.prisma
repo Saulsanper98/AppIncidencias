@@ -33,6 +33,21 @@ enum TicketPriority {
   baja
 }
 
+/// Quién/qué originó el fallo declarado en el ticket.
+/// maquina = equipo / implementación; conductor = operativa del conductor;
+/// externo = terceros / infraestructura / desconocido.
+enum FalloOrigen {
+  maquina
+  conductor
+  externo
+}
+
+enum ConductorPreventiveStatus {
+  abierto
+  en_proceso
+  cerrado
+}
+
 enum TicketDeletionRequestStatus {
   pendiente
   aprobada
@@ -155,6 +170,59 @@ model Linea {
   updatedAt DateTime @default(now()) @updatedAt
 }
 
+/// Catálogo de conductores (autocomplete + filtros + preventivos).
+/// `nameNormalized` es la clave de unicidad (minúsculas, sin espacios extra).
+model Conductor {
+  id             String   @id @default(cuid())
+  name           String
+  nameNormalized String   @unique
+  operator       String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tickets        Ticket[]
+  preventiveCases ConductorPreventiveCase[]
+}
+
+/// Caso preventivo sobre un conductor (umbral de tickets de origen conductor).
+/// Vista tipo ticket: estado, comentarios, asignación.
+model ConductorPreventiveCase {
+  id                String                     @id @default(cuid())
+  conductorId       String
+  title             String
+  description       String?
+  status            ConductorPreventiveStatus  @default(abierto)
+  /// Tickets de origen conductor contados al abrir el caso.
+  ticketCountAtOpen Int                        @default(0)
+  windowDays        Int                        @default(30)
+  assignedToUserId  String?
+  createdByUserId   String?
+  closedAt          DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  conductor         Conductor                  @relation(fields: [conductorId], references: [id], onDelete: Cascade)
+  assignedTo        User?                      @relation("ConductorPreventiveAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  createdBy         User?                      @relation("ConductorPreventiveCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  comments          ConductorPreventiveComment[]
+
+  @@index([conductorId, status])
+  @@index([status, updatedAt])
+  @@index([assignedToUserId])
+}
+
+model ConductorPreventiveComment {
+  id        String                  @id @default(cuid())
+  caseId    String
+  body      String
+  authorId  String?
+  authorName String
+  createdAt DateTime                @default(now())
+  case      ConductorPreventiveCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  author    User?                   @relation("ConductorPreventiveCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([caseId, createdAt])
+}
+
 /// Configuracion generica clave/valor de la app. Cada feature que necesita
 /// un parametro editable desde el panel de admin lo guarda aqui usando un
 /// prefijo coherente en `key` (p. ej. "anomalous.window_days",
@@ -271,6 +339,10 @@ model Ticket {
   impactedLines  Int     @default(1)
   /// Nombre del conductor en el momento de la incidencia (opcional, texto libre).
   conductorLabel String?
+  /// FK al catálogo Conductor (opcional; se rellena al normalizar conductorLabel).
+  conductorId    String?
+  /// Origen declarado del fallo (máquina vs conductor vs externo).
+  falloOrigen    FalloOrigen?
   /// Técnico de campo asignado al ticket (opcional).
   assignedToUserId String?
   /// Usuario que abrió el ticket (nullable para tickets legacy / email).
@@ -285,6 +357,7 @@ model Ticket {
   updatedAt    DateTime         @updatedAt
   bus          Bus              @relation(fields: [busId], references: [id], onDelete: Restrict)
   asset        Asset            @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  conductor    Conductor?       @relation(fields: [conductorId], references: [id], onDelete: SetNull)
   assignedTo   User?            @relation("TicketAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   createdBy    User?            @relation("TicketCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   comments     TicketComment[]
@@ -307,6 +380,9 @@ model Ticket {
   @@index([createdAt])
   @@index([slaDeadline])
   @@index([assetId])
+  @@index([conductorId])
+  @@index([falloOrigen])
+  @@index([conductorLabel])
 }
 
 /// Relacion N:N entre tickets para "adjuntar" tickets ya resueltos (u otros)
@@ -611,6 +687,9 @@ model User {
   assignedPreventiveTasks PreventiveTask[] @relation("PreventiveTaskAssignee")
   assignedTickets Ticket[] @relation("TicketAssignee")
   createdTickets  Ticket[] @relation("TicketCreator")
+  createdConductorPreventives ConductorPreventiveCase[] @relation("ConductorPreventiveCreator")
+  assignedConductorPreventives ConductorPreventiveCase[] @relation("ConductorPreventiveAssignee")
+  conductorPreventiveComments ConductorPreventiveComment[] @relation("ConductorPreventiveCommentAuthor")
   ticketWatchers  TicketWatcher[]
   ticketDesvioLinks TicketDesvioLink[] @relation("TicketDesvioLinkCreator")
   ticketRecurrences TicketRecurrence[] @relation("TicketRecurrenceCreator")

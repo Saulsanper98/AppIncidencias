@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import { Select, Textarea } from "@/components/ui/input";
+import { ChartTypeIcon } from "@/components/dashboard-builder/chart-type-icon";
+import { VisualPresetPicker } from "@/components/dashboard-builder/visual-preset-picker";
 import type { MetricFormat } from "@/lib/dashboard/chart-theme";
 import type { ChartType } from "@/lib/dashboard/chart-types";
 import {
@@ -13,7 +15,13 @@ import {
   isEmbedDataSource,
   pickDefaultChart,
 } from "@/lib/dashboard/data-sources";
-import { CHART_TYPE_ICONS, CHART_TYPE_LABELS } from "@/lib/dashboard/widget-data-helpers";
+import {
+  collectVisualSettings,
+  loadLastVisualSettings,
+  saveLastVisualSettings,
+  type VisualPresetSettings,
+} from "@/lib/dashboard/visual-preset-system";
+import { getChartTypeLabel } from "@/lib/dashboard/widget-data-helpers";
 import { cn } from "@/lib/utils";
 
 type WidgetPayload = {
@@ -34,14 +42,7 @@ type AddWidgetModalProps = {
   onSaveEdit?: (widgetId: string, widget: WidgetPayload) => void;
 };
 
-type VisualPreset = "operaciones" | "sla";
-type PersistedVisualSettings = {
-  accentColor: string;
-  showLegend: boolean;
-  showGrid: boolean;
-  smoothLines: boolean;
-  metricFormat: MetricFormat;
-};
+type VisualPreset = VisualPresetSettings;
 
 function getDefaultSeriesLabels(dataSource: string) {
   if (dataSource === "sla_compliance") {
@@ -51,10 +52,6 @@ function getDefaultSeriesLabels(dataSource: string) {
     return { serieA: "Creados", serieB: "Resueltos", serieC: "—" };
   }
   return { serieA: "Principal", serieB: "Secundaria", serieC: "Auxiliar" };
-}
-
-function getVisualSettingsStorageKey(dashboardId: string, userId: string | null) {
-  return `dashboard-widget-visual:${userId ?? "anon"}:${dashboardId}`;
 }
 
 export function AddWidgetModal({
@@ -81,6 +78,7 @@ export function AddWidgetModal({
   const [showGrid, setShowGrid] = useState(true);
   const [smoothLines, setSmoothLines] = useState(true);
   const [metricFormat, setMetricFormat] = useState<MetricFormat>("number");
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,19 +125,13 @@ export function AddWidgetModal({
 
   useEffect(() => {
     if (!open) return;
-    try {
-      const key = getVisualSettingsStorageKey(dashboardId, userId);
-      const raw = window.localStorage.getItem(key);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as PersistedVisualSettings;
-      if (parsed.accentColor) setAccentColor(parsed.accentColor);
-      setShowLegend(Boolean(parsed.showLegend));
-      setShowGrid(Boolean(parsed.showGrid));
-      setSmoothLines(Boolean(parsed.smoothLines));
-      setMetricFormat(parsed.metricFormat ?? "number");
-    } catch {
-      // ignore invalid persisted values
-    }
+    const persisted = loadLastVisualSettings(dashboardId, userId);
+    if (!persisted) return;
+    if (persisted.accentColor) setAccentColor(persisted.accentColor);
+    setShowLegend(Boolean(persisted.showLegend));
+    setShowGrid(Boolean(persisted.showGrid));
+    setSmoothLines(Boolean(persisted.smoothLines));
+    setMetricFormat(persisted.metricFormat ?? "number");
   }, [open, dashboardId, userId]);
 
   useEffect(() => {
@@ -167,36 +159,28 @@ export function AddWidgetModal({
     }
   }, [dataSource, chartType]);
 
-  const applyVisualPreset = (preset: VisualPreset) => {
-    let next: PersistedVisualSettings;
-    if (preset === "operaciones") {
-      next = {
-        accentColor: "#2563EB",
-        showLegend: true,
-        showGrid: true,
-        smoothLines: true,
-        metricFormat: "number",
-      };
-    } else {
-      next = {
-        accentColor: "#059669",
-        showLegend: true,
-        showGrid: true,
-        smoothLines: true,
-        metricFormat: "percent",
-      };
-    }
-    setAccentColor(next.accentColor);
-    setShowLegend(next.showLegend);
-    setShowGrid(next.showGrid);
-    setSmoothLines(next.smoothLines);
-    setMetricFormat(next.metricFormat);
-    try {
-      const key = getVisualSettingsStorageKey(dashboardId, userId);
-      window.localStorage.setItem(key, JSON.stringify(next));
-    } catch {
-      // ignore persistence errors
-    }
+  const applyVisualPreset = (settings: VisualPresetSettings, presetId: string) => {
+    setAccentColor(settings.accentColor);
+    setShowLegend(settings.showLegend);
+    setShowGrid(settings.showGrid);
+    setSmoothLines(settings.smoothLines);
+    setMetricFormat(settings.metricFormat);
+    setActivePresetId(presetId);
+    saveLastVisualSettings(dashboardId, userId, settings);
+  };
+
+  const persistCurrentVisualSettings = () => {
+    saveLastVisualSettings(
+      dashboardId,
+      userId,
+      collectVisualSettings({
+        accentColor,
+        showLegend,
+        showGrid,
+        smoothLines,
+        metricFormat,
+      }),
+    );
   };
 
   const handleAdd = () => {
@@ -251,19 +235,13 @@ export function AddWidgetModal({
             : dataSource === "embed_preventive"
               ? 360
               : 320;
-        const col = dataSource === "embed_tickets" ? 4 : 2;
+        const col = 100;
         base.layout = { colSpan: col, minHeightPx: minH };
       }
       config = JSON.stringify(base);
     }
 
-    try {
-      const key = getVisualSettingsStorageKey(dashboardId, userId);
-      const persist: PersistedVisualSettings = { accentColor, showLegend, showGrid, smoothLines, metricFormat };
-      window.localStorage.setItem(key, JSON.stringify(persist));
-    } catch {
-      // ignore persistence errors
-    }
+    persistCurrentVisualSettings();
 
     const payload: WidgetPayload = {
       title: safeTitle,
@@ -371,8 +349,10 @@ export function AddWidgetModal({
                         : "border-[var(--color-border)] bg-[var(--color-surface-3)] text-[var(--color-text-3)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-2)]",
                     )}
                   >
-                    <span className="text-base leading-none mb-1">{CHART_TYPE_ICONS[value] ?? "▣"}</span>
-                    <span className="text-[10px] leading-tight">{CHART_TYPE_LABELS[value] ?? value}</span>
+                    <span className="mb-1 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
+                      <ChartTypeIcon type={value} size={16} />
+                    </span>
+                    <span className="text-[10px] leading-tight">{getChartTypeLabel(value)}</span>
                   </button>
                 ))}
               </div>
@@ -427,6 +407,11 @@ export function AddWidgetModal({
             </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="text-label block">Estilo visual</label>
+            <VisualPresetPicker layout="row" activePresetId={activePresetId} onApply={applyVisualPreset} />
+          </div>
+
           <div className="pt-1">
             <label className="text-label block mb-1.5">Leyenda</label>
             <button
@@ -455,22 +440,6 @@ export function AddWidgetModal({
             </button>
             {advancedOpen ? (
               <>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => applyVisualPreset("operaciones")}
-                    className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1.5 text-xs text-[var(--color-text-2)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)] transition-all"
-                  >
-                    Ops
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyVisualPreset("sla")}
-                    className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1.5 text-xs text-[var(--color-text-2)] hover:border-[var(--color-border-hover)] hover:text-[var(--color-text-1)] transition-all"
-                  >
-                    SLA
-                  </button>
-                </div>
                 <button
                   type="button"
                   onClick={() => setShowGrid((v) => !v)}

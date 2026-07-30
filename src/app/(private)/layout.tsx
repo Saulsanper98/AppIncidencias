@@ -7,6 +7,7 @@ import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
 
 import { AnnouncementsBanner } from "@/components/novedades/AnnouncementsBanner";
 import { AnnouncementsToastListener } from "@/components/novedades/AnnouncementsToastListener";
+import { OperationalTicker } from "@/components/operations/OperationalTicker";
 import { TicketDraftsBanner } from "@/components/tickets/TicketDraftsBanner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ClockChip } from "@/components/clock-chip";
@@ -410,6 +411,7 @@ export default function PrivateLayout({
           <Suspense fallback={null}>
             <TicketDraftsBanner />
           </Suspense>
+          <OperationalTicker />
         </div>
         <header
           className={cn(

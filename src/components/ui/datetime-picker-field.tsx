@@ -91,8 +91,14 @@ function TimeColumn({
   );
 
   useEffect(() => {
-    const el = scrollRef.current?.querySelector('[data-selected="true"]');
-    el?.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior });
+    const container = scrollRef.current;
+    if (!container) return;
+    const el = container.querySelector<HTMLElement>('[data-selected="true"]');
+    if (!el) return;
+    // scrollIntoView({ block: "center" }) también mueve el documento (la
+    // página "baja sola" al abrir el popover). Solo ajustamos esta columna.
+    const top = el.offsetTop - container.clientHeight / 2 + el.clientHeight / 2;
+    container.scrollTop = Math.max(0, top);
   }, [selected]);
 
   return (

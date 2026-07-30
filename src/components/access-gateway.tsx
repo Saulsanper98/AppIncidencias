@@ -14,6 +14,7 @@ import {
   type LoginLocale,
 } from "@/app/login/login-i18n";
 import { LoginUserListbox } from "@/components/login-user-listbox";
+import { LoginWelcomeOverlay } from "@/components/login-welcome-overlay";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +24,7 @@ import { fetchJsonWithTimeout } from "@/lib/login-fetch-error";
 import { playOptionalLoginSuccessChime } from "@/lib/login-success-chime";
 import { safeInternalNextPath } from "@/lib/safe-next-path";
 import { trackLoginEvent } from "@/lib/login-telemetry";
+import { currentShiftNow, SHIFT_LABEL, shiftWindowLabel } from "@/lib/shift-utils";
 import { userRoleLabel } from "@/lib/user-role-labels";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +57,14 @@ function writeLastUserId(userId: string) {
   } catch {
     /* ignore */
   }
+}
+
+function welcomeDestinationLabel(dest: string, t: ReturnType<typeof loginCopy>): string {
+  if (dest.startsWith("/bitacora")) return t.welcomeDestBitacora;
+  if (dest.startsWith("/bandeja")) return t.welcomeDestBandeja;
+  if (dest.startsWith("/tickets")) return t.welcomeDestTickets;
+  if (dest.startsWith("/dashboard") || dest === "/") return t.welcomeDestDashboard;
+  return t.welcomeDestDefault;
 }
 
 type LocalUser = {
@@ -177,7 +187,9 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
   const [loggingIn, setLoggingIn] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [announce, setAnnounce] = useState("");
-  const [flashWelcome, setFlashWelcome] = useState<string | null>(null);
+  const [welcomeOverlay, setWelcomeOverlay] = useState<{ name: string; dest: string } | null>(
+    null,
+  );
   const [errorShake, setErrorShake] = useState(false);
 
   // Estado del campo de contraseña. El email ya no se introduce: el usuario
@@ -287,7 +299,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
       }
       return;
     }
-    if (!ready || loggingIn || flashWelcome) return;
+    if (!ready || loggingIn || welcomeOverlay) return;
     if (sessionUser) {
       primaryRef.current?.focus();
       return;
@@ -303,7 +315,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
       return;
     }
     userPickerTriggerRef.current?.focus();
-  }, [ready, sessionUser, devSelector, users.length, loggingIn, flashWelcome, error, errorSource, selectedUserId]);
+  }, [ready, sessionUser, devSelector, users.length, loggingIn, welcomeOverlay, error, errorSource, selectedUserId]);
 
   const persistLastDevUser = (userId: string) => {
     writeLastUserId(userId);
@@ -367,10 +379,21 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
       return;
     }
 
-    setFlashWelcome(t.welcomeBack(name));
     const dest = nextPath ?? "/dashboard";
-    navigateAfterLogin(dest, 180);
+    try {
+      router.prefetch(dest);
+    } catch {
+      /* ignore */
+    }
+    setWelcomeOverlay({ name, dest });
   };
+
+  const completeWelcomeOverlay = useCallback(() => {
+    const dest = welcomeOverlay?.dest ?? "/dashboard";
+    // No quitar el overlay aquí: si se desmonta antes del push, se ve el login.
+    // Se limpia al salir de /login.
+    router.push(dest);
+  }, [welcomeOverlay?.dest, router]);
 
   const performLogout = async () => {
     setLogoutOpen(false);
@@ -411,11 +434,25 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
     ? `${t.rolePrefix}: ${userRoleLabel(sessionUser.role, locale)}`
     : t.selectUserProtected;
 
+  const welcomeShift = currentShiftNow();
+
   return (
     <>
       <div className="sr-only" aria-live="polite">
         {announce}
       </div>
+
+      <LoginWelcomeOverlay
+        open={Boolean(welcomeOverlay)}
+        name={(welcomeOverlay?.name ?? "").trim().split(/\s+/)[0] || welcomeOverlay?.name || ""}
+        greeting={t.welcomeGreeting}
+        destinationLabel={welcomeDestinationLabel(welcomeOverlay?.dest ?? "/dashboard", t)}
+        openingLabel={t.welcomeOpening}
+        skipHint={t.welcomeSkip}
+        shiftLabel={`${SHIFT_LABEL[welcomeShift]} · ${shiftWindowLabel(welcomeShift)}`}
+        onComplete={completeWelcomeOverlay}
+        holdMs={2400}
+      />
 
       <section
         id="login-main"
@@ -505,12 +542,6 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
           ) : (
             <p className="text-[12.5px] leading-relaxed text-[var(--color-text-3)]">{t.selectUserProtected}</p>
           )}
-          {flashWelcome ? (
-            <p className="login-welcome-flash text-[13px] font-medium text-[var(--color-success)]" role="status">
-              {flashWelcome}
-            </p>
-          ) : null}
-
           {sessionUser ? null : (
             <div className="space-y-3">
                 {/* === Selector de usuario === */}
@@ -585,6 +616,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                       <input
                         ref={passwordInputRef}
                         id="login-password"
+                        form={`${formId}-form`}
                         type={showPassword ? "text" : "password"}
                         autoComplete="current-password"
                         placeholder={t.fieldPasswordPlaceholder}
@@ -601,6 +633,13 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
                             setError(null);
                             setErrorSource(null);
                           }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter") return;
+                          e.preventDefault();
+                          if (!ready || loggingIn || !selectedUserId) return;
+                          if (!devSelector && !passwordInput) return;
+                          void handleLogin();
                         }}
                         className="login-focusable login-input-premium min-h-11 w-full rounded-lg py-2.5 pl-9 pr-[4.5rem] text-[13px] text-[var(--color-text-1)] placeholder:text-[var(--color-text-3)] focus:outline-none"
                       />
@@ -660,6 +699,7 @@ export function AccessGateway({ guestTicketsUrl = null }: AccessGatewayProps) {
             </div>
           ) : (
             <form
+              id={`${formId}-form`}
               className="login-actions"
               onSubmit={(e) => {
                 e.preventDefault();

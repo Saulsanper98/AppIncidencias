@@ -71,6 +71,7 @@ export function createBitacoraMentionExtension(usersRef: RefObject<MentionUser[]
       class: "b-log-editor__mention",
       "data-mention": "",
     },
+    deleteTriggerWithBackspace: true,
     suggestion: createMentionSuggestion(usersRef),
   });
 }

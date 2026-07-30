@@ -1,6 +1,6 @@
 "use client";
 
-import { Inbox, Plus, Ticket as TicketIcon, Timer } from "lucide-react";
+import { GraduationCap, Inbox, Plus, Sparkles, Ticket as TicketIcon, Timer } from "lucide-react";
 import Link from "next/link";
 
 import { SectionTabs } from "@/components/ui/section-tabs";
@@ -28,7 +28,7 @@ function BandejaKpiRow({
   slaVencidos: number;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--color-border)]/50 pt-3">
+    <div className="flex flex-wrap items-center gap-1.5">
       <KpiPill label="Total" value={total} tone="neutral" compact />
       {borradores > 0 ? <KpiPill label="Pend." value={borradores} tone="warning" compact /> : null}
       <KpiPill label="Abiertos" value={abiertos} tone="info" compact />
@@ -48,13 +48,30 @@ function ModuleCta({
   label,
   hint,
   secondary,
+  compact,
 }: {
   href: string;
   icon: typeof Plus;
   label: string;
   hint: string;
   secondary?: boolean;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <Link
+        href={href}
+        className={cn(
+          "desvios-action-chip",
+          !secondary && "desvios-action-chip--accent",
+        )}
+        title={hint}
+      >
+        <Icon size={14} strokeWidth={1.7} aria-hidden />
+        <span>{label}</span>
+      </Link>
+    );
+  }
   return (
     <Link
       href={href}
@@ -90,8 +107,6 @@ export function TicketsModuleHeroUnified({
   esperandoRepuesto,
   resueltosHoy,
   slaVencidos,
-  maintenanceAlertsCount = 0,
-  preventiveTasksCount = 0,
 }: {
   view: TicketsModuleView;
   total: number;
@@ -101,21 +116,19 @@ export function TicketsModuleHeroUnified({
   esperandoRepuesto: number;
   resueltosHoy: number;
   slaVencidos: number;
-  maintenanceAlertsCount?: number;
-  preventiveTasksCount?: number;
 }) {
   const isManage = view === "manage";
   const isBandeja = view === "bandeja";
 
   const title = isManage ? "Gestión de tickets" : "Bandeja de tickets";
   const subtitle = isManage
-    ? "Apunte express en llamada. Despliega el formulario completo si necesitas tipología, adjuntos o ubicación."
-    : "Sigue, asigna y cierra incidencias del centro de control.";
+    ? "Plantillas reutilizables arriba. Apunte express en llamada. Despliega el formulario completo si necesitas adjuntos o ubicación."
+    : "Asigna y cierra. Sin incidencia → bitácora.";
 
   return (
     <HeroShell
       variant="ccmgc-hero uiu-page-hero"
-      className="mb-4 shadow-sm"
+      className={cn(isBandeja ? "!mb-0" : "mb-4 shadow-sm")}
       dotColor="var(--hero-accent-operacion)"
       eyebrow={
         <span className="inline-flex items-center gap-2">
@@ -128,17 +141,19 @@ export function TicketsModuleHeroUnified({
       actions={
         <>
           {isManage ? <SectionTabs preset="tickets" size="sm" className="border-b-0 pb-0" /> : null}
+          {isManage ? (
+            <ModuleCta href="#ticket-templates-panel" icon={Sparkles} label="Plantillas" hint="Crear o gestionar" />
+          ) : null}
           {isBandeja ? (
-            <ModuleCta href="/tickets" icon={Plus} label="Nuevo ticket" hint="Alta de incidencia" />
+            <ModuleCta href="/tickets" icon={Plus} label="Nuevo" hint="Alta de incidencia" compact />
           ) : null}
           {isManage ? (
             <ModuleCta href="/bandeja" icon={Inbox} label="Bandeja completa" hint="Listado en vivo" secondary />
           ) : null}
           {isManage ? (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <KpiPill label="Abiertos" value={abiertos} tone="info" compact />
-              <KpiPill label="Alertas" value={maintenanceAlertsCount} tone="warning" compact />
-              <KpiPill label="Preventivas" value={preventiveTasksCount} tone="accent" compact />
+              <ModuleCta href="/preventivo" icon={GraduationCap} label="Preventivo" hint="Conductores" secondary />
             </div>
           ) : null}
         </>

@@ -52,40 +52,21 @@ export function OperationalNowCard() {
 
   const critical = incidents.filter((t) => t.priority === "alta");
   const desvioLineas = Array.from(new Set(desvios.flatMap((d) => d.lineas_afectadas ?? []))).slice(0, 8);
-  const hasPulse = critical.length > 0 || desvios.length > 0 || announcements > 0;
 
   if (loading) {
     return (
-      <div className="ops-now-strip mt-2.5 border-t border-[var(--color-border)]/45 pt-2.5">
+      <div className="ops-now-strip border-t border-[var(--color-border)]/45 pt-2.5">
         <div className="grid gap-2 sm:grid-cols-3">
-          <Skeleton className="h-[4.5rem] rounded-xl" />
-          <Skeleton className="h-[4.5rem] rounded-xl" />
-          <Skeleton className="h-[4.5rem] rounded-xl" />
+          <Skeleton className="h-[3.75rem] rounded-xl" />
+          <Skeleton className="h-[3.75rem] rounded-xl" />
+          <Skeleton className="h-[3.75rem] rounded-xl" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="ops-now-strip mt-2.5 border-t border-[var(--color-border)]/45 pt-2.5">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-3)]">
-          <span
-            className={cn(
-              "relative inline-flex h-1.5 w-1.5 rounded-full",
-              hasPulse ? "bg-[var(--color-warning)]" : "bg-[var(--color-success)]",
-            )}
-            aria-hidden
-          >
-            {hasPulse ? (
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-warning)]/70 opacity-75" />
-            ) : null}
-          </span>
-          Operación ahora
-        </p>
-        <span className="text-[10px] text-[var(--color-text-3)]">Tiempo real</span>
-      </div>
-
+    <div className="ops-now-strip border-t border-[var(--color-border)]/45 pt-2.5">
       <div className="grid gap-2 sm:grid-cols-3">
         <OpsTile
           href="/bandeja?priority=alta"

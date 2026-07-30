@@ -17,10 +17,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Sparkles, Zap } from "lucide-react";
+import { BookmarkPlus, Loader2, Sparkles, Zap } from "lucide-react";
 
+import { CreateTicketTemplateDialog } from "@/components/tickets/CreateTicketTemplateDialog";
+import { TemplateDropdown } from "@/components/tickets/TemplateDropdown";
 import type { TicketTemplate } from "@/components/tickets/TicketTemplatePicker";
-import { ticketTemplateScopeLabel } from "@/lib/ticket-templates";
 import { defaultForm } from "@/components/tickets/tickets-module-types";
 import type {
   CatalogBus,
@@ -28,7 +29,7 @@ import type {
   FormState,
 } from "@/components/tickets/tickets-module-types";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import type { NivelImpacto, TipologiaItem } from "@/lib/tipologia";
 import type { SessionUser } from "@/lib/domain";
@@ -40,6 +41,8 @@ import {
 import { resolveBusIdForForm } from "@/lib/ticket-bus-asset";
 import { cn } from "@/lib/utils";
 import { trackUxEvent } from "@/lib/ux-telemetry";
+
+import "./ticket-templates.css";
 
 type Props = {
   open: boolean;
@@ -77,10 +80,29 @@ export function QuickTicketDialog({
   const [assignToMe, setAssignToMe] = useState<boolean>(canActorAssumeTicket);
   const [createAsResolved, setCreateAsResolved] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   // Telemetría: timestamp de apertura del diálogo (para medir cuánto tarda
   // un quick-ticket de principio a fin).
   const dialogOpenedAtRef = useRef<number>(0);
+
+  const loadTemplates = useCallback(async () => {
+    setLoadingTemplates(true);
+    setTemplateError(null);
+    try {
+      const res = await fetch("/api/tickets/templates", { cache: "no-store" });
+      if (!res.ok) {
+        setTemplateError("No se pudieron cargar las plantillas");
+        return;
+      }
+      const data = (await res.json()) as { templates: TicketTemplate[] };
+      setTemplates(data.templates ?? []);
+    } catch {
+      setTemplateError("No se pudieron cargar las plantillas");
+    } finally {
+      setLoadingTemplates(false);
+    }
+  }, []);
 
   // Recarga plantillas al abrir y resetea estado.
   useEffect(() => {
@@ -90,25 +112,9 @@ export function QuickTicketDialog({
     setSubmitError(null);
     setAssignToMe(canActorAssumeTicket);
     if (templates === null && !loadingTemplates) {
-      void (async () => {
-        setLoadingTemplates(true);
-        setTemplateError(null);
-        try {
-          const res = await fetch("/api/tickets/templates", { cache: "no-store" });
-          if (!res.ok) {
-            setTemplateError("No se pudieron cargar las plantillas");
-            return;
-          }
-          const data = (await res.json()) as { templates: TicketTemplate[] };
-          setTemplates(data.templates ?? []);
-        } catch {
-          setTemplateError("No se pudieron cargar las plantillas");
-        } finally {
-          setLoadingTemplates(false);
-        }
-      })();
+      void loadTemplates();
     }
-  }, [open, templates, loadingTemplates, canActorAssumeTicket]);
+  }, [open, templates, loadingTemplates, canActorAssumeTicket, loadTemplates]);
 
   /** Plantillas válidas para ticket rápido: tipología completa + título. */
   const usableTemplates = useMemo(() => {
@@ -120,12 +126,6 @@ export function QuickTicketDialog({
         return a.name.localeCompare(b.name, "es");
       });
   }, [templates]);
-
-  const templatesByScope = useMemo(() => {
-    const group = usableTemplates.filter((t) => t.scope === "global");
-    const personal = usableTemplates.filter((t) => t.scope !== "global");
-    return { group, personal };
-  }, [usableTemplates]);
 
   const selectedTemplate = useMemo(
     () => usableTemplates.find((t) => t.id === selectedTemplateId) ?? null,
@@ -328,83 +328,79 @@ export function QuickTicketDialog({
       }
     >
       <form id="quick-ticket-form" onSubmit={handleSubmit} className="max-h-[70vh] space-y-3 overflow-y-auto">
-          {/* Plantilla */}
-          <label className="block">
-            <span className="flex items-center gap-1.5 text-[11.5px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
-              <Sparkles size={11} aria-hidden />
-              Plantilla
-            </span>
-            {loadingTemplates ? (
-              <div className="mt-1 flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-[12.5px] text-[var(--color-text-3)]">
-                <Loader2 size={12} className="animate-spin" aria-hidden /> Cargando plantillas…
-              </div>
-            ) : templateError ? (
-              <p className="mt-1 text-[12px] text-[var(--color-error)]">{templateError}</p>
-            ) : usableTemplates.length === 0 ? (
-              <div className="mt-1 space-y-2 rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2.5 text-[12px] text-[var(--color-text-3)]">
-                <p>Aún no hay plantillas reutilizables para ticket rápido.</p>
-                <p className="text-[11px]">
-                  Crea la tuya en <span className="font-medium text-[var(--color-text-2)]">Nuevo ticket → Plantillas</span>,
-                  con tipología completa y título, marcando «Incluir variables operativas» si quieres usarla aquí.
+          <div className="ccmgc-quick-template-field">
+            <div className="ccmgc-quick-template-field__head">
+              <span className="ccmgc-quick-template-field__label">
+                <Sparkles size={11} aria-hidden />
+                Plantilla
+              </span>
+              {!templateError && (usableTemplates.length > 0 || loadingTemplates) ? (
+                <button
+                  type="button"
+                  className="ccmgc-template-new-btn ccmgc-template-new-btn--primary ccmgc-template-new-btn--compact"
+                  onClick={() => setShowCreateDialog(true)}
+                >
+                  <span className="ccmgc-template-new-btn__icon" aria-hidden>
+                    <BookmarkPlus size={13} strokeWidth={2} />
+                  </span>
+                  Nueva plantilla
+                </button>
+              ) : null}
+            </div>
+
+            {templateError ? (
+              <p className="text-[12px] text-[var(--color-error)]">{templateError}</p>
+            ) : usableTemplates.length === 0 && !loadingTemplates ? (
+              <div className="ccmgc-template-panel__empty ccmgc-template-panel__empty--premium !py-4">
+                <p className="text-[12px] text-[var(--color-text-2)]">Aún no hay plantillas para ticket rápido.</p>
+                <p className="text-[11px] text-[var(--color-text-3)]">
+                  Crea una con tipología, título y descripción completos.
                 </p>
+                <button
+                  type="button"
+                  className="ccmgc-template-new-btn ccmgc-template-new-btn--primary mt-1"
+                  onClick={() => setShowCreateDialog(true)}
+                >
+                  <span className="ccmgc-template-new-btn__icon" aria-hidden>
+                    <BookmarkPlus size={14} strokeWidth={2} />
+                  </span>
+                  Nueva plantilla
+                </button>
               </div>
             ) : (
-              <>
-                <Select
-                  value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="mt-1"
-                >
-                  <option value="">— Elegir plantilla —</option>
-                  {templatesByScope.group.length > 0 ? (
-                    <optgroup label={ticketTemplateScopeLabel("global")}>
-                      {templatesByScope.group.map((tpl) => (
-                        <option key={tpl.id} value={tpl.id}>
-                          {tpl.name}
-                          {tpl.category ? ` · ${tpl.category}` : ""}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  {templatesByScope.personal.length > 0 ? (
-                    <optgroup label={ticketTemplateScopeLabel("personal")}>
-                      {templatesByScope.personal.map((tpl) => (
-                        <option key={tpl.id} value={tpl.id}>
-                          {tpl.name}
-                          {tpl.category ? ` · ${tpl.category}` : ""}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                </Select>
-                <p className="mt-1.5 text-[10.5px] text-[var(--color-text-3)]">
-                  ¿Falta la tuya? Créala en Nuevo ticket → Plantillas de ticket → Guardar como plantilla.
-                </p>
-                {selectedTemplate ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10.5px]">
-                    <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[var(--color-text-2)]">
-                      {selectedTemplate.tipo} · {selectedTemplate.subtipo}
-                    </span>
-                    {selectedTemplate.impactedLines ? (
-                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-amber-300">
-                        {selectedTemplate.impactedLines} línea(s)
-                      </span>
-                    ) : null}
-                    {selectedTemplate.serviceStopped ? (
-                      <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-rose-300">
-                        Servicio detenido
-                      </span>
-                    ) : null}
-                    {selectedTemplate.lineaLabel ? (
-                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-emerald-300">
-                        Línea {selectedTemplate.lineaLabel}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </>
+              <TemplateDropdown
+                templates={usableTemplates}
+                value={selectedTemplateId}
+                onChange={setSelectedTemplateId}
+                loading={loadingTemplates}
+                placeholder="Elegir plantilla"
+                aria-label="Plantilla de ticket rápido"
+              />
             )}
-          </label>
+
+            {selectedTemplate ? (
+              <div className="flex flex-wrap gap-1.5 text-[10.5px]">
+                <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[var(--color-text-2)]">
+                  {selectedTemplate.tipo} · {selectedTemplate.subtipo}
+                </span>
+                {selectedTemplate.impactedLines ? (
+                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-amber-300">
+                    {selectedTemplate.impactedLines} línea(s)
+                  </span>
+                ) : null}
+                {selectedTemplate.serviceStopped ? (
+                  <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-rose-300">
+                    Servicio detenido
+                  </span>
+                ) : null}
+                {selectedTemplate.lineaLabel ? (
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-emerald-300">
+                    Línea {selectedTemplate.lineaLabel}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           {/* Variables del parte */}
           {selectedTemplate ? (
@@ -541,6 +537,19 @@ export function QuickTicketDialog({
             </p>
           ) : null}
       </form>
+
+      {showCreateDialog ? (
+        <CreateTicketTemplateDialog
+          sessionUser={sessionUser}
+          tipologias={tipologias}
+          onClose={() => setShowCreateDialog(false)}
+          onSaved={(tpl) => {
+            setTemplates((prev) => [...(prev ?? []), tpl]);
+            setSelectedTemplateId(tpl.id);
+            setShowCreateDialog(false);
+          }}
+        />
+      ) : null}
     </ModalShell>
   );
 }

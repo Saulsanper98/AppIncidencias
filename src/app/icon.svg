@@ -1,18 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="CCMGC Operaciones">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="CCMGC">
+  <!-- Favicon: marca geométrica del logo CCMGC (no el monograma CC). -->
   <defs>
-    <linearGradient id="ccmgc-bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
-    </linearGradient>
-    <linearGradient id="ccmgc-live" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#4ade80"/>
-      <stop offset="100%" stop-color="#16a34a"/>
+    <linearGradient id="ccmgc-icon-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#0f2a5a"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="0" width="32" height="32" rx="7" fill="url(#ccmgc-bg)"/>
-  <rect x="0" y="0" width="32" height="32" rx="7" fill="none" stroke="#1e3a8a" stroke-opacity="0.45" stroke-width="1"/>
-  <text x="16" y="22.5" text-anchor="middle" font-family="Inter, 'Segoe UI', system-ui, -apple-system, Arial, sans-serif" font-weight="800" font-size="17" letter-spacing="-0.6" fill="#f8fafc">CC</text>
-  <circle cx="25.5" cy="6.5" r="4.5" fill="#0b1220"/>
-  <circle cx="25.5" cy="6.5" r="3.2" fill="url(#ccmgc-live)"/>
-  <circle cx="25.5" cy="6.5" r="3.2" fill="none" stroke="#bbf7d0" stroke-opacity="0.7" stroke-width="0.5"/>
+  <rect width="32" height="32" rx="7" fill="url(#ccmgc-icon-bg)"/>
+  <rect width="32" height="32" rx="7" fill="none" stroke="#93c5fd" stroke-opacity="0.22" stroke-width="1"/>
+  <!-- Símbolo orbital del logo oficial, escalado al icono -->
+  <g fill="#f8fafc" transform="translate(3.2 7.2) scale(0.214)">
+    <path d="M32.15 64.32C43.67 64.32 53.8 58.22 59.48 49.09C65.16 58.22 75.28 64.32 86.81 64.32C104.54 64.32 118.97 49.89 118.97 32.16H106.3C106.3 42.91 97.56 51.65 86.81 51.65C76.06 51.65 67.32 42.91 67.32 32.16C67.32 21.41 76.06 12.67 86.81 12.67V0C71.72 0 59.03 10.45 55.58 24.49H29.42V37.16H51C48.79 45.49 41.18 51.65 32.16 51.65C21.41 51.65 12.67 42.91 12.67 32.16C12.67 21.41 21.41 12.67 32.16 12.67V0C14.43 0 0 14.43 0 32.16C0 49.89 14.43 64.32 32.16 64.32H32.15Z"/>
+  </g>
 </svg>

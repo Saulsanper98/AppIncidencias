@@ -13,6 +13,52 @@ type ParamsContext = {
   params: Promise<{ dashboardId: string }>;
 };
 
+export async function GET(request: Request, context: ParamsContext) {
+  try {
+    const actor = await resolveRequestActor(request);
+    if (!actor.userId) {
+      return NextResponse.json({ message: "Debes iniciar sesion para ver dashboards" }, { status: 401 });
+    }
+
+    const { dashboardId } = await context.params;
+    const dashboard = await prisma.customDashboard.findUnique({
+      where: { id: dashboardId },
+      include: {
+        widgets: { orderBy: { order: "asc" } },
+      },
+    });
+
+    if (!dashboard) {
+      return NextResponse.json({ message: "Dashboard no encontrado" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      dashboard: {
+        id: dashboard.id,
+        name: dashboard.name,
+        createdAt: dashboard.createdAt.toISOString(),
+        updatedAt: dashboard.updatedAt.toISOString(),
+        createdByUserId: dashboard.createdByUserId,
+        widgets: dashboard.widgets.map((widget) => ({
+          id: widget.id,
+          dashboardId: widget.dashboardId,
+          title: widget.title,
+          chartType: widget.chartType,
+          dataSource: widget.dataSource,
+          size: widget.size,
+          order: widget.order,
+          config: widget.config,
+          createdAt: widget.createdAt.toISOString(),
+          updatedAt: widget.updatedAt.toISOString(),
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Error loading dashboard:", error);
+    return NextResponse.json({ message: "No se pudo cargar el dashboard" }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: Request, context: ParamsContext) {
   try {
     const actor = await resolveRequestActor(request);

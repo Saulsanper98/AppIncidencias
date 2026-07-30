@@ -200,6 +200,11 @@ function rowValue(row: TicketExportRow, key: (typeof COLUMNS)[number]["key"]): s
       return row.slaOverdue ? "Sí" : "No";
     case "needsCompletion":
       return row.needsCompletion ? "Sí" : "No";
+    case "title":
+    case "description": {
+      const raw = String(row[key] ?? "");
+      return raw.replace(/\r\n/g, " ").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+    }
     default:
       return row[key as keyof TicketExportRow] as string | number;
   }
@@ -213,11 +218,13 @@ function styleDataRow(sheet: ExcelJS.Worksheet, rowNumber: number, ticket: Ticke
     const cell = row.getCell(index + 1);
     cell.value = rowValue(ticket, col.key);
     cell.font = { name: "Calibri", size: 10, color: { argb: T.ink } };
+    // Sin wrap: evita filas altísimas por descripciones multilínea.
+    // El texto completo sigue en la celda (visible en la barra de fórmulas).
     cell.alignment = {
-      vertical: "top",
+      vertical: "middle",
       horizontal: "left",
       indent: 1,
-      wrapText: col.key === "description" || col.key === "title",
+      wrapText: false,
     };
     cell.border = {
       bottom: { style: "hair", color: { argb: T.border } },

@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DesvioImportPdfDialog } from "@/components/desvios/DesvioImportPdfDialog";
 import { EstadoBadge } from "@/components/desvios/EstadoBadge";
@@ -30,13 +30,14 @@ import { OrigenBadge } from "@/components/desvios/OrigenBadge";
 import { PollerStatusChip } from "@/components/desvios/PollerStatusChip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DatePickerField } from "@/components/ui/date-picker-field";
+import { HeroShell } from "@/components/ui/hero-shell";
 import { Input } from "@/components/ui/input";
 import {
   FilterDivider,
   FilterLabeledGroup,
   FilterPills,
 } from "@/components/ui/ticket-filter-bar";
-import { kpiToneValueClass, type KpiTone } from "@/components/ui/kpi-pill";
+import { KpiPill } from "@/components/ui/kpi-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/toast-host";
 import { isFreshItem, useNewItemIds } from "@/hooks/use-animated-list";
@@ -428,57 +429,6 @@ function Th({ children }: { children: React.ReactNode }) {
   );
 }
 
-function DesviosKpiStrip({
-  counts,
-  indefinidos,
-}: {
-  counts: Counts;
-  indefinidos: number;
-}) {
-  const items: { value: number; label: string; tone: KpiTone; pulse?: boolean }[] = [
-    { value: counts.PENDIENTE, label: "Pendientes", tone: "warning" },
-    { value: counts.ACTIVO, label: "Activos", tone: "error" },
-    { value: counts.RESUELTO, label: "Resueltos", tone: "success" },
-    ...(indefinidos > 0
-      ? [{ value: indefinidos, label: "Indefinidos", tone: "violet" as const, pulse: true }]
-      : []),
-  ];
-
-  return (
-    <div
-      className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:justify-end sm:gap-x-3"
-      aria-label="Resumen por estado"
-    >
-      {items.map((item, index) => (
-        <Fragment key={item.label}>
-          {index > 0 ? (
-            <span className="hidden h-3 w-px shrink-0 bg-[var(--color-border)]/50 sm:inline" aria-hidden />
-          ) : null}
-          <span
-            className={cn(
-              "inline-flex items-baseline gap-1 whitespace-nowrap",
-              item.pulse && "animate-pulse",
-            )}
-            title={`${item.value} ${item.label}`}
-          >
-            <span
-              className={cn(
-                "text-[13px] font-bold tabular-nums leading-none sm:text-sm",
-                item.value === 0 ? "text-[var(--color-text-3)]" : kpiToneValueClass(item.tone),
-              )}
-            >
-              {item.value}
-            </span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">
-              {item.label}
-            </span>
-          </span>
-        </Fragment>
-      ))}
-    </div>
-  );
-}
-
 function Header({
   counts,
   indefinidos,
@@ -510,115 +460,112 @@ function Header({
 }) {
   const archivedCount = counts.RESUELTO + counts.CANCELADO;
   return (
-    <header className="desvios-hero flex flex-col gap-4 p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-accent-light)] text-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/25">
-            <RouteIcon size={20} strokeWidth={1.7} aria-hidden />
-          </div>
-          <div className="min-w-0">
-            <div className="ccmgc-eyebrow dashboard-pretitle">
-              <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
-              CCMGC · Operación
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h1 className="dashboard-hero-title text-[22px] font-semibold leading-tight tracking-tight sm:text-[24px]">
-                Desvíos
-              </h1>
-              <PollerStatusChip />
-            </div>
-            <p className="mt-1 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
-              Circulares informativas detectadas automáticamente o creadas a mano.
-              Confirma los pendientes, archiva los resueltos.
-            </p>
-          </div>
-        </div>
-
-        <DesviosKpiStrip counts={counts} indefinidos={indefinidos} />
-      </div>
-
+    <HeroShell
+      variant="ccmgc-hero desvios-hero"
+      className="!mb-4"
+      dotColor="var(--hero-accent-desvios)"
+      eyebrow={
+        <span className="inline-flex items-center gap-2">
+          <RouteIcon size={12} strokeWidth={1.8} aria-hidden />
+          CCMGC · Operación
+        </span>
+      }
+      title="Desvíos"
+      subtitle="Circulares informativas detectadas automáticamente o creadas a mano. Confirma los pendientes, archiva los resueltos."
+      actions={<PollerStatusChip />}
+      kpis={
+        <>
+          <KpiPill label="Pendientes" value={counts.PENDIENTE} tone="warning" compact />
+          <KpiPill label="Activos" value={counts.ACTIVO} tone="error" compact />
+          <KpiPill label="Resueltos" value={counts.RESUELTO} tone="success" compact />
+          {indefinidos > 0 ? (
+            <KpiPill label="Indefinidos" value={indefinidos} tone="violet" pulse compact />
+          ) : null}
+        </>
+      }
+    >
       <div className="desvios-action-row flex flex-wrap items-center gap-2 border-t border-[var(--color-border)]/60 pt-3">
         <div className="desvios-action-row__secondary flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={loading}
-          title="Refrescar"
-          className="desvios-action-chip disabled:opacity-60"
-        >
-          <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
-          Refrescar
-        </button>
-
-        {canCleanup && archivedCount > 0 ? (
-          <AnimatePresence mode="wait" initial={false}>
-            {cleanupAsking ? (
-              <motion.div
-                key="confirm-cleanup"
-                initial={{ opacity: 0, x: 6 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.12 }}
-                className="flex items-center gap-1.5"
-              >
-                <span className="text-[11px] font-semibold text-[var(--color-error)]">
-                  {"\u00BF"}Borrar {archivedCount}?
-                </span>
-                <button
-                  type="button"
-                  onClick={onConfirmCleanup}
-                  disabled={cleanupRunning}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-error)] px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-60"
-                >
-                  {cleanupRunning ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={13} />
-                  )}
-                  Sí, limpiar
-                </button>
-                <button
-                  type="button"
-                  onClick={onCancelCleanup}
-                  disabled={cleanupRunning}
-                  className="inline-flex h-9 items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 text-[12px] font-medium text-[var(--color-text-2)] disabled:opacity-60"
-                >
-                  <X size={12} />
-                </button>
-              </motion.div>
-            ) : (
-              <motion.button
-                key="ask-cleanup"
-                type="button"
-                onClick={onAskCleanup}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.12 }}
-                title="Eliminar definitivamente los desvios resueltos y cancelados"
-                className="desvios-action-chip desvios-action-chip--danger"
-              >
-                <Trash2 size={14} />
-                Limpiar archivados
-                <span className="ml-0.5 rounded-full bg-[rgba(220,38,38,0.18)] px-1.5 py-0.5 text-[10px] font-bold tabular-nums">
-                  {archivedCount}
-                </span>
-              </motion.button>
-            )}
-          </AnimatePresence>
-        ) : null}
-
-        {canImport ? (
           <button
             type="button"
-            onClick={onImport}
-            title="Subir manualmente una Circular Informativa en PDF"
-            className="desvios-action-chip"
+            onClick={onRefresh}
+            disabled={loading}
+            title="Refrescar"
+            className="desvios-action-chip disabled:opacity-60"
           >
-            <UploadCloud size={14} />
-            Importar PDF
+            <RefreshCcw size={14} className={cn(loading && "animate-spin")} />
+            Refrescar
           </button>
-        ) : null}
+
+          {canCleanup && archivedCount > 0 ? (
+            <AnimatePresence mode="wait" initial={false}>
+              {cleanupAsking ? (
+                <motion.div
+                  key="confirm-cleanup"
+                  initial={{ opacity: 0, x: 6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
+                  className="flex items-center gap-1.5"
+                >
+                  <span className="text-[11px] font-semibold text-[var(--color-error)]">
+                    {"\u00BF"}Borrar {archivedCount}?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onConfirmCleanup}
+                    disabled={cleanupRunning}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-error)] px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                  >
+                    {cleanupRunning ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Trash2 size={13} />
+                    )}
+                    Sí, limpiar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCancelCleanup}
+                    disabled={cleanupRunning}
+                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 text-[12px] font-medium text-[var(--color-text-2)] disabled:opacity-60"
+                  >
+                    <X size={12} />
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.button
+                  key="ask-cleanup"
+                  type="button"
+                  onClick={onAskCleanup}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
+                  title="Eliminar definitivamente los desvios resueltos y cancelados"
+                  className="desvios-action-chip desvios-action-chip--danger"
+                >
+                  <Trash2 size={14} />
+                  Limpiar archivados
+                  <span className="ml-0.5 rounded-full bg-[rgba(220,38,38,0.18)] px-1.5 py-0.5 text-[10px] font-bold tabular-nums">
+                    {archivedCount}
+                  </span>
+                </motion.button>
+              )}
+            </AnimatePresence>
+          ) : null}
+
+          {canImport ? (
+            <button
+              type="button"
+              onClick={onImport}
+              title="Subir manualmente una Circular Informativa en PDF"
+              className="desvios-action-chip"
+            >
+              <UploadCloud size={14} />
+              Importar PDF
+            </button>
+          ) : null}
         </div>
 
         {canCreate ? (
@@ -639,7 +586,7 @@ function Header({
           </Link>
         ) : null}
       </div>
-    </header>
+    </HeroShell>
   );
 }
 
@@ -799,11 +746,12 @@ function LineaFilterField({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div
+        data-field-chrome
         className={cn(
-          "relative flex h-9 min-w-[9rem] max-w-[11rem] flex-1 items-center rounded-lg border bg-[var(--color-surface)] shadow-sm transition-colors sm:min-w-[10rem]",
+          "relative flex h-9 min-w-[9rem] max-w-[11rem] flex-1 items-center overflow-hidden rounded-lg border bg-[var(--color-surface)] shadow-sm transition-[border-color,box-shadow] sm:min-w-[10rem]",
           active
             ? "border-[var(--color-accent)]/45 ring-1 ring-[var(--color-accent)]/15"
-            : "border-[var(--color-border)] focus-within:border-[var(--color-accent)]/40 focus-within:ring-1 focus-within:ring-[var(--color-accent)]/15",
+            : "border-[var(--color-border)] focus-within:border-[var(--color-accent)]/45 focus-within:ring-1 focus-within:ring-[var(--color-accent)]/20",
         )}
       >
         <RouteIcon
@@ -821,7 +769,7 @@ function LineaFilterField({
           placeholder="Ej. 205, 250…"
           aria-label="Filtrar por línea"
           className={cn(
-            "h-full w-full border-0 bg-transparent py-0 pl-8 pr-7 text-[12px] shadow-none focus-visible:ring-0",
+            "h-full min-h-0 w-full rounded-none border-0 bg-transparent py-0 pl-8 pr-7 text-[12px] shadow-none focus-visible:outline-none focus-visible:ring-0",
             active && "font-semibold text-[var(--color-accent)] placeholder:text-[var(--color-accent)]/50",
           )}
         />

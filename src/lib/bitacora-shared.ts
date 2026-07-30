@@ -271,7 +271,7 @@ export function formatShiftDateHuman(ymd: string): string {
 }
 
 export const COMPOSE_KIND_HINTS: Record<BitacoraKind, string> = {
-  nota: "Contexto general, observaciones o recordatorios para el siguiente turno.",
+  nota: "Deja constancia para jefatura y el siguiente turno sin abrir incidencia (avisos, mensajes globales, justificación).",
   alerta: "Algo urgente que el próximo turno debe atender de inmediato.",
   pendiente: "Tarea abierta que debe quedar resuelta o traspasada al cambio de turno.",
 };

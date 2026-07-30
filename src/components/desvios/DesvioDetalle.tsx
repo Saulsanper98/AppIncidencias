@@ -32,6 +32,7 @@ import { DesvioForm } from "@/components/desvios/DesvioForm";
 import { EstadoBadge } from "@/components/desvios/EstadoBadge";
 import { OrigenBadge } from "@/components/desvios/OrigenBadge";
 import { toast } from "@/components/toast-host";
+import { SectionEyebrow } from "@/components/ui/section-eyebrow";
 import { canaryParts } from "@/lib/datetime/canary";
 import type {
   DesvioDetalle as DesvioDetalleType,
@@ -376,10 +377,7 @@ function Header({
               />
             </div>
             <div className="min-w-0">
-              <div className="ccmgc-eyebrow dashboard-pretitle">
-                <span className="ccmgc-eyebrow-dot ccmgc-eyebrow-dot--pulse dashboard-pretitle-dot dashboard-pretitle-dot--pulse" aria-hidden />
-                CCMGC · Operación
-              </div>
+              <SectionEyebrow pulse>CCMGC · Operación</SectionEyebrow>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <h1 className="truncate text-xl font-semibold tracking-tight text-[var(--color-text-1)]">
                   {desvio.via || "Sin via"}

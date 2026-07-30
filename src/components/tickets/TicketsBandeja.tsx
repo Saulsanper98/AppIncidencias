@@ -339,6 +339,7 @@ function BandejaTableRow({
   actionMenuTicketId,
   onToggleActionMenu,
   onMarkVisited,
+  compact = false,
 }: {
   ticket: TicketView;
   index: number;
@@ -350,6 +351,7 @@ function BandejaTableRow({
   actionMenuTicketId: string | null;
   onToggleActionMenu: (ticketId: string) => void;
   onMarkVisited: (ticketId: string) => void;
+  compact?: boolean;
 }) {
   const flash = useFlashOnLastViewed(isLastViewed);
   const displayStatus = bandejaDisplayStatus(ticket);
@@ -362,6 +364,15 @@ function BandejaTableRow({
     actorUserId,
     ticket,
   );
+  const metaBits = [ticket.lineaLabel, ticket.servicioLabel, ticket.conductorLabel].filter(Boolean);
+  const titleTitle = [
+    ticket.title,
+    ticket.operator,
+    metaBits.length ? metaBits.join(" · ") : null,
+    ticket.assignedToUserName ? `→ ${ticket.assignedToUserName}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
   return (
     <tr
       aria-current={isLastViewed ? "true" : undefined}
@@ -390,40 +401,52 @@ function BandejaTableRow({
           </Link>
           <Link
             href={`/mapa?ticket=${encodeURIComponent(ticket.id)}`}
-            className="inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]"
+            className={cn(
+              "inline-flex items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]",
+              compact ? "h-6 w-6" : "min-h-[28px] min-w-[28px]",
+            )}
             title="Ver en mapa"
             aria-label={`Ver ticket ${ticket.id.slice(-8).toUpperCase()} en mapa`}
           >
-            <MapPinned size={14} aria-hidden />
+            <MapPinned size={compact ? 12 : 14} aria-hidden />
           </Link>
         </div>
       </td>
       <td className="min-w-0 max-w-[min(380px,36vw)] xl:max-w-md">
-        <p className="truncate text-[13px] font-semibold tracking-tight text-[var(--color-text-1)]">
+        <p
+          className={cn(
+            "truncate font-semibold tracking-tight text-[var(--color-text-1)]",
+            compact ? "text-[12.5px]" : "text-[13px]",
+          )}
+          title={titleTitle}
+        >
           {ticket.title}
         </p>
-        <p className="truncate text-[11px] text-[var(--color-text-2)]">{ticket.operator}</p>
-        {ticket.lineaLabel || ticket.servicioLabel || ticket.conductorLabel ? (
-          <p className="mt-0.5 truncate text-[10px] text-[var(--color-text-3)]">
-            {ticket.lineaLabel ? (
-              <span title="Línea">{ticket.lineaLabel}</span>
+        {!compact ? (
+          <>
+            <p className="truncate text-[11px] text-[var(--color-text-2)]">{ticket.operator}</p>
+            {metaBits.length ? (
+              <p className="mt-0.5 truncate text-[10px] text-[var(--color-text-3)]">
+                {ticket.lineaLabel ? <span title="Línea">{ticket.lineaLabel}</span> : null}
+                {ticket.lineaLabel && (ticket.servicioLabel || ticket.conductorLabel) ? (
+                  <span className="text-[var(--color-border)]"> · </span>
+                ) : null}
+                {ticket.servicioLabel ? <span title="Servicio">{ticket.servicioLabel}</span> : null}
+                {ticket.servicioLabel && ticket.conductorLabel ? (
+                  <span className="text-[var(--color-border)]"> · </span>
+                ) : null}
+                {ticket.conductorLabel ? <span title="Conductor">{ticket.conductorLabel}</span> : null}
+              </p>
             ) : null}
-            {ticket.lineaLabel && (ticket.servicioLabel || ticket.conductorLabel) ? (
-              <span className="text-[var(--color-border)]"> · </span>
+            {ticket.assignedToUserName ? (
+              <p className="truncate text-[10px] text-[var(--color-accent)]">→ {ticket.assignedToUserName}</p>
             ) : null}
-            {ticket.servicioLabel ? (
-              <span title="Servicio">{ticket.servicioLabel}</span>
-            ) : null}
-            {ticket.servicioLabel && ticket.conductorLabel ? (
-              <span className="text-[var(--color-border)]"> · </span>
-            ) : null}
-            {ticket.conductorLabel ? (
-              <span title="Conductor">{ticket.conductorLabel}</span>
-            ) : null}
+          </>
+        ) : (
+          <p className="truncate text-[10px] text-[var(--color-text-3)]">
+            {ticket.operator}
+            {ticket.assignedToUserName ? ` · → ${ticket.assignedToUserName}` : null}
           </p>
-        ) : null}
-        {ticket.assignedToUserName && (
-          <p className="truncate text-[10px] text-[var(--color-accent)]">→ {ticket.assignedToUserName}</p>
         )}
       </td>
       <td>
@@ -436,9 +459,11 @@ function BandejaTableRow({
           />
           <p className="font-mono text-[12px] font-medium text-[var(--color-text-1)]">{ticket.busId}</p>
         </div>
-        <p className="mt-0.5 truncate pl-[1.125rem] text-[11px] text-[var(--color-text-3)]">
-          {ticket.subsubtipo ?? ticket.assetType}
-        </p>
+        {!compact ? (
+          <p className="mt-0.5 truncate pl-[1.125rem] text-[11px] text-[var(--color-text-3)]">
+            {ticket.subsubtipo ?? ticket.assetType}
+          </p>
+        ) : null}
       </td>
       <td>
         <Badge
@@ -485,7 +510,8 @@ function BandejaTableRow({
               type="button"
               data-ticket-menu-anchor={ticket.id}
               className={cn(
-                "inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]",
+                "inline-flex items-center justify-center rounded-md border border-[var(--color-border)] text-[var(--color-text-3)] transition-colors hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-accent-light)] hover:text-[var(--color-accent)]",
+                compact ? "h-6 w-6" : "min-h-[28px] min-w-[28px]",
                 actionMenuTicketId === ticket.id &&
                   "border-[var(--color-accent)]/40 bg-[var(--color-accent-light)] text-[var(--color-accent)]",
               )}
@@ -496,7 +522,7 @@ function BandejaTableRow({
                 onToggleActionMenu(ticket.id);
               }}
             >
-              <MoreHorizontal size={16} strokeWidth={2} className="shrink-0" aria-hidden />
+              <MoreHorizontal size={compact ? 14 : 16} strokeWidth={2} className="shrink-0" aria-hidden />
             </button>
           </div>
         ) : null}
@@ -674,6 +700,7 @@ export function TicketsBandeja({
                       actionMenuTicketId={actionMenuTicketId}
                       onToggleActionMenu={onToggleActionMenu}
                       onMarkVisited={markTicketVisited}
+                      compact={bandejaCompacta}
                     />
                   ))}
                 </tbody>
@@ -696,7 +723,7 @@ export function TicketsBandeja({
                 className={cn(
                   staggerClass(index),
                   "rounded-2xl border bg-[var(--color-surface)] shadow-[0_2px_6px_-4px_rgba(0,0,0,0.4)] transition-colors duration-200 ease-out",
-                  bandejaCompacta ? "p-3.5" : "p-4",
+                  bandejaCompacta ? "p-2.5" : "p-4",
                   mobilePriorityClass(ticket.priority),
                   isLastViewedMobile
                     ? "bandeja-mobile-card--last-viewed"
@@ -763,7 +790,10 @@ export function TicketsBandeja({
                     })()}
                   </div>
                 </div>
-                <p className="mb-3 line-clamp-2 text-[13.5px] leading-relaxed text-[var(--color-text-2)] sm:text-sm sm:leading-snug">{ticket.description}</p>
+                <p className={cn(
+                  "mb-3 text-[13.5px] leading-relaxed text-[var(--color-text-2)] sm:text-sm sm:leading-snug",
+                  bandejaCompacta ? "line-clamp-1" : "line-clamp-2",
+                )}>{ticket.description}</p>
                 <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-caption">
                   <span className="flex min-w-0 flex-1 items-center gap-1">
                     <Clock3 size={11} className="shrink-0" />

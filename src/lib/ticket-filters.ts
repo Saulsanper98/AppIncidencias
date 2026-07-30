@@ -61,3 +61,45 @@ export function normalizeTicketPriorityFilter(value: string | null): TicketPrior
   if (value === "alta" || value === "media" || value === "baja") return value;
   return "todos";
 }
+
+/**
+ * Rango de fechas inclusivo sobre `createdAt`.
+ * - Solo `from` → ese día completo.
+ * - Solo `to` → ese día completo.
+ * - Ambos → rango inclusivo.
+ */
+export function parseTicketDateRange(
+  fromRaw: string | null,
+  toRaw: string | null,
+): { from?: Date; to?: Date } | null {
+  const fromStr = fromRaw?.trim() ?? "";
+  const toStr = toRaw?.trim() ?? "";
+  if (!fromStr && !toStr) return null;
+
+  const startOfDay = (ymd: string) => {
+    const d = ymd.length <= 10 ? new Date(`${ymd}T00:00:00`) : new Date(ymd);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  };
+  const endOfDay = (ymd: string) => {
+    const d = ymd.length <= 10 ? new Date(`${ymd}T23:59:59.999`) : new Date(ymd);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  };
+
+  if (fromStr && !toStr) {
+    const from = startOfDay(fromStr);
+    const to = endOfDay(fromStr);
+    if (!from || !to) return null;
+    return { from, to };
+  }
+  if (toStr && !fromStr) {
+    const from = startOfDay(toStr);
+    const to = endOfDay(toStr);
+    if (!from || !to) return null;
+    return { from, to };
+  }
+
+  const from = startOfDay(fromStr);
+  const to = endOfDay(toStr);
+  if (!from && !to) return null;
+  return { from, to };
+}

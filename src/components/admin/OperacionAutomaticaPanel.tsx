@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/toast-host";
 import { cn } from "@/lib/utils";
 
@@ -143,9 +144,9 @@ export function OperacionAutomaticaPanel() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 py-12 text-sm text-[var(--color-text-3)]">
-        <Loader2 size={16} className="animate-spin" aria-hidden />
-        Cargando configuración…
+      <div className="space-y-4">
+        <Skeleton className="h-48 rounded-xl" />
+        <Skeleton className="h-56 rounded-xl" />
       </div>
     );
   }

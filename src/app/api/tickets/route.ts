@@ -33,6 +33,8 @@ import { addMinutesIso, calculatePriority } from "@/lib/ticketing";
 import type { NivelImpacto } from "@/lib/tipologia";
 import { trackTicketResolvedTelemetry } from "@/lib/ticket-resolution-telemetry";
 import { trackServerUxEvent } from "@/lib/ux-server";
+import { upsertConductorFromLabel } from "@/lib/conductors";
+import { evaluateConductorPreventive } from "@/lib/conductor-preventive";
 import {
   CatalogIdFormatError,
   collectOperatorPrefixes,
@@ -42,6 +44,7 @@ import { resolveBusAndAssetForTicket } from "@/lib/ticket-bus-asset";
 import {
   normalizeTicketPriorityFilter,
   normalizeTicketStatusFilter,
+  parseTicketDateRange,
 } from "@/lib/ticket-filters";
 
 const createTicketSchema = z.object({
@@ -91,6 +94,12 @@ const createTicketSchema = z.object({
     .transform((value) => (value === "" ? null : value))
     .nullable()
     .optional(),
+  /** Prioridad elegida por el técnico. Si falta (express/legacy), se calcula. */
+  priority: z.enum(["alta", "media", "baja"]).optional(),
+  /** Origen del fallo: máquina / conductor / externo. */
+  falloOrigen: z.enum(["maquina", "conductor", "externo"]).optional().default("maquina"),
+  /** Hora real de la incidencia (ISO o datetime-local). Opcional por compat. */
+  incidentOccurredAt: z.string().trim().min(1).optional(),
   // Auto-asignar al técnico que crea el ticket (sugerencia de Ibrahim 1b).
   // Solo aplica si el actor tiene permiso para ser asignado (técnico o gestor).
   // Si llega `true` y el actor es conductor, lo ignoramos en silencio.
@@ -118,6 +127,8 @@ export async function GET(request: Request) {
     const operator = searchParams.get("operator");
     const busId = searchParams.get("busId");
     const tipo = searchParams.get("tipo");
+    const conductorQ = searchParams.get("conductor")?.trim() ?? "";
+    const dateRange = parseTicketDateRange(searchParams.get("from"), searchParams.get("to"));
     const partCodeRaw = searchParams.get("partCode")?.trim() ?? "";
     // `mine=1` (o `assignee=me`) limita la bandeja a los tickets asignados al
     // usuario que hace la petición. Para gestores es útil para "ver lo mío",
@@ -157,6 +168,24 @@ export async function GET(request: Request) {
       busId: busId && busId !== "todas" ? busId : undefined,
       bus: operator && operator !== "todas" ? { operator } : undefined,
       tipo: tipo && tipo !== "todos" ? tipo : undefined,
+      ...(conductorQ
+        ? {
+            OR: [
+              { conductorLabel: { equals: conductorQ } },
+              { conductorLabel: { contains: conductorQ } },
+              { conductor: { nameNormalized: { contains: conductorQ.toLocaleLowerCase("es") } } },
+              { conductor: { name: { contains: conductorQ } } },
+            ],
+          }
+        : {}),
+      ...(dateRange
+        ? {
+            createdAt: {
+              ...(dateRange.from ? { gte: dateRange.from } : {}),
+              ...(dateRange.to ? { lte: dateRange.to } : {}),
+            },
+          }
+        : {}),
       ...(onlyMine ? { assignedToUserId: onlyMine } : {}),
       ...(conductorScope ? { createdByUserId: conductorScope } : {}),
       ...(partTicketIds !== null
@@ -213,6 +242,8 @@ export async function GET(request: Request) {
         lineaLabel: ticket.lineaLabel ?? null,
         servicioLabel: ticket.servicioLabel ?? null,
         conductorLabel: ticket.conductorLabel ?? null,
+        conductorId: ticket.conductorId ?? null,
+        falloOrigen: ticket.falloOrigen ?? null,
         title: ticket.title,
         description: ticket.description,
         status: ticket.status,
@@ -351,10 +382,22 @@ export async function POST(request: Request) {
       lineaLabel,
       servicioLabel,
       conductorLabel,
+      priority: requestedPriority,
+      falloOrigen,
+      incidentOccurredAt: incidentOccurredAtRaw,
       assignToMe,
       initialStatus,
       resolutionNote,
     } = parsed;
+
+    let incidentOccurredAt: Date | null = null;
+    if (incidentOccurredAtRaw) {
+      const parsedAt = new Date(incidentOccurredAtRaw);
+      if (Number.isNaN(parsedAt.getTime())) {
+        return NextResponse.json({ message: "Hora de incidencia no válida" }, { status: 400 });
+      }
+      incidentOccurredAt = parsedAt;
+    }
 
     // ====== Resolver bus + activo (creando al vuelo si no existen) ======
     let resolvedLineaLabel = lineaLabel;
@@ -396,7 +439,7 @@ export async function POST(request: Request) {
       throw err;
     }
 
-    const priority = calculatePriority({
+    const priority = requestedPriority ?? calculatePriority({
       assetType: asset.type,
       impactedLines,
       serviceStopped,
@@ -409,6 +452,11 @@ export async function POST(request: Request) {
       asset.slaMinutes != null && asset.slaMinutes > 0
         ? asset.slaMinutes
         : await getSlaMinutesForPriority(priority);
+
+    const conductorResolved = await upsertConductorFromLabel(
+      conductorLabel,
+      undefined,
+    );
 
     const attachmentCreates =
       uploadedFiles.length === 0 && photoNames.length > 0
@@ -459,9 +507,12 @@ export async function POST(request: Request) {
         slaDeadline: new Date(addMinutesIso(now, slaMinutes)),
         lineaLabel: resolvedLineaLabel ?? null,
         servicioLabel: servicioLabel ?? null,
-        conductorLabel: conductorLabel ?? null,
+        conductorLabel: conductorResolved?.name ?? conductorLabel ?? null,
+        conductorId: conductorResolved?.id ?? null,
+        falloOrigen,
         serviceStopped,
         impactedLines,
+        ...(incidentOccurredAt ? { incidentOccurredAt } : {}),
         ...(latitude !== undefined && longitude !== undefined
           ? {
               latitude,
@@ -512,6 +563,10 @@ export async function POST(request: Request) {
         where: { id: created.id },
         data: { status: "esperando_repuesto" },
       });
+    }
+
+    if (falloOrigen === "conductor" && conductorResolved?.id && !shouldCreateClosed) {
+      await evaluateConductorPreventive(conductorResolved.id);
     }
 
     const auditDetailParts: string[] = [];

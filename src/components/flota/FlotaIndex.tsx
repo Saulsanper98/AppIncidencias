@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { BusAvatar } from "@/components/flota/bus-avatar";
+import { FlotaHero } from "@/components/flota/FlotaHero";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { KbGridSkeleton } from "@/components/ui/view-skeletons";
@@ -122,30 +123,21 @@ export function FlotaIndex({ canManage }: Props) {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-[var(--color-text-3)]">
-            <BusIcon size={16} aria-hidden />
-            <span className="text-[12px] font-medium uppercase tracking-wider">Flota</span>
-          </div>
-          <h1 className="mt-1 text-xl font-semibold text-[var(--color-text-1)]">Catálogo de flota</h1>
-          <p className="mt-1 max-w-2xl text-[13px] text-[var(--color-text-3)]">
-            {filtered.length} de {buses.length} buses
-            {anomalousIds.size > 0 ? ` · ${anomalousIds.size} anómalos` : ""}.
-            {canManage ? (
-              <>
-                {" "}
-                Gestión en{" "}
-                <Link href="/admin/catalog" className="text-[var(--color-accent)] hover:underline">
-                  Administración → Catálogo
-                </Link>
-                .
-              </>
-            ) : null}
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative w-full sm:w-64">
+      <FlotaHero
+        totalBuses={buses.length}
+        filteredCount={filtered.length}
+        operatorCount={operators.length}
+        anomalousCount={anomalousIds.size}
+        canManage={canManage}
+      />
+
+      <div className="reports-panel ccmgc-stagger-in ccmgc-stagger-in-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-3 sm:p-4">
+        <h2 className="reports-panel-title mb-3">
+          <span className="reports-panel-title-dot" aria-hidden />
+          Filtrar flota
+        </h2>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative w-full lg:max-w-xs">
             <Search
               size={14}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-3)]"
@@ -160,7 +152,7 @@ export function FlotaIndex({ canManage }: Props) {
             />
           </div>
           <div
-            className="flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5"
+            className="flex rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]/50 p-0.5"
             role="tablist"
             aria-label="Vista de flota"
           >
@@ -184,7 +176,7 @@ export function FlotaIndex({ canManage }: Props) {
             ))}
           </div>
         </div>
-      </header>
+      </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
         <button

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, LayoutDashboard, Settings2, Sparkles, Star } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import "../dashboard-builder.css";
 import {
   DndContext,
@@ -17,16 +17,26 @@ import {
 import { SortableContext, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable";
 
 import { AddWidgetModal } from "@/components/dashboard-builder/add-widget-modal";
+import { FeedbackTargetButton } from "@/components/feedback/FeedbackTargetButton";
 import { DashboardBuilderToolbar } from "@/components/dashboard-builder/dashboard-builder-toolbar";
 import { SortableWidget } from "@/components/dashboard-builder/sortable-widget";
+import { VisualPresetPicker } from "@/components/dashboard-builder/visual-preset-picker";
 import { WidgetRenderer } from "@/components/dashboard-builder/widget-renderer";
+import { getPresentationStaggerDelayMs } from "@/components/dashboard-builder/charts/chart-utils";
 import { Badge } from "@/components/ui/badge";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { CHART_TYPES, type ChartType } from "@/lib/dashboard/chart-types";
-import { EMPTY_DASHBOARD_DATA, type CustomDashboardData } from "@/lib/dashboard/dashboard-data-types";
-import { getCompatibleCharts } from "@/lib/dashboard/data-sources";
-import { BUILTIN_VISUAL_PRESETS } from "@/lib/dashboard/visual-presets";
+import { EMPTY_DASHBOARD_DATA, mergeDashboardData, type CustomDashboardData } from "@/lib/dashboard/dashboard-data-types";
+import { getCompatibleCharts, pickDefaultChart } from "@/lib/dashboard/data-sources";
+import { isLegacyEmbedDataSource } from "@/lib/dashboard/widget-data-helpers";
+import {
+  getSavedPresetsKey,
+  saveLastVisualSettings,
+  type SavedVisualPreset,
+  type VisualPresetSettings,
+} from "@/lib/dashboard/visual-preset-system";
 import { mergeLayoutIntoConfig, parseWidgetLayout } from "@/lib/dashboard/widget-layout";
+import { getEffectiveColSpan } from "@/lib/dashboard/widget-density";
 import { cn } from "@/lib/utils";
 import type { SessionUser, UserRole } from "@/lib/domain";
 
@@ -50,18 +60,7 @@ type DashboardItem = {
 
 type DashboardData = CustomDashboardData;
 
-type VisualPreset = {
-  id: string;
-  name: string;
-  favorite?: boolean;
-  settings: {
-    accentColor: string;
-    showLegend: boolean;
-    showGrid: boolean;
-    smoothLines: boolean;
-    metricFormat: "number" | "compact" | "percent" | "integer";
-  };
-};
+type VisualPreset = SavedVisualPreset;
 
 const emptyData: DashboardData = EMPTY_DASHBOARD_DATA;
 
@@ -74,6 +73,7 @@ const WIDGET_MANUAL_LAYOUT_EDIT_ENABLED = true;
 export default function DashboardBuilderPage() {
   const params = useParams<{ dashboardId: string }>();
   const dashboardId = params.dashboardId;
+  const router = useRouter();
 
   const [dashboard, setDashboard] = useState<DashboardItem | null>(null);
   const [data, setData] = useState<DashboardData | null>(null);
@@ -92,8 +92,12 @@ export default function DashboardBuilderPage() {
   const [presentationMode, setPresentationMode] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [savedPresets, setSavedPresets] = useState<VisualPreset[]>([]);
+  const [activeBuiltinPresetId, setActiveBuiltinPresetId] = useState<string | null>(null);
   const [showEditHelp, setShowEditHelp] = useState(false);
   const [focusedWidgetId, setFocusedWidgetId] = useState<string | null>(null);
+  const [isMobileGrid, setIsMobileGrid] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   // Preview en vivo del redimensionado de cada widget. Lo emite `SortableWidget`
   // en cada `mousemove` mientras se arrastra un asa y se limpia al soltar. Lo
   // usamos para recalcular `chartHeight` frame a frame y que Recharts redibuje
@@ -113,33 +117,41 @@ export default function DashboardBuilderPage() {
     useSensor(KeyboardSensor),
   );
   const presetStorageKey = useMemo(
-    () => `dashboard-presets:${sessionUserId ?? "anon"}:${dashboardId}`,
+    () => getSavedPresetsKey(dashboardId, sessionUserId),
     [sessionUserId, dashboardId],
   );
 
   const fetchDashboard = useCallback(async () => {
-    const dashboardsResponse = await fetch("/api/dashboards", { cache: "no-store" });
-    const dashboardsPayload = (await dashboardsResponse.json()) as {
-      dashboards?: DashboardItem[];
+    const response = await fetch(`/api/dashboards/${dashboardId}`, { cache: "no-store" });
+    const payload = (await response.json()) as {
+      dashboard?: DashboardItem;
       message?: string;
     };
-    if (!dashboardsResponse.ok) {
-      throw new Error(dashboardsPayload.message ?? "No se pudieron cargar dashboards");
+    if (!response.ok) {
+      throw new Error(payload.message ?? "No se pudieron cargar dashboards");
     }
-    const found = (dashboardsPayload.dashboards ?? []).find((item) => item.id === dashboardId) ?? null;
-    setDashboard(found);
+    setDashboard(payload.dashboard ?? null);
   }, [dashboardId]);
 
   const fetchData = useCallback(async () => {
     setDataRefreshing(true);
     try {
-      const dataResponse = await fetch(`/api/dashboards/${dashboardId}/data?days=${days}`, { cache: "no-store" });
-      const dataPayload = (await dataResponse.json()) as CustomDashboardData & { message?: string };
+      const widgets = dashboardRef.current?.widgets ?? [];
+      const sources = [...new Set(widgets.map((w) => w.dataSource).filter(Boolean))];
+      const params = new URLSearchParams({ days: String(days) });
+      if (sources.length > 0) params.set("sources", sources.join(","));
+      const dataResponse = await fetch(`/api/dashboards/${dashboardId}/data?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const dataPayload = (await dataResponse.json()) as Partial<CustomDashboardData> & { message?: string };
       if (!dataResponse.ok) {
         throw new Error(dataPayload.message ?? "No se pudieron cargar datos del dashboard");
       }
-      setData(dataPayload);
-      setLastRefreshedAt(new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }));
+      setData((prev) => mergeDashboardData(prev, dataPayload));
+      const stamp = dataPayload.generatedAt ? new Date(dataPayload.generatedAt) : new Date();
+      setLastRefreshedAt(
+        stamp.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      );
     } finally {
       setDataRefreshing(false);
     }
@@ -180,6 +192,14 @@ export default function DashboardBuilderPage() {
     }, 60_000);
     return () => window.clearInterval(handle);
   }, [autoRefresh, fetchData]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const apply = () => setIsMobileGrid(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   useEffect(() => {
     try {
@@ -328,6 +348,11 @@ export default function DashboardBuilderPage() {
     return response.ok;
   }, [dashboardId]);
 
+  const syncHistoryState = useCallback(() => {
+    setCanUndo(undoStackRef.current.length > 0);
+    setCanRedo(redoStackRef.current.length > 0);
+  }, []);
+
   const pushUndoSnapshot = useCallback(() => {
     const d = dashboardRef.current;
     if (!d?.widgets.length) return;
@@ -338,27 +363,47 @@ export default function DashboardBuilderPage() {
       undoStackRef.current.push(JSON.parse(JSON.stringify(d.widgets)) as DashboardWidget[]);
     }
     if (undoStackRef.current.length > 20) undoStackRef.current.shift();
-  }, []);
+    syncHistoryState();
+  }, [syncHistoryState]);
+
+  const livePreviewDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const handleWidgetLivePreview = useCallback(
     (widgetId: string, preview: { colSpan?: number; minHeightPx?: number } | null) => {
-      setLivePreviewById((prev) => {
-        if (preview === null) {
+      const clearTimer = () => {
+        const pending = livePreviewDebounceRef.current[widgetId];
+        if (pending) {
+          clearTimeout(pending);
+          delete livePreviewDebounceRef.current[widgetId];
+        }
+      };
+
+      if (preview === null) {
+        clearTimer();
+        setLivePreviewById((prev) => {
           if (!(widgetId in prev)) return prev;
           const next = { ...prev };
           delete next[widgetId];
           return next;
-        }
-        const current = prev[widgetId];
-        if (
-          current &&
-          current.colSpan === preview.colSpan &&
-          current.minHeightPx === preview.minHeightPx
-        ) {
-          return prev;
-        }
-        return { ...prev, [widgetId]: preview };
-      });
+        });
+        return;
+      }
+
+      clearTimer();
+      livePreviewDebounceRef.current[widgetId] = setTimeout(() => {
+        setLivePreviewById((prev) => {
+          const current = prev[widgetId];
+          if (
+            current &&
+            current.colSpan === preview.colSpan &&
+            current.minHeightPx === preview.minHeightPx
+          ) {
+            return prev;
+          }
+          return { ...prev, [widgetId]: preview };
+        });
+        delete livePreviewDebounceRef.current[widgetId];
+      }, 80);
     },
     [],
   );
@@ -429,7 +474,8 @@ export default function DashboardBuilderPage() {
     if (results.some((ok) => !ok)) {
       setError("No se pudo sincronizar al deshacer; recarga el dashboard.");
     }
-  }, [updateWidget]);
+    syncHistoryState();
+  }, [updateWidget, syncHistoryState]);
 
   const handleRedo = useCallback(async () => {
     const rstack = redoStackRef.current;
@@ -459,7 +505,8 @@ export default function DashboardBuilderPage() {
     if (results.some((ok) => !ok)) {
       setError("No se pudo sincronizar al rehacer; recarga el dashboard.");
     }
-  }, [updateWidget]);
+    syncHistoryState();
+  }, [updateWidget, syncHistoryState]);
 
   const handleExportPng = useCallback(async (widgetId: string) => {
     const el = widgetRootRefs.current[widgetId];
@@ -517,7 +564,9 @@ export default function DashboardBuilderPage() {
     const allowed = getCompatibleCharts(current.dataSource);
     const pool = allowed.length > 0 ? allowed : CHART_TYPES;
     const index = pool.indexOf(current.chartType as ChartType);
-    const nextChartType = pool[(index + 1) % pool.length] ?? pool[0] ?? "bar";
+    const nextIndex =
+      index < 0 ? Math.max(0, pool.indexOf(pickDefaultChart(current.dataSource))) : (index + 1) % pool.length;
+    const nextChartType = pool[nextIndex] ?? pool[0] ?? "bar";
     const ok = await updateWidget(widgetId, { chartType: nextChartType });
     if (!ok) return;
     setDashboard((prev) =>
@@ -569,25 +618,99 @@ export default function DashboardBuilderPage() {
     );
   };
 
+  const handleMigrateLegacySource = async (widgetId: string, dataSource: string, title: string) => {
+    pushUndoSnapshot();
+    const ok = await updateWidget(widgetId, { dataSource, title });
+    if (!ok) return;
+    setDashboard((prev) =>
+      prev
+        ? {
+            ...prev,
+            widgets: prev.widgets.map((widget) =>
+              widget.id === widgetId ? { ...widget, dataSource, title } : widget,
+            ),
+          }
+        : prev,
+    );
+  };
+
   const handleSaveCurrentAsPreset = () => {
     if (!presetName.trim()) return;
-    const firstWithConfig = sortedWidgets[0];
-    if (!firstWithConfig) return;
-    const cfg = parseWidgetConfig(firstWithConfig.config);
+    if (sortedWidgets.length === 0) return;
+    const accentCounts = new Map<string, number>();
+    let showLegend = true;
+    let showGrid = true;
+    let smoothLines = true;
+    let metricFormat: VisualPreset["settings"]["metricFormat"] = "number";
+    for (const widget of sortedWidgets) {
+      const cfg = parseWidgetConfig(widget.config);
+      const accent = String(cfg.accentColor ?? "#2563EB");
+      accentCounts.set(accent, (accentCounts.get(accent) ?? 0) + 1);
+      if (cfg.showLegend === false) showLegend = false;
+      if (cfg.showGrid === false) showGrid = false;
+      if (cfg.smoothLines === false) smoothLines = false;
+      if (cfg.metricFormat) metricFormat = cfg.metricFormat as VisualPreset["settings"]["metricFormat"];
+    }
+    const dominantAccent =
+      [...accentCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "#2563EB";
     const nextPreset: VisualPreset = {
       id: crypto.randomUUID(),
       name: presetName.trim(),
       favorite: false,
       settings: {
-        accentColor: String(cfg.accentColor ?? "#2563EB"),
-        showLegend: Boolean(cfg.showLegend ?? true),
-        showGrid: Boolean(cfg.showGrid ?? true),
-        smoothLines: Boolean(cfg.smoothLines ?? true),
-        metricFormat: (cfg.metricFormat as VisualPreset["settings"]["metricFormat"]) ?? "number",
+        accentColor: dominantAccent,
+        showLegend,
+        showGrid,
+        smoothLines,
+        metricFormat,
       },
     };
     persistPresets([nextPreset, ...savedPresets]);
     setPresetName("");
+  };
+
+  const handleExportDashboardJson = () => {
+    if (!dashboard) return;
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      dashboard: {
+        name: dashboard.name,
+        widgets: sortedWidgets.map((widget) => ({
+          title: widget.title,
+          chartType: widget.chartType,
+          dataSource: widget.dataSource,
+          size: widget.size,
+          order: widget.order,
+          config: parseWidgetConfig(widget.config),
+        })),
+      },
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${dashboard.name.replace(/\s+/g, "-").toLowerCase()}-panel.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDuplicateDashboard = async () => {
+    try {
+      const response = await fetch(`/api/dashboards/${dashboardId}/duplicate`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = (await response.json()) as { dashboard?: { id: string }; message?: string };
+      if (!response.ok) {
+        throw new Error(payload.message ?? "No se pudo duplicar el panel");
+      }
+      if (payload.dashboard?.id) {
+        router.push(`/dashboards/${payload.dashboard.id}`);
+      }
+    } catch (duplicateError) {
+      setError(duplicateError instanceof Error ? duplicateError.message : "No se pudo duplicar el panel");
+    }
   };
 
   const applyPresetToAllWidgets = async (preset: VisualPreset) => {
@@ -614,10 +737,10 @@ export default function DashboardBuilderPage() {
     );
   };
 
-  const applyBuiltinPreset = async (presetId: string) => {
-    const preset = BUILTIN_VISUAL_PRESETS.find((item) => item.id === presetId);
-    if (!preset || !dashboard) return;
-    const { id: _id, name: _name, description: _description, ...settings } = preset;
+  const applyBuiltinPreset = async (settings: VisualPresetSettings, presetId: string) => {
+    if (!dashboard) return;
+    setActiveBuiltinPresetId(presetId);
+    saveLastVisualSettings(dashboardId, sessionUserId, settings);
     pushUndoSnapshot();
     const updates = await Promise.all(
       dashboard.widgets.map(async (widget) => {
@@ -647,6 +770,11 @@ export default function DashboardBuilderPage() {
   const sortedWidgets = useMemo(
     () => [...(dashboard?.widgets ?? [])].sort((a, b) => a.order - b.order),
     [dashboard?.widgets],
+  );
+
+  const legacyEmbedCount = useMemo(
+    () => sortedWidgets.filter((widget) => isLegacyEmbedDataSource(widget.dataSource)).length,
+    [sortedWidgets],
   );
 
   const handleUndoRef = useRef(handleUndo);
@@ -742,88 +870,123 @@ export default function DashboardBuilderPage() {
         </div>
       ) : null}
 
+      {legacyEmbedCount > 0 && !presentationMode ? (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-[var(--color-text-2)]">
+          <p className="font-medium text-amber-200/95">
+            {legacyEmbedCount === 1
+              ? "Hay 1 widget obsoleto (mapa embebido)."
+              : `Hay ${legacyEmbedCount} widgets obsoletos (mapa embebido).`}
+          </p>
+          <p className="mt-1 text-[12px] text-[var(--color-text-3)]">
+            Abre cada bloque afectado y usa «Migrar a bandeja» o «Migrar a desvíos» para actualizarlo con un clic.
+          </p>
+        </div>
+      ) : null}
+
       <div className="space-y-3">
         <div className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-surface)] via-[var(--color-surface)] to-[color-mix(in_oklab,var(--color-accent)_8%,transparent)] p-4 shadow-sm">
           <div aria-hidden className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-[var(--color-accent)]/10 blur-2xl" />
-          <div className="relative flex flex-wrap items-center gap-3">
-            <Link
-              href="/dashboards"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)]"
-            >
-              <ArrowLeft size={16} />
-            </Link>
-            <div className="min-w-0 flex-1">
-              {editingName !== null ? (
-                <input
-                  value={editingName}
-                  onChange={(e) => setEditingName(e.target.value)}
-                  onBlur={async () => {
-                    if (skipNamePatchRef.current) {
-                      skipNamePatchRef.current = false;
+          <div className="relative space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/dashboards"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-3)] transition-colors hover:text-[var(--color-text-1)]"
+              >
+                <ArrowLeft size={16} />
+              </Link>
+              <div className="min-w-0 flex-1">
+                {editingName !== null ? (
+                  <input
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onBlur={async () => {
+                      if (skipNamePatchRef.current) {
+                        skipNamePatchRef.current = false;
+                        setEditingName(null);
+                        return;
+                      }
+                      if (editingName && editingName !== dashboard.name) {
+                        await fetch(`/api/dashboards/${dashboardId}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ name: editingName }),
+                        });
+                        await fetchDashboard();
+                      }
                       setEditingName(null);
-                      return;
-                    }
-                    if (editingName && editingName !== dashboard.name) {
-                      await fetch(`/api/dashboards/${dashboardId}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ name: editingName }),
-                      });
-                      await fetchDashboard();
-                    }
-                    setEditingName(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                    if (e.key === "Escape") {
-                      skipNamePatchRef.current = true;
-                      setEditingName(null);
-                    }
-                  }}
-                  className="w-full max-w-md bg-transparent text-xl font-semibold text-[var(--color-text-1)] border-b border-[var(--color-accent)] focus:outline-none"
-                  autoFocus
-                />
-              ) : (
-                <h1
-                  className={cn(
-                    "truncate text-xl font-semibold tracking-tight text-[var(--color-text-1)]",
-                    isEditing && role === "gestor_centro_control" && "cursor-text hover:text-[var(--color-accent)]",
-                  )}
-                  onClick={() => isEditing && role === "gestor_centro_control" && setEditingName(dashboard.name)}
-                >
-                  {dashboard.name}
-                </h1>
-              )}
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-3)]">
-                <Badge variant="neutral">{dashboard.widgets.length} widgets</Badge>
-                <span>Periodo {days} días</span>
-                {lastRefreshedAt ? <span>· {lastRefreshedAt}</span> : null}
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        skipNamePatchRef.current = true;
+                        setEditingName(null);
+                      }
+                    }}
+                    className="w-full max-w-md bg-transparent text-xl font-semibold text-[var(--color-text-1)] border-b border-[var(--color-accent)] focus:outline-none"
+                    autoFocus
+                  />
+                ) : (
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <h1
+                      className={cn(
+                        "truncate text-xl font-semibold tracking-tight text-[var(--color-text-1)]",
+                        isEditing && role === "gestor_centro_control" && "cursor-text hover:text-[var(--color-accent)]",
+                      )}
+                      onClick={() => isEditing && role === "gestor_centro_control" && setEditingName(dashboard.name)}
+                    >
+                      {dashboard.name}
+                    </h1>
+                    {!presentationMode ? (
+                      <FeedbackTargetButton
+                        id={`dashboards/${dashboardId}`}
+                        label={dashboard.name}
+                        placement="inline"
+                      />
+                    ) : null}
+                  </div>
+                )}
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-3)]">
+                  <Badge variant="neutral">{dashboard.widgets.length} widgets</Badge>
+                </div>
               </div>
             </div>
+
+            <DashboardBuilderToolbar
+              embedded
+              days={days}
+              onDaysChange={setDays}
+              onRefresh={() => void fetchData()}
+              dataRefreshing={dataRefreshing}
+              autoRefresh={autoRefresh}
+              onToggleAutoRefresh={() => setAutoRefresh((v) => !v)}
+              lastRefreshedAt={lastRefreshedAt}
+              periodComparison={data?.periodComparison ?? null}
+              isEditing={isEditing}
+              onToggleEditing={() => {
+                setIsEditing((prev) => {
+                  if (prev) setFocusedWidgetId(null);
+                  return !prev;
+                });
+              }}
+              presentationMode={presentationMode}
+              onTogglePresentation={() => setPresentationMode((v) => !v)}
+              onAddWidget={() => setAddWidgetOpen(true)}
+              canEdit={role === "gestor_centro_control"}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onUndo={() => void handleUndo()}
+              onRedo={() => void handleRedo()}
+              onExportJson={handleExportDashboardJson}
+              onDuplicateDashboard={() => void handleDuplicateDashboard()}
+            />
           </div>
         </div>
-
-        <DashboardBuilderToolbar
-          days={days}
-          onDaysChange={setDays}
-          onRefresh={() => void fetchData()}
-          dataRefreshing={dataRefreshing}
-          autoRefresh={autoRefresh}
-          onToggleAutoRefresh={() => setAutoRefresh((v) => !v)}
-          lastRefreshedAt={lastRefreshedAt}
-          isEditing={isEditing}
-          onToggleEditing={() => {
-            setIsEditing((prev) => {
-              if (prev) setFocusedWidgetId(null);
-              return !prev;
-            });
-          }}
-          presentationMode={presentationMode}
-          onTogglePresentation={() => setPresentationMode((v) => !v)}
-          onAddWidget={() => setAddWidgetOpen(true)}
-          canEdit={role === "gestor_centro_control"}
-        />
       </div>
+      {role !== "gestor_centro_control" && !presentationMode ? (
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-[12px] text-[var(--color-text-2)]">
+          Vista de solo lectura. Solo el gestor del centro de control puede editar este panel.
+        </div>
+      ) : null}
       {role === "gestor_centro_control" && isEditing ? (
         <div className="flex items-center justify-between gap-2">
           <button
@@ -850,22 +1013,10 @@ export default function DashboardBuilderPage() {
               <p className="text-[11px] text-[var(--color-text-3)]">Presets visuales en un clic para todos los widgets</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {BUILTIN_VISUAL_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => void applyBuiltinPreset(preset.id)}
-                className="dashboard-preset-chip rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-left hover:border-[var(--color-border-hover)]"
-              >
-                <span className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-1)]">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: preset.accentColor }} />
-                  {preset.name}
-                </span>
-                <span className="mt-0.5 block text-[10px] text-[var(--color-text-3)]">{preset.description}</span>
-              </button>
-            ))}
-          </div>
+          <VisualPresetPicker
+            activePresetId={activeBuiltinPresetId}
+            onApply={(settings, presetId) => void applyBuiltinPreset(settings, presetId)}
+          />
           <div className="mt-4 border-t border-[var(--color-border)] pt-3">
             <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--color-text-3)]">Tus presets guardados</p>
           <div className="flex items-center gap-2">
@@ -960,9 +1111,8 @@ export default function DashboardBuilderPage() {
               {sortedWidgets.map((widget, index) => {
                 const layout = parseWidgetLayout(widget.config, widget.size);
                 const preview = livePreviewById[widget.id];
-                // Mientras se arrastra usamos el preview en vivo (si lo hay),
-                // así Recharts recibe un `chartHeight` nuevo en cada frame y la
-                // gráfica se redibuja a la par del wrapper.
+                const baseColSpan = preview?.colSpan ?? layout.colSpan;
+                const displayColSpan = getEffectiveColSpan(baseColSpan, isMobileGrid);
                 const effectiveMinHeightPx = preview?.minHeightPx ?? layout.minHeightPx;
                 // Altura efectiva del chart = altura del widget menos cabecera/toolbar internos.
                 // Cabecera (~92 px) + toolbar de edición (~40 px) + paddings.
@@ -976,7 +1126,7 @@ export default function DashboardBuilderPage() {
                 <SortableWidget
                   key={widget.id}
                   id={widget.id}
-                  layoutColSpan={layout.colSpan}
+                  layoutColSpan={displayColSpan}
                   layoutMinHeightPx={layout.minHeightPx}
                   isEditing={isEditing}
                   onLayoutPatch={
@@ -992,6 +1142,7 @@ export default function DashboardBuilderPage() {
                 >
                   <div className="h-full min-h-0">
                   <WidgetRenderer
+                    dashboardId={dashboardId}
                     widget={{ ...widget, chartType: widget.chartType as ChartType }}
                     data={data ?? emptyData}
                     days={days}
@@ -1002,8 +1153,11 @@ export default function DashboardBuilderPage() {
                     onQuickCycleChartType={handleCycleChartType}
                     onQuickResetVisual={handleResetVisual}
                     onQuickChangeSource={handleQuickChangeSource}
+                    onMigrateLegacySource={handleMigrateLegacySource}
                     presentationMode={presentationMode}
-                    animationDelayMs={Math.min(index * 35, 260)}
+                    animationDelayMs={
+                      presentationMode ? getPresentationStaggerDelayMs(index) : Math.min(index * 35, 260)
+                    }
                     onRequestEdit={
                       role === "gestor_centro_control"
                         ? () => {

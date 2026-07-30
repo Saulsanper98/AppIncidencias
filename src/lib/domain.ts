@@ -37,6 +37,10 @@ export type Ticket = {
   servicioLabel?: string | null;
   /** Nombre del conductor en el momento de la incidencia (opcional). */
   conductorLabel?: string | null;
+  /** Id del catálogo Conductor (si está vinculado). */
+  conductorId?: string | null;
+  /** Origen del fallo: máquina, conductor o externo. */
+  falloOrigen?: "maquina" | "conductor" | "externo" | null;
   title: string;
   description: string;
   status: TicketStatus;

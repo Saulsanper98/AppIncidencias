@@ -1,18 +1,11 @@
 "use client";
 
 import {
-  Activity,
-  BarChart3,
   ChevronRight,
-  Gauge,
-  Layers,
   LayoutDashboard,
-  LineChart,
   Plus,
-  PieChart,
   Sparkles,
   Star,
-  Table2,
   Trash2,
   X,
 } from "lucide-react";
@@ -20,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { ChartTypeIcon } from "@/components/dashboard-builder/chart-type-icon";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import "./dashboard-builder.css";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,6 +22,10 @@ import { DashboardViewSkeleton } from "@/components/ui/view-skeletons";
 import type { SessionUser, UserRole } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 import { DASHBOARD_TEMPLATES } from "@/lib/dashboard/templates";
+import {
+  getWidgetChipKey,
+  getWidgetChipLabel,
+} from "@/lib/dashboard/widget-data-helpers";
 
 type DashboardWidgetLite = {
   id: string;
@@ -118,39 +116,20 @@ export default function DashboardsPage() {
   };
 
   const handleCreateFromTemplate = async (templateId: string) => {
-    const template = DASHBOARD_TEMPLATES.find((item) => item.id === templateId);
-    if (!template || creating) return;
+    if (creating) return;
     try {
       setCreating(true);
       setError(null);
-      const response = await fetch("/api/dashboards", {
+      const response = await fetch("/api/dashboards/from-template", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: template.name }),
+        body: JSON.stringify({ templateId }),
       });
       const payload = (await response.json()) as { message?: string; dashboard?: { id: string } };
       if (!response.ok || !payload.dashboard?.id) {
         throw new Error(payload.message ?? "No se pudo crear el panel desde plantilla");
       }
-      const dashboardId = payload.dashboard.id;
-      for (const widget of template.widgets) {
-        const widgetRes = await fetch(`/api/dashboards/${dashboardId}/widgets`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: widget.title,
-            chartType: widget.chartType,
-            dataSource: widget.dataSource,
-            size: widget.size,
-            config: JSON.stringify(widget.config ?? {}),
-          }),
-        });
-        if (!widgetRes.ok) {
-          const widgetPayload = (await widgetRes.json()) as { message?: string };
-          throw new Error(widgetPayload.message ?? "No se pudo añadir un widget de la plantilla");
-        }
-      }
-      router.push(`/dashboards/${dashboardId}`);
+      router.push(`/dashboards/${payload.dashboard.id}`);
     } catch (templateError) {
       setError(templateError instanceof Error ? templateError.message : "No se pudo crear desde plantilla");
     } finally {
@@ -239,7 +218,7 @@ export default function DashboardsPage() {
                 Paneles personalizados
               </div>
               <h1 className="mt-0.5 text-[22px] font-semibold tracking-tight text-[var(--color-text-1)]">
-                Custom Dashboards
+                Cuadros personalizados
               </h1>
               <p className="mt-0.5 max-w-2xl text-[12.5px] leading-snug text-[var(--color-text-3)]">
                 Paneles con KPIs operativos, tendencias de tickets, SLA y vistas embebidas. Marca uno como principal para
@@ -252,13 +231,13 @@ export default function DashboardsPage() {
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             <KpiPill
               layout="stacked"
-              icon={<Layers size={11} strokeWidth={1.7} aria-hidden />}
+              icon={<LayoutDashboard size={11} strokeWidth={1.7} aria-hidden />}
               label="Paneles"
               value={kpis.totalDashboards}
             />
             <KpiPill
               layout="stacked"
-              icon={<BarChart3 size={11} strokeWidth={1.7} aria-hidden />}
+              icon={<ChartTypeIcon type="bar" size={11} strokeWidth={1.9} />}
               label="Widgets"
               value={kpis.totalWidgets}
               hint={kpis.totalDashboards > 0 ? `${kpis.avg} por panel` : undefined}
@@ -318,25 +297,17 @@ export default function DashboardsPage() {
       ) : null}
 
       {isManager ? (
-        <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-3)]">
-            Inicio rápido del constructor
-          </p>
-          <p className="mt-1 text-sm text-[var(--color-text-2)]">
-            Usa una plantilla preconfigurada con KPIs y gráficas de tickets, o crea un panel vacío y añade widgets en modo{" "}
-            <strong>Editar</strong>.
-          </p>
-        </section>
-      ) : null}
-
-      {isManager ? (
         <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-[var(--color-accent)]" />
               <div>
                 <h2 className="text-sm font-semibold text-[var(--color-text-1)]">Plantillas listas para usar</h2>
-                <p className="text-[11px] text-[var(--color-text-3)]">Un clic y tienes un panel completo con layout optimizado</p>
+                <p className="text-[11px] text-[var(--color-text-3)]">
+                  Un clic y tienes un panel completo con layout optimizado. También puedes crear uno vacío en{" "}
+                  <strong className="font-medium text-[var(--color-text-2)]">Tus paneles</strong> y añadir widgets en
+                  modo <strong className="font-medium text-[var(--color-text-2)]">Editar</strong>.
+                </p>
               </div>
             </div>
           </div>
@@ -376,11 +347,9 @@ export default function DashboardsPage() {
         </section>
       ) : null}
 
-      {/* ── CREAR DASHBOARD ──────────────────────────────────────────────── */}
       {isManager ? (
-        <section className="relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
-          <span aria-hidden className="absolute inset-y-3 left-0 w-0.5 rounded-r bg-[var(--hero-accent-admin)]/70" />
-          <div className="flex flex-wrap items-end gap-3">
+        <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+          <div className="flex flex-wrap items-end gap-3 border-b border-[var(--color-border)]/70 pb-4">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_oklab,var(--hero-accent-admin)_12%,transparent)] text-[color-mix(in_oklab,var(--hero-accent-admin)_75%,white)]">
               <Plus size={16} strokeWidth={1.8} aria-hidden />
             </div>
@@ -411,12 +380,38 @@ export default function DashboardsPage() {
               {creating ? "Creando…" : "Crear panel"}
             </button>
           </div>
-        </section>
-      ) : null}
 
-      {/* ── LISTADO ──────────────────────────────────────────────────────── */}
-      {dashboards.length === 0 ? (
-        <EmptyDashboardListState isManager={isManager} />
+          {dashboards.length === 0 ? (
+            <EmptyDashboardListState isManager embedded />
+          ) : (
+            <>
+              <div className="mb-4 mt-4 flex items-center gap-2">
+                <LayoutDashboard size={15} className="text-[var(--color-text-3)]" aria-hidden />
+                <h2 className="text-sm font-semibold text-[var(--color-text-1)]">Tus paneles</h2>
+                <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[10px] font-medium tabular-nums text-[var(--color-text-3)]">
+                  {dashboards.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {dashboards.map((dashboard, idx) => (
+                  <DashboardCard
+                    key={dashboard.id}
+                    dashboard={dashboard}
+                    staggerIndex={(idx % 6) + 1}
+                    isPreferred={preferredDashboardId === dashboard.id}
+                    isManager={isManager}
+                    onTogglePreferred={() =>
+                      void patchPreferredDashboard(preferredDashboardId === dashboard.id ? null : dashboard.id)
+                    }
+                    onDelete={() => void handleDelete(dashboard.id, dashboard.name)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      ) : dashboards.length === 0 ? (
+        <EmptyDashboardListState isManager={false} />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {dashboards.map((dashboard, idx) => (
@@ -461,12 +456,18 @@ function DashboardCard({
 
   // Resumen por tipo de widget
   const typeCounts = useMemo(() => {
-    const counts = new Map<string, number>();
+    const counts = new Map<string, { count: number; dataSource?: string }>();
     for (const w of dashboard.widgets) {
-      const key = (w.chartType ?? "otro").toLowerCase();
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+      const key = getWidgetChipKey(w);
+      const prev = counts.get(key);
+      counts.set(key, {
+        count: (prev?.count ?? 0) + 1,
+        dataSource: prev?.dataSource ?? w.dataSource,
+      });
     }
-    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+    return Array.from(counts.entries())
+      .map(([key, meta]) => ({ key, ...meta }))
+      .sort((a, b) => b.count - a.count);
   }, [dashboard.widgets]);
 
   return (
@@ -517,21 +518,23 @@ function DashboardCard({
           {widgetCount === 0 ? (
             <p className="text-[11.5px] italic text-[var(--color-text-3)]">Panel vacío {"\u2014"} sin widgets aún.</p>
           ) : (
-            <div className="flex flex-wrap items-center gap-1">
-              {typeCounts.slice(0, 4).map(([type, count]) => (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {typeCounts.slice(0, 5).map(({ key, count, dataSource }) => (
                 <span
-                  key={type}
-                  className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10.5px] font-medium text-[var(--color-text-2)]"
-                  title={`${count} \u00D7 ${type}`}
+                  key={key}
+                  className="dashboard-widget-type-chip inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[10.5px] font-medium text-[var(--color-text-2)]"
+                  title={`${count} × ${getWidgetChipLabel(key, dataSource)}`}
                 >
-                  <WidgetIcon type={type} />
-                  <span className="num-tabular">{count}</span>
-                  <span className="capitalize text-[var(--color-text-3)]">{prettyType(type)}</span>
+                  <ChartTypeIcon type={key} size={12} strokeWidth={1.9} className="text-[var(--color-text-3)]" />
+                  <span className="num-tabular text-[var(--color-text-1)]">{count}</span>
+                  <span className="max-w-[7rem] truncate text-[var(--color-text-3)]">
+                    {getWidgetChipLabel(key, dataSource)}
+                  </span>
                 </span>
               ))}
-              {typeCounts.length > 4 ? (
-                <span className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10.5px] text-[var(--color-text-3)]">
-                  +{typeCounts.length - 4}
+              {typeCounts.length > 5 ? (
+                <span className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2 py-1 text-[10.5px] text-[var(--color-text-3)]">
+                  +{typeCounts.length - 5}
                 </span>
               ) : null}
             </div>
@@ -595,60 +598,23 @@ function DashboardCard({
   );
 }
 
-function EmptyDashboardListState({ isManager }: { isManager: boolean }) {
+function EmptyDashboardListState({ isManager, embedded = false }: { isManager: boolean; embedded?: boolean }) {
   return (
     <EmptyState
       icon={LayoutDashboard}
       title="Sin dashboards todavía"
       hint={
         isManager
-          ? "Crea el primero usando el formulario de arriba."
+          ? "Escribe un nombre arriba y pulsa Crear panel."
           : "El gestor aún no ha publicado paneles personalizados."
       }
-      className="border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]"
+      className={cn(
+        embedded
+          ? "mt-4 border border-dashed border-[var(--color-border)] bg-[var(--color-surface-2)]/50"
+          : "border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]",
+      )}
     />
   );
-}
-
-function WidgetIcon({ type }: { type: string }) {
-  const props = { size: 10, strokeWidth: 1.8, "aria-hidden": true } as const;
-  switch (type) {
-    case "line":
-    case "area":
-      return <LineChart {...props} />;
-    case "pie":
-    case "donut":
-      return <PieChart {...props} />;
-    case "table":
-    case "list":
-      return <Table2 {...props} />;
-    case "kpi":
-    case "metric":
-    case "number":
-      return <Gauge {...props} />;
-    case "bar":
-    case "column":
-      return <BarChart3 {...props} />;
-    default:
-      return <Activity {...props} />;
-  }
-}
-
-function prettyType(type: string): string {
-  const map: Record<string, string> = {
-    line: "líneas",
-    area: "área",
-    bar: "barras",
-    column: "barras",
-    pie: "tarta",
-    donut: "donut",
-    table: "tabla",
-    list: "lista",
-    kpi: "KPI",
-    metric: "métrica",
-    number: "número",
-  };
-  return map[type] ?? type;
 }
 
 function formatRelativeShort(date: Date): string {
